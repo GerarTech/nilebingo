@@ -388,6 +388,10 @@ function HomePage() {
     // Record game in Supabase database and notify admin bot
     if (profile?.id) {
       const pot = Math.round((stakeAmt * livePlayerCount) * (1 - commissionRate / 100));
+      // Generate a shared game session ID based on room + time window (30 second intervals)
+      const roomKey = selectedRoom?.name || 'Quick_Lobby';
+      const timeSlot = Math.floor(Date.now() / 30000);
+      const gameSessionId = `${roomKey.replace(/\s/g, '_')}_${timeSlot}`;
       fetch('/api/public/games/record', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -397,7 +401,8 @@ function HomePage() {
           prizePool: pot,
           outcome,
           drawnNumbers: drawnRef.current || [],
-          roomName: selectedRoom?.name || 'Quick Lobby'
+          roomName: selectedRoom?.name || 'Quick Lobby',
+          gameSessionId
         })
       }).catch(err => console.error('Failed to save game to db:', err));
     }
@@ -493,7 +498,7 @@ function HomePage() {
     const rawJackpot = (selectedStake || 10) * livePlayerCount;
     const houseCommission = Math.round(rawJackpot * (commissionRate / 100));
     const jackpot = rawJackpot - houseCommission;
-    updateBalance(jackpot, 'play_balance');
+    updateBalance(jackpot, 'main_balance');
   }, [gameId, selectedStake, livePlayerCount, addGameToHistory, updateBalance, commissionRate]);
 
   // Auto-draw numbers when in game (every 1.4 seconds)
