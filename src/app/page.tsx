@@ -556,7 +556,7 @@ function HomePage() {
       // Simulate other live players marking their cards in real time!
       if (!isWatching) {
         setOtherPlayers(prev => {
-          let someWinner = '';
+          const winners: string[] = [];
           const updated = prev.map(p => {
             // Check marked cells for this player using the exact drawn numbers list
             const markedMatrix = p.card.map(row => row.map(cell => cell === 0 || newDrawn.includes(cell)));
@@ -584,8 +584,8 @@ function HomePage() {
             const neededToWin = Math.min(neededForRow, neededForCol);
             
             const hasBingo = neededToWin === 0;
-            if (hasBingo && !someWinner) {
-              someWinner = p.username;
+            if (hasBingo) {
+              winners.push(p.username);
             }
 
             return {
@@ -596,8 +596,10 @@ function HomePage() {
             };
           });
 
-          if (someWinner) {
-            setOpponentWinner(someWinner);
+          // If multiple opponents won simultaneously, randomly pick one
+          if (winners.length > 0) {
+            const randomWinner = winners[Math.floor(Math.random() * winners.length)];
+            setOpponentWinner(randomWinner);
             if (intervalRef.current) {
               clearInterval(intervalRef.current);
               intervalRef.current = null;
@@ -606,8 +608,8 @@ function HomePage() {
             if (typeof window !== 'undefined') {
               try {
                 const talkText = language === 'en'
-                  ? `Attention! Competitor ${someWinner} has called BINGO! and claimed the jackpot prize!`
-                  : `ትኩረት ይሰጥ! ተወዳዳሪ ${someWinner} ቢንጎ በመሙላት የጃክፖት ሽልማቱን አሸንፏል!`;
+                  ? `Attention! Competitor ${randomWinner} has called BINGO! and claimed the jackpot prize!`
+                  : `ትኩረት ይሰጥ! ተወዳዳሪ ${randomWinner} ቢንጎ በመሙላት የጃክፖት ሽልማቱን አሸንፏል!`;
 
                 if (window.speechSynthesis) {
                   window.speechSynthesis.cancel();

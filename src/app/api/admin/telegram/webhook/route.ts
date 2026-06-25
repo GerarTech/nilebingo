@@ -77,10 +77,10 @@ async function getBotCommands(): Promise<Record<string, string>> {
 
 // Admin command handlers
 async function handleAdminStats(chatId: number) {
-  const { data: profiles } = await supabase.from('profiles').select('id', { count: 'exact', head: true });
-  const { data: games } = await supabase.from('games').select('id', { count: 'exact', head: true });
-  const { data: activeGames } = await supabase.from('games').select('id', { count: 'exact', head: true }).eq('status', 'active');
-  const { data: lobbyGames } = await supabase.from('games').select('id', { count: 'exact', head: true }).eq('status', 'lobby');
+  const profileRes = await supabase.from('profiles').select('id', { count: 'exact', head: true });
+  const gamesRes = await supabase.from('games').select('id', { count: 'exact', head: true });
+  const activeRes = await supabase.from('games').select('id', { count: 'exact', head: true }).eq('status', 'active');
+  const lobbyRes = await supabase.from('games').select('id', { count: 'exact', head: true }).eq('status', 'lobby');
   const { data: transactions } = await supabase.from('transactions').select('type, amount, status');
 
   let totalDeposits = 0, totalWithdrawals = 0, totalBets = 0, totalWins = 0;
@@ -97,7 +97,7 @@ async function handleAdminStats(chatId: number) {
     }
   }
 
-  const msg = `*📊 Admin Dashboard*\n\n👥 Users: ${profiles?.length || 0}\n🎮 Games: ${games?.count || 0}\n🟢 Active: ${activeGames?.count || 0}\n🟡 Lobby: ${lobbyGames?.count || 0}\n💰 Deposits: ${totalDeposits.toLocaleString()} ETB\n💸 Withdrawals: ${totalWithdrawals.toLocaleString()} ETB\n📈 Revenue: ${(totalBets - totalWins).toLocaleString()} ETB\n⏳ Pending Deposits: ${pendingDep}\n⏳ Pending Withdrawals: ${pendingWit}`;
+  const msg = `*📊 Admin Dashboard*\n\n👥 Users: ${profileRes.count || 0}\n🎮 Games: ${gamesRes.count || 0}\n🟢 Active: ${activeRes.count || 0}\n🟡 Lobby: ${lobbyRes.count || 0}\n💰 Deposits: ${totalDeposits.toLocaleString()} ETB\n💸 Withdrawals: ${totalWithdrawals.toLocaleString()} ETB\n📈 Revenue: ${(totalBets - totalWins).toLocaleString()} ETB\n⏳ Pending Deposits: ${pendingDep}\n⏳ Pending Withdrawals: ${pendingWit}`;
 
   await sendMessage(chatId, msg, { parse_mode: 'Markdown' });
 }
