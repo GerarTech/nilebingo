@@ -160,7 +160,7 @@ async function handleAdminGames(chatId: number) {
 }
 
 async function handleAdminApprove(chatId: number, txId: string) {
-  const { data: tx } = await supabase.from('transactions').select('*').eq('id', txId).single();
+  const { data: tx } = await supabase.from('transactions').select('*, profiles!inner(first_name, username, telegram_id)').eq('id', txId).single();
   if (!tx || tx.status !== 'pending') {
     await sendMessage(chatId, 'Transaction not found or already processed.');
     return;
@@ -175,12 +175,31 @@ async function handleAdminApprove(chatId: number, txId: string) {
     }
   }
 
-  await sendMessage(chatId, `✅ Transaction ${txId.slice(0, 8)} approved.`);
+  const userName = tx.profiles?.first_name || tx.profiles?.username || 'Unknown User';
+  const typeLabel = tx.type === 'deposit' ? '💳 DEPOSIT' : '💸 WITHDRAW';
+  await sendMessage(chatId, `✅ *Transaction Approved*\n\n${typeLabel}\n👤 User: ${userName}\n💰 Amount: ${Number(tx.amount).toLocaleString()} ETB\n🆔 TX ID: \`${tx.id.slice(0, 8)}\`\n⏰ ${new Date().toLocaleString()}`, { parse_mode: 'Markdown' });
+
+  // Notify user
+  const userTgId = tx.profiles?.telegram_id;
+  if (userTgId && tx.type === 'deposit') {
+    await sendMessage(userTgId, `✅ *Deposit Approved*\n\n💰 ${Number(tx.amount).toLocaleString()} ETB has been added to your Main Wallet.\nThank you for your payment!`, { parse_mode: 'Markdown' });
+  }
 }
 
 async function handleAdminReject(chatId: number, txId: string) {
+  const { data: tx } = await supabase.from('transactions').select('*, profiles!inner(first_name, username, telegram_id)').eq('id', txId).single();
   await supabase.from('transactions').update({ status: 'failed' }).eq('id', txId);
-  await sendMessage(chatId, `❌ Transaction ${txId.slice(0, 8)} rejected.`);
+
+  if (tx) {
+    const userName = tx.profiles?.first_name || tx.profiles?.username || 'Unknown User';
+    const userTgId = tx.profiles?.telegram_id;
+    const typeLabel = tx.type === 'deposit' ? '💳 DEPOSIT' : '💸 WITHDRAW';
+    await sendMessage(chatId, `❌ *Transaction Rejected*\n\n${typeLabel}\n👤 User: ${userName}\n💰 Amount: ${Number(tx.amount).toLocaleString()} ETB\n🆔 TX ID: \`${tx.id.slice(0, 8)}\`\n⏰ ${new Date().toLocaleString()}`, { parse_mode: 'Markdown' });
+
+    if (userTgId) {
+      await sendMessage(userTgId, `❌ *Transaction Rejected*\n\nYour ${tx.type} of ${Number(tx.amount).toLocaleString()} ETB was not approved.\nPlease contact support if you have questions.`, { parse_mode: 'Markdown' });
+    }
+  }
 }
 
 export async function POST(request: NextRequest) {

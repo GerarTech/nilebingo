@@ -5,6 +5,26 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key';
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+const adminBotToken = process.env.ADMIN_BOT_TOKEN || '';
+const adminChatId = process.env.ADMIN_CHAT_ID || '';
+
+async function sendTelegramNotification(chatId: string | number, text: string) {
+  if (!adminBotToken || !adminChatId) return;
+  try {
+    await fetch(`https://api.telegram.org/bot${adminBotToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        parse_mode: 'Markdown'
+      })
+    });
+  } catch (err) {
+    console.error('Failed to send Telegram notification:', err);
+  }
+}
+
 // Verify admin access
 export function verifyAdmin(password: string): boolean {
   const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
@@ -160,7 +180,7 @@ export async function getTransactions(options: {
 export async function approveTransaction(transactionId: string, adminId: string) {
   const { data: tx } = await supabase
     .from('transactions')
-    .select('*')
+    .select('*, profiles!inner(first_name, username, telegram_id)')
     .eq('id', transactionId)
     .single();
 
@@ -188,17 +208,74 @@ export async function approveTransaction(transactionId: string, adminId: string)
     });
   }
 
+  // Send Telegram notification to admin
+  const userName = tx.profiles?.first_name || tx.profiles?.username || 'Unknown User';
+  const userTgId = tx.profiles?.telegram_id;
+  const typeLabel = tx.type === 'deposit' ? '💳 DEPOSIT' : '💸 WITHDRAW';
+  await sendTelegramNotification(
+    adminChatId,
+    `✅ *Transaction Approved*\n\n` +
+    `${typeLabel}\n` +
+    `👤 User: ${userName}\n` +
+    `💰 Amount: ${Number(tx.amount).toLocaleString()} ETB\n` +
+    `🆔 TX ID: \`${tx.id.slice(0, 8)}\`\n` +
+    `⏰ ${new Date().toLocaleString()}`
+  );
+
+  // Also notify the user if they have a telegram_id
+  if (userTgId && tx.type === 'deposit') {
+    await sendTelegramNotification(
+      userTgId,
+      `✅ *Deposit Approved*\n\n` +
+      `💰 ${Number(tx.amount).toLocaleString()} ETB has been added to your Main Wallet.\n` +
+      `Thank you for your payment!`
+    );
+  }
+
   return { success: true };
 }
 
 // Reject transaction
 export async function rejectTransaction(transactionId: string) {
+  const { data: tx } = await supabase
+    .from('transactions')
+    .select('*, profiles!inner(first_name, username, telegram_id)')
+    .eq('id', transactionId)
+    .single();
+
   const { error } = await supabase
     .from('transactions')
     .update({ status: 'failed' })
     .eq('id', transactionId);
 
   if (error) return { error: error.message };
+
+  // Send Telegram notification to admin
+  if (tx) {
+    const userName = tx.profiles?.first_name || tx.profiles?.username || 'Unknown User';
+    const userTgId = tx.profiles?.telegram_id;
+    const typeLabel = tx.type === 'deposit' ? '💳 DEPOSIT' : '💸 WITHDRAW';
+    await sendTelegramNotification(
+      adminChatId,
+      `❌ *Transaction Rejected*\n\n` +
+      `${typeLabel}\n` +
+      `👤 User: ${userName}\n` +
+      `💰 Amount: ${Number(tx.amount).toLocaleString()} ETB\n` +
+      `🆔 TX ID: \`${tx.id.slice(0, 8)}\`\n` +
+      `⏰ ${new Date().toLocaleString()}`
+    );
+
+    // Also notify the user
+    if (userTgId) {
+      await sendTelegramNotification(
+        userTgId,
+        `❌ *Transaction Rejected*\n\n` +
+        `Your ${tx.type} of ${Number(tx.amount).toLocaleString()} ETB was not approved.\n` +
+        `Please contact support if you have questions.`
+      );
+    }
+  }
+
   return { success: true };
 }
 
