@@ -190,7 +190,7 @@ async function handleAdminLive(chatId: number) {
 
   for (const game of activeGames) {
     const gameShortId = game.id.slice(0, 8);
-    const stakeAmount = game.stakes?.amount || 'N/A';
+    const stakeAmount = game.stakes?.[0]?.amount || 'N/A';
     const statusIcon = game.status === 'active' ? '🟢' : '🟡';
     const prizePool = Number(game.prize_pool || 0).toLocaleString();
 
