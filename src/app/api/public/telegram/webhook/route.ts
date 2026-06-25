@@ -537,7 +537,7 @@ export async function POST(request: NextRequest) {
         .replace('{play}', playBal.toLocaleString())
         .replace('{total}', (mainBal + playBal).toLocaleString());
 
-      await sendMessage(chatId, msgText, { parse_mode: 'Markdown' });
+      await sendMessage(chatId, msgText, { parse_mode: 'Markdown', reply_markup: getMainKeyboard(lang) });
     } else if (matchesCommand(userCommands.deposit, plainCommands.deposit)) {
       await sendMessage(chatId, getMsg('deposit_choose', 'deposit_choose'), {
         parse_mode: 'Markdown',
@@ -549,11 +549,11 @@ export async function POST(request: NextRequest) {
         }
       });
     } else if (matchesCommand(userCommands.withdraw, plainCommands.withdraw)) {
-      await sendMessage(chatId, getMsg('withdraw_info', 'withdraw_info'), { parse_mode: 'Markdown' });
+      await sendMessage(chatId, getMsg('withdraw_info', 'withdraw_info'), { parse_mode: 'Markdown', reply_markup: getMainKeyboard(lang) });
     } else if (matchesCommand(userCommands.contact, plainCommands.contact)) {
-      await sendMessage(chatId, getMsg('contact_info', 'contact_info'), { parse_mode: 'Markdown' });
+      await sendMessage(chatId, getMsg('contact_info', 'contact_info'), { parse_mode: 'Markdown', reply_markup: getMainKeyboard(lang) });
     } else if (matchesCommand(userCommands.instructions, plainCommands.instructions)) {
-      await sendMessage(chatId, getMsg('how_to_play', 'how_to_play'), { parse_mode: 'Markdown' });
+      await sendMessage(chatId, getMsg('how_to_play', 'how_to_play'), { parse_mode: 'Markdown', reply_markup: getMainKeyboard(lang) });
     } else if (matchesCommand(userCommands.transactions, plainCommands.transactions)) {
       await sendMessage(chatId, getMsg('transactions_prompt', 'transactions_prompt'), {
         parse_mode: 'Markdown',
@@ -562,7 +562,7 @@ export async function POST(request: NextRequest) {
         }
       });
     } else if (matchesCommand(userCommands.winning_patterns, plainCommands.winning_patterns)) {
-      await sendMessage(chatId, getMsg('winning_patterns_info', 'winning_patterns_info'), { parse_mode: 'Markdown' });
+      await sendMessage(chatId, getMsg('winning_patterns_info', 'winning_patterns_info'), { parse_mode: 'Markdown', reply_markup: getMainKeyboard(lang) });
     } else if (matchesCommand(userCommands.language, plainCommands.language)) {
       await sendMessage(chatId, getText('en', 'language_menu'), {
         reply_markup: {
@@ -573,7 +573,7 @@ export async function POST(request: NextRequest) {
         }
       });
     } else {
-      await sendMessage(chatId, 'Use the buttons below:', getMainKeyboard(lang));
+      await sendMessage(chatId, 'Use the buttons below:', { reply_markup: getMainKeyboard(lang) });
     }
 
     return NextResponse.json({ ok: true });
