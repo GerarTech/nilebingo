@@ -1,0 +1,6 @@
+{
+  "name": "Nile Bingo",
+  "description": "Nile Bingo - An exciting, interactive BINGO game on Telegram featuring CBE & Telebirr integrations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

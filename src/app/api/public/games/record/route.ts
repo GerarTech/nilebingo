@@ -1,0 +1,129 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key';
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { userId, stakeAmount, prizePool, outcome, drawnNumbers, roomName } = body;
+
+    if (!userId) {
+      return NextResponse.json({ error: 'userId is required' }, { status: 400 });
+    }
+
+    // 1. Locate a stake from database with matching amount, or create one if missing
+    let stakeId: string | null = null;
+    try {
+      const { data: stakeData } = await supabase
+        .from('stakes')
+        .select('id')
+        .eq('amount', stakeAmount)
+        .limit(1);
+
+      if (stakeData && stakeData.length > 0) {
+        stakeId = stakeData[0].id;
+      } else {
+        // Insert new stake dynamically
+        const { data: newStake } = await supabase
+          .from('stakes')
+          .insert({
+            amount: stakeAmount,
+            status: 'open',
+            lobby_open_until: new Date(Date.now() + 3600000).toISOString()
+          })
+          .select()
+          .single();
+        if (newStake) {
+          stakeId = newStake.id;
+        }
+      }
+    } catch (e) {
+      console.error('Error finding/creating stake record:', e);
+    }
+
+    // 2. Insert into games table
+    const code = 'BG-' + Math.floor(100000 + Math.random() * 900000);
+    const isWin = outcome === 'win';
+    
+    const { data: game, error: gameError } = await supabase
+      .from('games')
+      .insert({
+        stake_id: stakeId,
+        code,
+        status: 'finished',
+        drawn_numbers: Array.isArray(drawnNumbers) ? drawnNumbers : [],
+        current_number: Array.isArray(drawnNumbers) && drawnNumbers.length > 0 ? drawnNumbers[drawnNumbers.length - 1] : null,
+        prize_pool: Number(prizePool) || 0,
+        called_count: Array.isArray(drawnNumbers) ? drawnNumbers.length : 0,
+        winner_id: isWin ? userId : null,
+        created_at: new Date().toISOString()
+      })
+      .select()
+      .single();
+
+    if (gameError) {
+      throw gameError;
+    }
+
+    // 3. Insert user into game_players table
+    if (game) {
+      await supabase.from('game_players').insert({
+        game_id: game.id,
+        user_id: userId
+      });
+    }
+
+    // 4. Send notification to Admin Telegram Bot
+    const adminBotToken = process.env.ADMIN_BOT_TOKEN;
+    const adminChatId = process.env.ADMIN_CHAT_ID;
+    
+    if (adminBotToken && adminChatId && game) {
+      try {
+        // Fetch player profile info
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('first_name, username')
+          .eq('id', userId)
+          .single();
+
+        const playerName = profile 
+          ? (profile.first_name || (profile.username ? `@${profile.username}` : 'Unknown Player'))
+          : 'Unknown Player';
+
+        const outcomeIcon = isWin ? '🏆 WIN' : '❌ LOSS';
+        const outcomeMsg = isWin 
+          ? `🏆 *Player WON the match!*` 
+          : `❌ *Player LOST the match.*`;
+
+        const text = `🎮 *BINGO GAME RECORDED (ID: #${code})*\n\n` +
+                     `👤 *Player:* ${playerName}\n` +
+                     `🏠 *Room:* ${roomName || 'Quick Lobby'}\n` +
+                     `💰 *Stake:* ${stakeAmount} ETB\n` +
+                     `📢 *Result:* ${outcomeIcon}\n` +
+                     `💰 *Prize Pool:* ${Number(prizePool).toLocaleString()} ETB\n` +
+                     `🔢 *Called Numbers:* ${Array.isArray(drawnNumbers) ? drawnNumbers.length : 0} calls\n` +
+                     `⏱️ *Date:* ${new Date().toLocaleString()}`;
+
+        await fetch(`https://api.telegram.org/bot${adminBotToken}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: adminChatId,
+            text,
+            parse_mode: 'Markdown'
+          })
+        });
+      } catch (tgErr) {
+        console.error('Error sending Telegram admin notification:', tgErr);
+      }
+    }
+
+    return NextResponse.json({ success: true, gameId: game?.id, code });
+  } catch (error: any) {
+    console.error('Error recording game match:', error);
+    return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
+  }
+}
