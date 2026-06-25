@@ -388,9 +388,9 @@ function HomePage() {
     // Record game in Supabase database and notify admin bot
     if (profile?.id) {
       const pot = Math.round((stakeAmt * livePlayerCount) * (1 - commissionRate / 100));
-      // Generate a shared game session ID based on room + time window (30 second intervals)
+      // Generate a shared game session ID based on room + time window (45 second intervals)
       const roomKey = selectedRoom?.name || 'Quick_Lobby';
-      const timeSlot = Math.floor(Date.now() / 30000);
+      const timeSlot = Math.floor(Date.now() / 45000);
       const gameSessionId = `${roomKey.replace(/\s/g, '_')}_${timeSlot}`;
       fetch('/api/public/games/record', {
         method: 'POST',
@@ -495,11 +495,13 @@ function HomePage() {
     setWinningCells(getWinningCells(card, drawn));
     setShowWinModal(true);
     addGameToHistory(gameId, selectedStake || 10, 'win');
-    const rawJackpot = (selectedStake || 10) * livePlayerCount;
+    const cardCount = selectedCards.length || 1;
+    const actualStake = (selectedStake || 10) * cardCount;
+    const rawJackpot = actualStake * livePlayerCount;
     const houseCommission = Math.round(rawJackpot * (commissionRate / 100));
     const jackpot = rawJackpot - houseCommission;
     updateBalance(jackpot, 'main_balance');
-  }, [gameId, selectedStake, livePlayerCount, addGameToHistory, updateBalance, commissionRate]);
+  }, [gameId, selectedStake, selectedCards, livePlayerCount, addGameToHistory, updateBalance, commissionRate]);
 
   // Auto-draw numbers when in game (every 1.4 seconds)
   useEffect(() => {
@@ -855,6 +857,9 @@ function HomePage() {
     }
   }, [voiceEnabled, language, gameCard, isWatching, triggerWin]);
 
+  const [showNotBingoModal, setShowNotBingoModal] = useState(false);
+  const notBingoTimer = useRef<NodeJS.Timeout | null>(null);
+
   const handleBingo = useCallback(() => {
     if (playerCards.length > 0) {
       const checkAgainst = autoMark ? drawnRef.current : userMarkedNumbers;
@@ -865,13 +870,19 @@ function HomePage() {
         triggerWin(wonCard, drawnRef.current);
       } else {
         triggerHaptic('error');
-        alert(language === 'en' 
-          ? "Not a valid BINGO yet! Match more numbers on your card." 
-          : "ትክክለኛ ቢንጎ የለም! ካርድዎ ላይ ተጨማሪ ቁጥሮችን ያዛምዱ።"
-        );
+        setShowNotBingoModal(true);
+        if (notBingoTimer.current) clearTimeout(notBingoTimer.current);
+        notBingoTimer.current = setTimeout(() => setShowNotBingoModal(false), 2500);
       }
     }
   }, [playerCards, autoMark, userMarkedNumbers, triggerWin, language]);
+
+  // Cleanup modal timer
+  useEffect(() => {
+    return () => {
+      if (notBingoTimer.current) clearTimeout(notBingoTimer.current);
+    };
+  }, []);
 
   // ============= WIN MODAL =============
   const renderWinModal = () => {
@@ -1280,6 +1291,28 @@ function HomePage() {
 
           {renderWinModal()}
           {renderLossModal()}
+          
+          {/* Not Bingo Yet - Beautiful Modal */}
+          {showNotBingoModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-6" style={{ background: 'rgba(5, 14, 24, 0.85)' }}>
+              <div className="bg-gradient-to-b from-[#1e2a45] to-[#141f33] border border-amber-500/20 rounded-3xl p-8 max-w-xs w-full text-center animate-slide-up shadow-2xl shadow-amber-500/5">
+                <div className="text-5xl mb-4 animate-bounce">🎯</div>
+                <h3 className="text-lg font-black text-amber-400 mb-2 uppercase tracking-wider">Not Yet!</h3>
+                <div className="w-12 h-1 bg-gradient-to-r from-transparent via-amber-500 to-transparent mx-auto mb-3 rounded-full" />
+                <p className="text-sm text-gray-300 leading-relaxed mb-1">
+                  You need to match more numbers
+                </p>
+                <p className="text-xs text-gray-500 font-medium">
+                  Complete a row or column to win!
+                </p>
+                <div className="mt-5 flex justify-center gap-1.5">
+                  {[0, 1, 2, 3, 4].map((i) => (
+                    <div key={i} className="w-2 h-2 rounded-full bg-amber-500/40 animate-pulse" style={{ animationDelay: `${i * 150}ms` }} />
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       );
     }
@@ -1335,6 +1368,23 @@ function HomePage() {
                 <span className="text-base text-white font-black leading-none mt-0.5">{roomTick.countdown}S</span>
               </div>
             )}
+          </div>
+
+          {/* Game Session ID Display */}
+          <div className="bg-[#141f33]/60 border border-[#233c66]/30 rounded-xl p-2.5 mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-[8px] text-gray-400 font-extrabold uppercase tracking-wider">SESSION ID:</span>
+              <span className="text-[10px] font-mono font-black text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded">
+                {(() => {
+                  const roomKey = selectedRoom?.name || 'Quick_Lobby';
+                  const timeSlot = Math.floor(Date.now() / 45000);
+                  return `${roomKey.replace(/\s/g, '_')}_${timeSlot}`;
+                })()}
+              </span>
+            </div>
+            <div className="text-[8px] text-gray-500 font-mono">
+              Refreshes in: {45 - Math.floor(Date.now() / 1000) % 45}s
+            </div>
           </div>
 
           {/* My Cards selector guide label */}

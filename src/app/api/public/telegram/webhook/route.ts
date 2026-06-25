@@ -361,7 +361,7 @@ export async function POST(request: NextRequest) {
       const firstName = from.first_name;
       const username = from.username;
 
-      // Create/ensure profile
+      // Create/ensure profile (with telegram name)
       const { data: existing } = await supabase
         .from('profiles')
         .select('phone')
@@ -392,18 +392,28 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Send welcome message with play button inline
-      await sendMessage(chatId, getText(lang, 'welcome'), {
-        reply_markup: {
-          inline_keyboard: [[{ text: getText(lang, 'play'), web_app: { url: miniAppUrl } }]],
-        },
-      });
-      
-      // Send main menu keyboard as separate message (reply keyboard)
-      await sendMessage(chatId, '📋 *Main Menu*', {
-        parse_mode: 'Markdown',
-        reply_markup: getMainKeyboard(lang),
-      });
+      // If user hasn't shared their phone, request it BEFORE showing the menu
+      if (!existing || !existing.phone) {
+        await sendMessage(chatId, getText(lang, 'share_contact'), {
+          reply_markup: {
+            keyboard: [[{ text: getText(lang, 'share_contact_btn'), request_contact: true }]],
+            resize_keyboard: true,
+            one_time_keyboard: true,
+          }
+        });
+      } else {
+        // Phone already shared - show full experience
+        await sendMessage(chatId, getText(lang, 'welcome'), {
+          reply_markup: {
+            inline_keyboard: [[{ text: getText(lang, 'play'), web_app: { url: miniAppUrl } }]],
+          },
+        });
+        
+        await sendMessage(chatId, '📋 *Main Menu*', {
+          parse_mode: 'Markdown',
+          reply_markup: getMainKeyboard(lang),
+        });
+      }
       
       return NextResponse.json({ ok: true });
     }

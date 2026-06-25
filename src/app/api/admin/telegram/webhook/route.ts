@@ -167,48 +167,67 @@ async function handleAdminGames(chatId: number) {
 // Show active/lobby game sessions with live players
 async function handleAdminLive(chatId: number) {
   // Get active and lobby games
-  const { data: activeGames } = await supabase
+  const { data: activeGames, error: gamesError } = await supabase
     .from('games')
-    .select('*, stakes(amount)')
+    .select('id, code, status, prize_pool, stake_id, created_at, stakes(amount)')
     .in('status', ['active', 'lobby'])
     .order('created_at', { ascending: false })
     .limit(10);
+
+  if (gamesError) {
+    console.error('Error fetching active games:', gamesError);
+    await sendMessage(chatId, '❌ Error fetching game sessions. Please try again.');
+    return;
+  }
 
   if (!activeGames || activeGames.length === 0) {
     await sendMessage(chatId, 'No active game sessions right now.');
     return;
   }
 
-  for (const game of activeGames) {
-    // Get players for this game
-    const { data: players } = await supabase
-      .from('game_players')
-      .select('*, profiles(first_name, username, telegram_id)')
-      .eq('game_id', game.id);
+  // Build a comprehensive summary
+  let summary = `*🟢 LIVE GAME SESSIONS (${activeGames.length} active)*\n\n`;
 
-    const playerCount = players?.length || 0;
+  for (const game of activeGames) {
+    const gameShortId = game.id.slice(0, 8);
     const stakeAmount = game.stakes?.amount || 'N/A';
     const statusIcon = game.status === 'active' ? '🟢' : '🟡';
+    const prizePool = Number(game.prize_pool || 0).toLocaleString();
 
-    let playerList = '';
-    if (players && players.length > 0) {
-      playerList = players.map((p: any, i: number) => {
-        const name = p.profiles?.first_name || p.profiles?.username || 'Unknown';
-        const tgId = p.profiles?.telegram_id || '';
-        return `${i + 1}. ${name}${tgId ? ` (ID: \`${tgId}\`)` : ''} | /setwinner_${game.id.slice(0, 8)}_${p.user_id.slice(0, 8)}`;
-      }).join('\n');
-    } else {
-      playerList = 'No players yet';
+    // Get players for this game
+    const { data: players, error: playersError } = await supabase
+      .from('game_players')
+      .select('user_id, profiles(first_name, username, telegram_id)')
+      .eq('game_id', game.id);
+
+    if (playersError) {
+      console.error(`Error fetching players for game ${game.id}:`, playersError);
     }
 
-    const msg = `${statusIcon} *Game Session: #${game.code}*\n` +
-                `Status: *${game.status}* | Stake: *${stakeAmount} ETB*\n` +
-                `Prize Pool: *${Number(game.prize_pool || 0).toLocaleString()} ETB*\n` +
-                `👥 *Live Players (${playerCount}):*\n${playerList}\n` +
-                `_To appoint a winner, tap the /setwinner command next to a player_\n`;
+    const playerCount = players?.length || 0;
 
-    await sendMessage(chatId, msg, { parse_mode: 'Markdown' });
+    summary += `${statusIcon} *Game: #${game.code}*\n`;
+    summary += `   ID: \`${gameShortId}\` | Stake: *${stakeAmount} ETB*\n`;
+    summary += `   Prize Pool: *${prizePool} ETB*\n`;
+    summary += `   👥 *Players (${playerCount}):*\n`;
+
+    if (players && players.length > 0) {
+      players.forEach((p: any, i: number) => {
+        const name = p.profiles?.first_name || p.profiles?.username || 'Unknown';
+        const userShortId = p.user_id.slice(0, 8);
+        summary += `   ${i + 1}. ${name}\n`;
+        summary += `      /setwinner_${gameShortId}_${userShortId}\n`;
+      });
+    } else {
+      summary += `   _No players yet_\n`;
+    }
+
+    summary += `\n`;
   }
+
+  summary += `_Use /setwinner_<gameId>_<userId> to appoint a winner_`;
+
+  await sendMessage(chatId, summary, { parse_mode: 'Markdown' });
 }
 
 // Appoint a winner for a game session and credit their wallet
