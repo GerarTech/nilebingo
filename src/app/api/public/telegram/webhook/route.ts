@@ -392,15 +392,18 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Send welcome message with play button
+      // Send welcome message with play button inline
       await sendMessage(chatId, getText(lang, 'welcome'), {
         reply_markup: {
-          inline_keyboard: [[{ text: getText(lang, 'play'), web_app: { url: miniAppUrl } }]]
-        }
+          inline_keyboard: [[{ text: getText(lang, 'play'), web_app: { url: miniAppUrl } }]],
+        },
       });
       
-      // Always send the main keyboard
-      await sendMessage(chatId, 'Menu:', getMainKeyboard(lang));
+      // Send main menu keyboard as separate message (reply keyboard)
+      await sendMessage(chatId, '📋 *Main Menu*', {
+        parse_mode: 'Markdown',
+        reply_markup: getMainKeyboard(lang),
+      });
       
       return NextResponse.json({ ok: true });
     }
