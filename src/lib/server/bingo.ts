@@ -72,7 +72,7 @@ export function drawNumber(drawnNumbers: number[]): number {
 
 // Mark all called numbers on the card
 export function markCard(card: number[][], drawnNumbers: number[]): boolean[][] {
-  return card.map(row => row.map(cell => drawnNumbers.includes(cell)));
+  return card.map((row, rIdx) => row.map((cell, cIdx) => cell === 0 || (rIdx === 2 && cIdx === 2) || drawnNumbers.includes(cell)));
 }
 
 // Get winning cells

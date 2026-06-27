@@ -15,7 +15,12 @@ import { generateCard, getSeededCard, getWinningCells, getColumnLabel, getAvaila
 type TabType = 'game' | 'scores' | 'history' | 'wallet' | 'profile';
 
 function generateGameId(): string {
-  return Math.random().toString(36).substring(2, 10);
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let result = '';
+  for (let i = 0; i < 8; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
 }
 
 function triggerHaptic(type: 'light' | 'medium' | 'heavy' | 'success' | 'warning' | 'error') {
@@ -388,10 +393,6 @@ function HomePage() {
     // Record game in Supabase database and notify admin bot
     if (profile?.id) {
       const pot = Math.round((stakeAmt * livePlayerCount) * (1 - commissionRate / 100));
-      // Generate a shared game session ID based on room + time window (45 second intervals)
-      const roomKey = selectedRoom?.name || 'Quick_Lobby';
-      const timeSlot = Math.floor(Date.now() / 45000);
-      const gameSessionId = `${roomKey.replace(/\s/g, '_')}_${timeSlot}`;
       fetch('/api/public/games/record', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -401,8 +402,7 @@ function HomePage() {
           prizePool: pot,
           outcome,
           drawnNumbers: drawnRef.current || [],
-          roomName: selectedRoom?.name || 'Quick Lobby',
-          gameSessionId
+          roomName: selectedRoom?.name || 'Quick Lobby'
         })
       }).catch(err => console.error('Failed to save game to db:', err));
     }
@@ -495,13 +495,11 @@ function HomePage() {
     setWinningCells(getWinningCells(card, drawn));
     setShowWinModal(true);
     addGameToHistory(gameId, selectedStake || 10, 'win');
-    const cardCount = selectedCards.length || 1;
-    const actualStake = (selectedStake || 10) * cardCount;
-    const rawJackpot = actualStake * livePlayerCount;
+    const rawJackpot = (selectedStake || 10) * livePlayerCount;
     const houseCommission = Math.round(rawJackpot * (commissionRate / 100));
     const jackpot = rawJackpot - houseCommission;
-    updateBalance(jackpot, 'main_balance');
-  }, [gameId, selectedStake, selectedCards, livePlayerCount, addGameToHistory, updateBalance, commissionRate]);
+    updateBalance(jackpot, 'play_balance');
+  }, [gameId, selectedStake, livePlayerCount, addGameToHistory, updateBalance, commissionRate]);
 
   // Auto-draw numbers when in game (every 1.4 seconds)
   useEffect(() => {
@@ -558,7 +556,7 @@ function HomePage() {
       // Simulate other live players marking their cards in real time!
       if (!isWatching) {
         setOtherPlayers(prev => {
-          const winners: string[] = [];
+          let someWinner = '';
           const updated = prev.map(p => {
             // Check marked cells for this player using the exact drawn numbers list
             const markedMatrix = p.card.map(row => row.map(cell => cell === 0 || newDrawn.includes(cell)));
@@ -586,8 +584,8 @@ function HomePage() {
             const neededToWin = Math.min(neededForRow, neededForCol);
             
             const hasBingo = neededToWin === 0;
-            if (hasBingo) {
-              winners.push(p.username);
+            if (hasBingo && !someWinner) {
+              someWinner = p.username;
             }
 
             return {
@@ -598,10 +596,8 @@ function HomePage() {
             };
           });
 
-          // If multiple opponents won simultaneously, randomly pick one
-          if (winners.length > 0) {
-            const randomWinner = winners[Math.floor(Math.random() * winners.length)];
-            setOpponentWinner(randomWinner);
+          if (someWinner) {
+            setOpponentWinner(someWinner);
             if (intervalRef.current) {
               clearInterval(intervalRef.current);
               intervalRef.current = null;
@@ -610,8 +606,8 @@ function HomePage() {
             if (typeof window !== 'undefined') {
               try {
                 const talkText = language === 'en'
-                  ? `Attention! Competitor ${randomWinner} has called BINGO! and claimed the jackpot prize!`
-                  : `ትኩረት ይሰጥ! ተወዳዳሪ ${randomWinner} ቢንጎ በመሙላት የጃክፖት ሽልማቱን አሸንፏል!`;
+                  ? `Attention! Competitor ${someWinner} has called BINGO! and claimed the jackpot prize!`
+                  : `ትኩረት ይሰጥ! ተወዳዳሪ ${someWinner} ቢንጎ በመሙላት የጃክፖት ሽልማቱን አሸንፏል!`;
 
                 if (window.speechSynthesis) {
                   window.speechSynthesis.cancel();
@@ -697,6 +693,7 @@ function HomePage() {
     setSelectedStake(room.entry);
     setSelectedCards([]);
     setPreviewCard([]);
+    setGameId(generateGameId());
   }, [rooms]);
 
   // Watch live game
@@ -704,7 +701,7 @@ function HomePage() {
     setShowCardPicker(false);
     setInGame(true);
     setIsWatching(true);
-    setGameId(generateGameId());
+    setGameId(gameId || generateGameId());
     const randomCard = generateCard();
     setGameCard(randomCard);
     setPlayerCards([randomCard]);
@@ -713,7 +710,7 @@ function HomePage() {
     drawnRef.current = [];
     setRecentCalled([]);
     setSelectedStake(null);
-  }, []);
+  }, [gameId]);
 
   // Toggle card selection in picker (supports up to 2 cards!)
   const toggleCard = useCallback((num: number) => {
@@ -765,7 +762,7 @@ function HomePage() {
     }
 
     // Initialize unique, competitive live game session
-    const uniqueGameId = generateGameId();
+    const uniqueGameId = gameId || generateGameId();
     const activePlayerCards = selectedCards.map(num => getSeededCard(num));
     setPlayerCards(activePlayerCards);
     setGameCard(activePlayerCards[0] || []);
@@ -785,7 +782,7 @@ function HomePage() {
     if (selectedRoom) {
       setLivePlayerCount(selectedRoom.players);
     }
-  }, [selectedCards, selectedStake, wallet, updateBalance, t, selectedRoom]);
+  }, [selectedCards, selectedStake, wallet, updateBalance, t, selectedRoom, gameId]);
 
   const leaveGame = useCallback(() => {
     if (intervalRef.current) {
@@ -857,9 +854,6 @@ function HomePage() {
     }
   }, [voiceEnabled, language, gameCard, isWatching, triggerWin]);
 
-  const [showNotBingoModal, setShowNotBingoModal] = useState(false);
-  const notBingoTimer = useRef<NodeJS.Timeout | null>(null);
-
   const handleBingo = useCallback(() => {
     if (playerCards.length > 0) {
       const checkAgainst = autoMark ? drawnRef.current : userMarkedNumbers;
@@ -870,19 +864,13 @@ function HomePage() {
         triggerWin(wonCard, drawnRef.current);
       } else {
         triggerHaptic('error');
-        setShowNotBingoModal(true);
-        if (notBingoTimer.current) clearTimeout(notBingoTimer.current);
-        notBingoTimer.current = setTimeout(() => setShowNotBingoModal(false), 2500);
+        alert(language === 'en' 
+          ? "Not a valid BINGO yet! Match more numbers on your card." 
+          : "ትክክለኛ ቢንጎ የለም! ካርድዎ ላይ ተጨማሪ ቁጥሮችን ያዛምዱ።"
+        );
       }
     }
   }, [playerCards, autoMark, userMarkedNumbers, triggerWin, language]);
-
-  // Cleanup modal timer
-  useEffect(() => {
-    return () => {
-      if (notBingoTimer.current) clearTimeout(notBingoTimer.current);
-    };
-  }, []);
 
   // ============= WIN MODAL =============
   const renderWinModal = () => {
@@ -1291,28 +1279,6 @@ function HomePage() {
 
           {renderWinModal()}
           {renderLossModal()}
-          
-          {/* Not Bingo Yet - Beautiful Modal */}
-          {showNotBingoModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-6" style={{ background: 'rgba(5, 14, 24, 0.85)' }}>
-              <div className="bg-gradient-to-b from-[#1e2a45] to-[#141f33] border border-amber-500/20 rounded-3xl p-8 max-w-xs w-full text-center animate-slide-up shadow-2xl shadow-amber-500/5">
-                <div className="text-5xl mb-4 animate-bounce">🎯</div>
-                <h3 className="text-lg font-black text-amber-400 mb-2 uppercase tracking-wider">Not Yet!</h3>
-                <div className="w-12 h-1 bg-gradient-to-r from-transparent via-amber-500 to-transparent mx-auto mb-3 rounded-full" />
-                <p className="text-sm text-gray-300 leading-relaxed mb-1">
-                  You need to match more numbers
-                </p>
-                <p className="text-xs text-gray-500 font-medium">
-                  Complete a row or column to win!
-                </p>
-                <div className="mt-5 flex justify-center gap-1.5">
-                  {[0, 1, 2, 3, 4].map((i) => (
-                    <div key={i} className="w-2 h-2 rounded-full bg-amber-500/40 animate-pulse" style={{ animationDelay: `${i * 150}ms` }} />
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       );
     }
@@ -1337,7 +1303,7 @@ function HomePage() {
             </button>
             <div className="text-center">
               <div className="text-sm font-extrabold text-gold uppercase tracking-wider flex items-center gap-1.5 justify-center">
-                <span>🎴</span> {roomTick.name}
+                <span>🎴</span> GAME ID: {gameId}
               </div>
             </div>
             <div className="flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md">
@@ -1368,19 +1334,6 @@ function HomePage() {
                 <span className="text-base text-white font-black leading-none mt-0.5">{roomTick.countdown}S</span>
               </div>
             )}
-          </div>
-
-          {/* Game ID Display */}
-          <div className="bg-[#141f33]/60 border border-[#233c66]/30 rounded-xl p-2.5 mb-4 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-[8px] text-gray-400 font-extrabold uppercase tracking-wider">GAME ID:</span>
-              <span className="text-[10px] font-mono font-black text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded">
-                {gameId || 'N/A'}
-              </span>
-            </div>
-            <div className="text-[8px] text-gray-500 font-mono">
-              Active Session
-            </div>
           </div>
 
           {/* My Cards selector guide label */}
@@ -1642,8 +1595,6 @@ function HomePage() {
           </div>
         </div>
 
-        {/* High Stakes Championship - Removed for now, will be added back in admin panel later */}
-
         {/* How to Play Manual Guide Buttons */}
         <button 
           onClick={() => setShowRules(true)} 
@@ -1809,7 +1760,7 @@ function HomePage() {
           {/* Stats Cards */}
           <div className="grid grid-cols-2 gap-3 mb-4">
             <div className="bg-navy-card/60 p-3 rounded-xl border border-white/5 text-center">
-              <span className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Total Sessions</span>
+              <span className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Total Games</span>
               <div className="text-lg font-extrabold text-white mt-0.5">{stakeHistory.length}</div>
             </div>
             <div className="bg-navy-card/60 p-3 rounded-xl border border-white/5 text-center">
@@ -1823,7 +1774,7 @@ function HomePage() {
           {/* Stake History list - last 10 games */}
           <h3 className="text-[11px] text-gray-400 mb-2.5 font-bold uppercase tracking-wider flex items-center justify-between">
             <span>Last 10 Games Played</span>
-            <span className="text-[9px] text-gray-500 font-normal">Session Logs</span>
+            <span className="text-[9px] text-gray-500 font-normal">Game Logs</span>
           </h3>
 
           <div className="space-y-2">

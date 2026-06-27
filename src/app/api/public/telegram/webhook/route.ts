@@ -361,7 +361,7 @@ export async function POST(request: NextRequest) {
       const firstName = from.first_name;
       const username = from.username;
 
-      // Create/ensure profile (with telegram name)
+      // Create/ensure profile
       const { data: existing } = await supabase
         .from('profiles')
         .select('phone')
@@ -392,47 +392,55 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // If user hasn't shared their phone, request it BEFORE showing the menu
+      // If they do not have a phone, prompt them to share contact
       if (!existing || !existing.phone) {
         await sendMessage(chatId, getText(lang, 'share_contact'), {
           reply_markup: {
-            keyboard: [[{ text: getText(lang, 'share_contact_btn'), request_contact: true }]],
+            keyboard: [
+              [{ text: getText(lang, 'share_contact_btn'), request_contact: true }]
+            ],
             resize_keyboard: true,
             one_time_keyboard: true,
           }
         });
-      } else {
-        // Update profile name from Telegram if it changed
-        const { data: currentProfile } = await supabase
-          .from('profiles')
-          .select('first_name, username')
-          .eq('telegram_id', telegramId)
-          .single();
-        
-        if (currentProfile && (currentProfile.first_name !== firstName || currentProfile.username !== username)) {
-          await supabase
-            .from('profiles')
-            .update({ 
-              first_name: firstName || null, 
-              username: username || null 
-            })
-            .eq('telegram_id', telegramId);
-        }
-        
-        // Phone already shared - show full experience
-        await sendMessage(chatId, getText(lang, 'welcome'), {
-          reply_markup: {
-            inline_keyboard: [[{ text: getText(lang, 'play'), web_app: { url: miniAppUrl } }]],
-          },
-        });
-        
-        await sendMessage(chatId, '📋 *Main Menu*', {
-          parse_mode: 'Markdown',
-          reply_markup: getMainKeyboard(lang),
-        });
+        return NextResponse.json({ ok: true });
       }
+
+      // Send welcome message with play button
+      await sendMessage(chatId, getText(lang, 'welcome'), {
+        reply_markup: {
+          inline_keyboard: [[{ text: getText(lang, 'play'), web_app: { url: miniAppUrl } }]]
+        }
+      });
+      
+      // Always send the main keyboard
+      await sendMessage(chatId, 'Menu:', getMainKeyboard(lang));
       
       return NextResponse.json({ ok: true });
+    }
+
+    // Intercept normal messages if phone is missing and they are not the admin
+    const telegramIdCheck = String(from?.id || '');
+    const isAdmin = adminChatId && String(chatId) === adminChatId;
+    if (telegramIdCheck && !isAdmin) {
+      const { data: prof } = await supabase
+        .from('profiles')
+        .select('phone')
+        .eq('telegram_id', telegramIdCheck)
+        .maybeSingle();
+
+      if (!prof || !prof.phone) {
+        await sendMessage(chatId, getText(lang, 'share_contact'), {
+          reply_markup: {
+            keyboard: [
+              [{ text: getText(lang, 'share_contact_btn'), request_contact: true }]
+            ],
+            resize_keyboard: true,
+            one_time_keyboard: true,
+          }
+        });
+        return NextResponse.json({ ok: true });
+      }
     }
 
     // Admin commands (dynamic from DB)
@@ -567,7 +575,7 @@ export async function POST(request: NextRequest) {
         .replace('{play}', playBal.toLocaleString())
         .replace('{total}', (mainBal + playBal).toLocaleString());
 
-      await sendMessage(chatId, msgText, { parse_mode: 'Markdown', reply_markup: getMainKeyboard(lang) });
+      await sendMessage(chatId, msgText, { parse_mode: 'Markdown' });
     } else if (matchesCommand(userCommands.deposit, plainCommands.deposit)) {
       await sendMessage(chatId, getMsg('deposit_choose', 'deposit_choose'), {
         parse_mode: 'Markdown',
@@ -579,11 +587,11 @@ export async function POST(request: NextRequest) {
         }
       });
     } else if (matchesCommand(userCommands.withdraw, plainCommands.withdraw)) {
-      await sendMessage(chatId, getMsg('withdraw_info', 'withdraw_info'), { parse_mode: 'Markdown', reply_markup: getMainKeyboard(lang) });
+      await sendMessage(chatId, getMsg('withdraw_info', 'withdraw_info'), { parse_mode: 'Markdown' });
     } else if (matchesCommand(userCommands.contact, plainCommands.contact)) {
-      await sendMessage(chatId, getMsg('contact_info', 'contact_info'), { parse_mode: 'Markdown', reply_markup: getMainKeyboard(lang) });
+      await sendMessage(chatId, getMsg('contact_info', 'contact_info'), { parse_mode: 'Markdown' });
     } else if (matchesCommand(userCommands.instructions, plainCommands.instructions)) {
-      await sendMessage(chatId, getMsg('how_to_play', 'how_to_play'), { parse_mode: 'Markdown', reply_markup: getMainKeyboard(lang) });
+      await sendMessage(chatId, getMsg('how_to_play', 'how_to_play'), { parse_mode: 'Markdown' });
     } else if (matchesCommand(userCommands.transactions, plainCommands.transactions)) {
       await sendMessage(chatId, getMsg('transactions_prompt', 'transactions_prompt'), {
         parse_mode: 'Markdown',
@@ -592,7 +600,7 @@ export async function POST(request: NextRequest) {
         }
       });
     } else if (matchesCommand(userCommands.winning_patterns, plainCommands.winning_patterns)) {
-      await sendMessage(chatId, getMsg('winning_patterns_info', 'winning_patterns_info'), { parse_mode: 'Markdown', reply_markup: getMainKeyboard(lang) });
+      await sendMessage(chatId, getMsg('winning_patterns_info', 'winning_patterns_info'), { parse_mode: 'Markdown' });
     } else if (matchesCommand(userCommands.language, plainCommands.language)) {
       await sendMessage(chatId, getText('en', 'language_menu'), {
         reply_markup: {
@@ -603,7 +611,7 @@ export async function POST(request: NextRequest) {
         }
       });
     } else {
-      await sendMessage(chatId, 'Use the buttons below:', { reply_markup: getMainKeyboard(lang) });
+      await sendMessage(chatId, 'Use the buttons below:', getMainKeyboard(lang));
     }
 
     return NextResponse.json({ ok: true });

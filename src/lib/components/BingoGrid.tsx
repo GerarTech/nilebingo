@@ -24,8 +24,21 @@ export default function BingoGrid({
   const isCalled = (num: number) => num === 0 || drawnNumbers.includes(num);
   const isWinning = (row: number, col: number) => winningCells?.[row]?.[col] ?? false;
 
+  const [shouldShake, setShouldShake] = useState(false);
+  const prevDrawnCount = useRef(drawnNumbers.length);
+
+  useEffect(() => {
+    if (drawnNumbers.length > prevDrawnCount.current) {
+      setShouldShake(true);
+      const timer = setTimeout(() => setShouldShake(false), 400);
+      prevDrawnCount.current = drawnNumbers.length;
+      return () => clearTimeout(timer);
+    }
+    prevDrawnCount.current = drawnNumbers.length;
+  }, [drawnNumbers]);
+
   return (
-    <div className={`w-full mx-auto ${compact ? 'max-w-[280px]' : 'max-w-sm'} transition-transform duration-300`}>
+    <div className={`w-full mx-auto ${compact ? 'max-w-[280px]' : 'max-w-sm'} ${shouldShake ? 'animate-grid-shake' : ''} transition-transform duration-300`}>
       {/* Column headers with specific background colors from screenshot */}
       <div className={`grid grid-cols-5 gap-1.5 px-0.5 ${compact ? 'mb-1.5' : 'mb-2.5'}`}>
         {COLUMN_LABELS.map((label, idx) => (

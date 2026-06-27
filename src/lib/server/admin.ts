@@ -5,26 +5,6 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key';
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-const adminBotToken = process.env.ADMIN_BOT_TOKEN || '';
-const adminChatId = process.env.ADMIN_CHAT_ID || '';
-
-async function sendTelegramNotification(chatId: string | number, text: string) {
-  if (!adminBotToken || !adminChatId) return;
-  try {
-    await fetch(`https://api.telegram.org/bot${adminBotToken}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text,
-        parse_mode: 'Markdown'
-      })
-    });
-  } catch (err) {
-    console.error('Failed to send Telegram notification:', err);
-  }
-}
-
 // Verify admin access
 export function verifyAdmin(password: string): boolean {
   const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
@@ -180,7 +160,7 @@ export async function getTransactions(options: {
 export async function approveTransaction(transactionId: string, adminId: string) {
   const { data: tx } = await supabase
     .from('transactions')
-    .select('*, profiles!inner(first_name, username, telegram_id)')
+    .select('*')
     .eq('id', transactionId)
     .single();
 
@@ -208,41 +188,14 @@ export async function approveTransaction(transactionId: string, adminId: string)
     });
   }
 
-  // Send Telegram notification to admin
-  const userName = tx.profiles?.first_name || tx.profiles?.username || 'Unknown User';
-  const userTgId = tx.profiles?.telegram_id;
-  const typeLabel = tx.type === 'deposit' ? '💳 DEPOSIT' : '💸 WITHDRAW';
-  await sendTelegramNotification(
-    adminChatId,
-    `✅ *Transaction Approved*\n\n` +
-    `${typeLabel}\n` +
-    `👤 User: ${userName}\n` +
-    `💰 Amount: ${Number(tx.amount).toLocaleString()} ETB\n` +
-    `🆔 TX ID: \`${tx.id.slice(0, 8)}\`\n` +
-    `⏰ ${new Date().toLocaleString()}`
-  );
-
-  // Also notify the user if they have a telegram_id
-  if (userTgId && tx.type === 'deposit') {
-    await sendTelegramNotification(
-      userTgId,
-      `✅ *Deposit Approved*\n\n` +
-      `💰 ${Number(tx.amount).toLocaleString()} ETB has been added to your Main Wallet.\n` +
-      `Thank you for your payment!`
-    );
-  }
+  // Trigger real-time notification
+  await notifyAdminTransactionCompleted(transactionId);
 
   return { success: true };
 }
 
 // Reject transaction
 export async function rejectTransaction(transactionId: string) {
-  const { data: tx } = await supabase
-    .from('transactions')
-    .select('*, profiles!inner(first_name, username, telegram_id)')
-    .eq('id', transactionId)
-    .single();
-
   const { error } = await supabase
     .from('transactions')
     .update({ status: 'failed' })
@@ -250,31 +203,8 @@ export async function rejectTransaction(transactionId: string) {
 
   if (error) return { error: error.message };
 
-  // Send Telegram notification to admin
-  if (tx) {
-    const userName = tx.profiles?.first_name || tx.profiles?.username || 'Unknown User';
-    const userTgId = tx.profiles?.telegram_id;
-    const typeLabel = tx.type === 'deposit' ? '💳 DEPOSIT' : '💸 WITHDRAW';
-    await sendTelegramNotification(
-      adminChatId,
-      `❌ *Transaction Rejected*\n\n` +
-      `${typeLabel}\n` +
-      `👤 User: ${userName}\n` +
-      `💰 Amount: ${Number(tx.amount).toLocaleString()} ETB\n` +
-      `🆔 TX ID: \`${tx.id.slice(0, 8)}\`\n` +
-      `⏰ ${new Date().toLocaleString()}`
-    );
-
-    // Also notify the user
-    if (userTgId) {
-      await sendTelegramNotification(
-        userTgId,
-        `❌ *Transaction Rejected*\n\n` +
-        `Your ${tx.type} of ${Number(tx.amount).toLocaleString()} ETB was not approved.\n` +
-        `Please contact support if you have questions.`
-      );
-    }
-  }
+  // Trigger real-time notification
+  await notifyAdminTransactionCompleted(transactionId);
 
   return { success: true };
 }
@@ -426,13 +356,96 @@ export async function adjustBalance(userId: string, amount: number, type: 'main'
   if (updateError) return { error: updateError.message };
 
   // Record transaction
-  await supabase.from('transactions').insert({
-    user_id: userId,
-    type: amount > 0 ? 'deposit' : 'withdraw',
-    amount: Math.abs(amount),
-    status: 'completed',
-    reference: `admin_${reason}_${Date.now()}`,
-  });
+  const { data: insertedTx } = await supabase
+    .from('transactions')
+    .insert({
+      user_id: userId,
+      type: amount > 0 ? 'deposit' : 'withdraw',
+      amount: Math.abs(amount),
+      status: 'completed',
+      reference: `admin_${reason}_${Date.now()}`,
+    })
+    .select('id')
+    .single();
+
+  if (insertedTx) {
+    // Notify in background
+    notifyAdminTransactionCompleted(insertedTx.id).catch(err => {
+      console.error('Error triggering admin notification for balance adjustment:', err);
+    });
+  }
 
   return { success: true };
+}
+
+// Helper to send real-time notification to Admin Telegram Bot for completed transactions
+export async function notifyAdminTransactionCompleted(transactionId: string) {
+  const adminBotToken = process.env.ADMIN_BOT_TOKEN;
+  const adminChatId = process.env.ADMIN_CHAT_ID;
+  
+  if (!adminBotToken || !adminChatId) {
+    console.warn('Admin Telegram transaction notification skipped: ADMIN_BOT_TOKEN or ADMIN_CHAT_ID not configured');
+    return;
+  }
+
+  try {
+    // 1. Fetch transaction details
+    const { data: tx, error: txError } = await supabase
+      .from('transactions')
+      .select('*')
+      .eq('id', transactionId)
+      .maybeSingle();
+
+    if (txError || !tx) {
+      console.error(`Error fetching transaction ${transactionId} for notification:`, txError);
+      return;
+    }
+
+    // 2. Fetch user profile
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('first_name, username, phone')
+      .eq('id', tx.user_id)
+      .maybeSingle();
+
+    const playerName = profile 
+      ? (profile.first_name || (profile.username ? `@${profile.username}` : 'Unknown Player'))
+      : 'Unknown Player';
+    const playerPhone = profile?.phone || 'N/A';
+    const playerUsername = profile?.username ? `@${profile.username}` : 'N/A';
+
+    // 3. Status icon
+    let statusIcon = '⏳ PENDING';
+    if (tx.status === 'completed') {
+      statusIcon = '✅ COMPLETED';
+    } else if (tx.status === 'failed') {
+      statusIcon = '❌ FAILED/REJECTED';
+    }
+
+    // 4. Construct message
+    const text = `💰 *TRANSACTION RECORDED / UPDATED*\n\n` +
+                 `🏷️ *Type:* ${tx.type.toUpperCase()}\n` +
+                 `💵 *Amount:* ${Number(tx.amount).toLocaleString()} ETB\n` +
+                 `🚦 *Status:* ${statusIcon}\n\n` +
+                 `👤 *User:* ${playerName}\n` +
+                 `👤 *Username:* ${playerUsername}\n` +
+                 `📞 *Phone:* ${playerPhone}\n` +
+                 `🆔 *Tx ID:* \`${tx.id.slice(0, 8)}...\`\n` +
+                 `🔗 *Reference:* \`${tx.reference || 'N/A'}\`\n` +
+                 `⏱️ *Date:* ${new Date(tx.created_at || Date.now()).toLocaleString()}`;
+
+    // 5. Call Telegram API
+    await fetch(`https://api.telegram.org/bot${adminBotToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: adminChatId,
+        text,
+        parse_mode: 'Markdown',
+      }),
+      signal: AbortSignal.timeout(5000),
+    });
+  } catch (err) {
+    console.error('Error sending Telegram admin transaction notification:', err);
+  }
 }

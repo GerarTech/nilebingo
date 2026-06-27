@@ -221,10 +221,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       };
     });
 
-    if (state.profile && state.wallet) {
+    if (state.profile) {
       try {
-        const currentVal = state.wallet[type] || 0;
-        const newVal = Math.max(0, currentVal + amount);
+        const { data: latestWallet } = await supabase
+          .from('wallets')
+          .select('main_balance, play_balance')
+          .eq('user_id', state.profile.id)
+          .single();
+        
+        const dbVal = latestWallet ? (Number((latestWallet as any)[type]) || 0) : 0;
+        const newVal = Math.max(0, dbVal + amount);
+
         await supabase
           .from('wallets')
           .update({ [type]: newVal })
@@ -233,7 +240,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         console.warn('Could not persist wallet balance update to Supabase:', e);
       }
     }
-  }, [state.profile, state.wallet]);
+  }, [state.profile]);
 
   const updateAvatar = useCallback(async (avatar: string) => {
     if (!state.profile) return;
