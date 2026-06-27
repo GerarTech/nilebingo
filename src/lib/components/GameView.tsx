@@ -5,7 +5,6 @@ import { supabase } from '../supabase';
 import BingoGrid from './BingoGrid';
 import RollingCounter from './RollingCounter';
 import { getColumnLabel, getWinningCells, checkWin } from '../server/bingo';
-import { speakNumber, triggerHaptic } from '../utils/voice';
 import WinModal from './WinModal';
 import LossModal from './LossModal';
 import LeaveModal from './LeaveModal';
@@ -24,7 +23,6 @@ interface GameViewProps {
   isWatching: boolean;
   autoMark: boolean;
   autoWin: boolean;
-  voiceEnabled: boolean;
   language: 'en' | 'am';
   livePlayerCount: number;
   recentCalled: { num: number; label: string }[];
@@ -40,7 +38,6 @@ interface GameViewProps {
   t: (key: string) => string;
   onSetAutoMark: (v: boolean) => void;
   onSetAutoWin: (v: boolean) => void;
-  onSetVoiceEnabled: (v: boolean) => void;
   onManualDraw: () => void;
   onBingo: () => void;
   onLeave: () => void;
@@ -54,10 +51,10 @@ interface GameViewProps {
 export default function GameView({
   profile, gameCard, playerCards, selectedCards, drawnNumbers,
   gameId, selectedStake, inGame, isWatching, autoMark, autoWin,
-  voiceEnabled, language, livePlayerCount, recentCalled,
+  language, livePlayerCount, recentCalled,
   otherPlayers, opponentWinner, showWinModal, showLossModal, showLeaveModal,
   winningCard, winningCells, commissionRate, resultCountdown,
-  t, onSetAutoMark, onSetAutoWin, onSetVoiceEnabled, onManualDraw,
+  t, onSetAutoMark, onSetAutoWin, onManualDraw,
   onBingo, onLeave, onLeaveAttempt, onForfeitExit, onCancelLeave,
   onSkipResult, onMarkNumber,
 }: GameViewProps) {
@@ -105,7 +102,7 @@ export default function GameView({
                 <div className="absolute inset-0.5 rounded-full border border-dashed border-emerald-500/10 animate-[spin_12s_linear_infinite]" />
                 <div className="absolute inset-2 rounded-full border border-dotted border-gold/10 animate-[spin_6s_linear_infinite_reverse]" />
                 {recentCalled.length > 0 ? (
-                  <div className="relative z-10 w-11 h-11 rounded-full bg-gradient-to-br from-[#ffd500] via-[#ffd000] to-amber-500 flex flex-col items-center justify-center font-sans shadow-lg shadow-gold/25 animate-scale-up">
+                  <div className="relative z-10 w-11 h-11 rounded-full bg-gradient-to-br from-[#FEE800] via-[#FEE800] to-amber-500 flex flex-col items-center justify-center font-sans shadow-lg shadow-gold/25 animate-scale-up">
                     <span className="text-[8px] font-black text-navy leading-none mb-0.5 select-none">{recentCalled[0].label.charAt(0)}</span>
                     <span className="text-sm font-extrabold text-navy leading-none select-none">{recentCalled[0].num}</span>
                   </div>
@@ -150,10 +147,7 @@ export default function GameView({
                       const num = card[row][col];
                       if (num === 0) return;
                       if (drawnNumbers.includes(num)) {
-                        triggerHaptic('medium');
                         onMarkNumber(num);
-                      } else {
-                        triggerHaptic('light');
                       }
                     }}
                   />
@@ -211,18 +205,14 @@ export default function GameView({
 
         {/* Actions */}
         <div className="space-y-3 font-sans">
-          <div className="grid grid-cols-3 gap-2">
-            <button onClick={() => { onSetAutoMark(!autoMark); triggerHaptic('light'); }}
+          <div className="grid grid-cols-2 gap-2">
+            <button onClick={() => { onSetAutoMark(!autoMark); }}
               className={`py-3 rounded-xl text-[10px] sm:text-xs font-bold border transition-all ${autoMark ? 'bg-[#10b981]/15 text-[#10b981] border-[#10b981]/30' : 'bg-black/20 border-white/5 text-gray-400'}`}>
               Mark: <span className="font-extrabold">{autoMark ? 'AUTO' : 'MAN'}</span>
             </button>
-            <button onClick={() => { onSetAutoWin(!autoWin); triggerHaptic('light'); }}
+            <button onClick={() => { onSetAutoWin(!autoWin); }}
               className={`py-3 rounded-xl text-[10px] sm:text-xs font-bold border transition-all ${autoWin ? 'bg-indigo-500/15 text-indigo-400 border-indigo-500/30' : 'bg-black/20 border-white/5 text-gray-400'}`}>
               Auto-Win: <span className="font-extrabold">{autoWin ? 'ON' : 'OFF'}</span>
-            </button>
-            <button onClick={() => { onSetVoiceEnabled(!voiceEnabled); triggerHaptic('light'); }}
-              className={`py-3 rounded-xl text-[10px] sm:text-xs font-bold border transition-all ${voiceEnabled ? 'bg-gold/15 text-gold border-gold/30' : 'bg-black/20 border-white/5 text-gray-400'}`}>
-              Voice: <span className="font-extrabold">{voiceEnabled ? 'ON' : 'OFF'}</span>
             </button>
           </div>
 
@@ -237,7 +227,7 @@ export default function GameView({
                 className={`flex-1 font-black py-4 rounded-xl text-sm transition-all tracking-wider uppercase relative overflow-hidden select-none cursor-pointer ${
                   isBingoReady
                     ? 'bg-gradient-to-r from-red-600 via-amber-500 to-red-600 text-white shadow-xl shadow-red-500/40 scale-[1.01] border border-red-400 animate-pulse'
-                    : 'bg-[#ffd000] text-navy hover:opacity-95 shadow-md shadow-gold/15 transition-transform hover:scale-[1.01] active:translate-y-0.5'
+                    : 'bg-[#FEE800] text-navy hover:opacity-95 shadow-md shadow-gold/15 transition-transform hover:scale-[1.01] active:translate-y-0.5'
                 }`}>
                 🚀 {isBingoReady ? '🔥 CLAIM BINGO! 🔥' : 'CLAIM BINGO!'}
               </button>
@@ -262,6 +252,7 @@ export default function GameView({
         playerName={profile?.first_name || profile?.username || 'You'}
         countdown={resultCountdown}
         onSkip={onSkipResult}
+        t={t}
       />
 
       <LossModal
@@ -275,6 +266,7 @@ export default function GameView({
         drawnNumbers={drawnNumbers}
         countdown={resultCountdown}
         onSkip={onSkipResult}
+        t={t}
       />
 
       <LeaveModal
@@ -283,6 +275,7 @@ export default function GameView({
         onResume={onCancelLeave}
         onForfeit={onForfeitExit}
         onClose={onCancelLeave}
+        t={t}
       />
     </>
   );

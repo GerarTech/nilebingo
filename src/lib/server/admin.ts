@@ -37,6 +37,7 @@ export async function getDashboardStats() {
 
   // Calculate transaction totals
   let totalDeposits = 0;
+  let totalDepositsApproved = 0;
   let totalWithdrawals = 0;
   let totalBets = 0;
   let totalWins = 0;
@@ -46,7 +47,10 @@ export async function getDashboardStats() {
   if (transactions.data) {
     for (const t of transactions.data) {
       const amt = Number(t.amount) || 0;
-      if (t.type === 'deposit' && t.status === 'completed') totalDeposits += amt;
+      if (t.type === 'deposit' && t.status === 'completed') {
+        totalDeposits += amt;
+        totalDepositsApproved += amt;
+      }
       if (t.type === 'withdraw' && t.status === 'completed') totalWithdrawals += amt;
       if (t.type === 'bet') totalBets += amt;
       if (t.type === 'win') totalWins += amt;
@@ -62,9 +66,11 @@ export async function getDashboardStats() {
     totalMainBalance,
     totalPlayBalance,
     totalDeposits,
+    totalDepositsApproved,
     totalWithdrawals,
     totalBets,
     totalWins,
+    totalCommissionEarned: Math.max(0, totalBets - totalWins),
     pendingDeposits,
     pendingWithdrawals,
     revenue: totalBets - totalWins,

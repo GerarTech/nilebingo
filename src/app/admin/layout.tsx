@@ -4,13 +4,14 @@ import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
-  LayoutDashboard, Users, Wallet, Gamepad2, Coins, Phone, Send, Settings, LogOut, Menu, X
+  LayoutDashboard, Users, Wallet, Gamepad2, Coins, Phone, Send, Settings, LogOut, Menu, X, PlusCircle
 } from 'lucide-react';
 
 const navItems = [
   { href: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/admin/users', label: 'Users', icon: Users },
   { href: '/admin/transactions', label: 'Transactions', icon: Wallet },
+  { href: '/admin/bulk-deposit', label: 'Bulk Deposit', icon: PlusCircle },
   { href: '/admin/games', label: 'Games', icon: Gamepad2 },
   { href: '/admin/stakes', label: 'Stakes', icon: Coins },
   { href: '/admin/contacts', label: 'Contacts', icon: Phone },
@@ -44,7 +45,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   if (!authed) return null;
 
   return (
-    <div className="min-h-screen bg-[#0a0f1e] flex">
+    <div className="min-h-screen bg-[#283782] flex">
       {/* Mobile sidebar toggle */}
       <button
         onClick={() => setSidebarOpen(!sidebarOpen)}

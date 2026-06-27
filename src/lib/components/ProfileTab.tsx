@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Trophy, Gamepad2, Coins, Volume2, VolumeX, Star, Check, Camera } from 'lucide-react';
+import { Trophy, Gamepad2, Coins, Star, Check, Camera } from 'lucide-react';
 import type { Profile, Wallet } from '../types';
 
 interface ProfileTabProps {
@@ -11,16 +11,14 @@ interface ProfileTabProps {
   t: (key: string) => string;
   language: string;
   onSetLanguage: (lang: 'en' | 'am') => void;
-  onToggleSound: () => void;
   onUpdateAvatar: (avatar: string) => void;
-  triggerHaptic: (type: 'light' | 'medium' | 'heavy' | 'success' | 'warning' | 'error') => void;
 }
 
 const AVATARS = ['👑', '🦁', '🦅', '🏃‍♂️', '☕', '⚡', '🎪', '👤', '👩‍🦰', '🧔'];
 
 export default function ProfileTab({
   profile, wallet, stakeHistory, t, language,
-  onSetLanguage, onToggleSound, onUpdateAvatar, triggerHaptic,
+  onSetLanguage, onUpdateAvatar,
 }: ProfileTabProps) {
   const [showAvatarSelector, setShowAvatarSelector] = useState(false);
 
@@ -34,7 +32,7 @@ export default function ProfileTab({
     <div className="px-4 pt-4 animate-fade-in pb-20">
       <div className="text-center mb-6">
         <button
-          onClick={() => { setShowAvatarSelector(!showAvatarSelector); triggerHaptic('light'); }}
+          onClick={() => { setShowAvatarSelector(!showAvatarSelector); }}
           className="w-20 h-20 rounded-full bg-gradient-to-r from-amber-400 to-amber-600 mx-auto mb-3 flex items-center justify-center shadow-lg relative border border-amber-300 cursor-pointer group hover:scale-[1.03] transition-all duration-200"
         >
           <span className="text-3xl">{profile?.photo_url || '👑'}</span>
@@ -55,7 +53,7 @@ export default function ProfileTab({
                 return (
                   <button
                     key={av}
-                    onClick={() => { onUpdateAvatar(av); setShowAvatarSelector(false); triggerHaptic('success'); }}
+                    onClick={() => { onUpdateAvatar(av); setShowAvatarSelector(false); }}
                     className={`aspect-square text-xl rounded-xl flex items-center justify-center border transition-all cursor-pointer hover:scale-105 active:scale-95 duration-150 relative ${
                       isSelected ? 'bg-amber-500/10 border-amber-500/60 shadow-lg shadow-amber-500/5' : 'bg-[#0a111a] border-white/5 hover:border-white/10'
                     }`}
@@ -103,15 +101,6 @@ export default function ProfileTab({
       <div className="space-y-3 mb-5">
         <h3 className="text-xs text-gray-400 mb-2 font-bold uppercase tracking-wider">⚙️ Preferences</h3>
         <div className="glass rounded-2xl divide-y divide-white/5 border border-white/5">
-          <div className="flex items-center justify-between p-4">
-            <div className="flex items-center gap-3">
-              {profile?.sound_on ? <Volume2 size={18} className="text-gold" /> : <VolumeX size={18} className="text-gray-500" />}
-              <span className="text-xs text-gray-200 font-bold">{t('sound_effects')}</span>
-            </div>
-            <button onClick={onToggleSound} className={`w-10 h-5 rounded-full transition-colors relative select-none cursor-pointer ${profile?.sound_on ? 'bg-gold' : 'bg-gray-600'}`}>
-              <div className={`w-4 h-4 bg-white rounded-full transition-transform absolute top-0.5 ${profile?.sound_on ? 'translate-x-5' : 'translate-x-0.5'}`} />
-            </button>
-          </div>
           <div className="flex items-center justify-between p-4">
             <div className="flex items-center gap-3">
               <Star size={18} className="text-gold" />

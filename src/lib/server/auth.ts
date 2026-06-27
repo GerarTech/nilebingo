@@ -72,7 +72,6 @@ export async function getOrCreateProfile(telegramId: string): Promise<Profile | 
     .insert({
       telegram_id: telegramId,
       language: 'en',
-      sound_on: true,
       verified: false,
     })
     .select()
@@ -109,16 +108,6 @@ export async function updateLanguage(userId: string, language: 'en' | 'am') {
   const { error } = await supabase
     .from('profiles')
     .update({ language })
-    .eq('id', userId);
-  
-  return !error;
-}
-
-// Update sound setting
-export async function updateSoundSetting(userId: string, soundOn: boolean) {
-  const { error } = await supabase
-    .from('profiles')
-    .update({ sound_on: soundOn })
     .eq('id', userId);
   
   return !error;

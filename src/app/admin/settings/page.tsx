@@ -19,6 +19,7 @@ interface BotCommands {
   transactions: string;
   winning_patterns: string;
   language: string;
+  mycode: string;
 }
 
 interface BotMessages {
@@ -72,20 +73,21 @@ export default function SettingsPage() {
     transactions: '📒 Transactions',
     winning_patterns: '🎯 Winning patterns',
     language: '🌐 Language',
+    mycode: '🔗 My Invite Code',
   });
   const [messages, setMessages] = useState<BotMessages>({
     welcome: '🎰 Welcome to Nile Bingo!\n\nThe most exciting BINGO experience on Telegram.\n\nTap the button below to start playing!',
     share_contact: '📱 Please share your phone number to continue.\n\nThis helps us identify you and provide better support.',
     contact_received: '✅ Thank you! Your contact has been shared with our support team.',
-    balance_info: '💰 *Your Balance*\n\nMain Wallet: 0 ETB\nPlay Wallet: 0 ETB\nTotal: 0 ETB',
+    balance_info: '💰 *Your Balance*\n\nMain Wallet: 0 ETB (Withdrawable)\nPlay Wallet: 0 ETB (Non-withdrawable, Play only)\nTotal: 0 ETB',
     deposit_choose: '💳 *Choose payment method:*\n\nSelect your preferred option below:',
-    deposit_cbe_info: '*CBE Deposit Instructions*\n\nAccount: 1000256789123\nName: Nile Bingo\nBank: CBE\n\nSend amount, then forward SMS confirmation here.',
-    deposit_telebirr_info: '*Telebirr Deposit Instructions*\n\nNumber: 0925502345\nName: Ashe\n\nSend up to 1000 ETB, then forward SMS confirmation here.',
-    withdraw_info: '*Withdraw Funds*\n\nContact support to withdraw. Min: 50 ETB',
+    deposit_cbe_info: '*CBE Deposit Instructions*\n\nAccount: 1000256789123\nName: Nile Bingo\nBank: CBE\n\n1. Send your deposit using CBE Birr\n2. Copy/forward the full SMS confirmation here\n3. Admin will verify and credit your balance\n\nMin deposit: 10 ETB',
+    deposit_telebirr_info: '*Telebirr Deposit Instructions*\n\nNumber: 0925502345\nName: Ashe\n\n1. Send up to 1000 ETB using Telebirr\n2. Copy/forward the full SMS confirmation here\n3. Admin will verify and credit your balance\n\nMin deposit: 10 ETB',
+    withdraw_info: '*Withdraw Funds*\n\nWithdrawals are processed manually by our team.\n\nRequirements:\n• Main Wallet balance only (Play Wallet cannot be withdrawn)\n• Minimum withdrawal: 50 ETB\n• You must have played at least 5 games\n\nTo request a withdrawal, please contact support with:\n• Amount to withdraw\n• Your preferred receiving method\n\nWe process withdrawals within 24 hours.',
     contact_info: '*Contact Support*\n\nEmail: support@nilebingo.com\nTelegram: @nile_bingo_support',
     winning_patterns_info: '*Winning Patterns*\n\n1. Horizontal Line\n2. Vertical Line\n3. Diagonal Line\n4. Four Corners\n5. Blackout\n\nFirst to complete a pattern wins!',
     how_to_play: '*How to Play BINGO:*\n\n1. Choose your stake (10/20/50 ETB)\n2. Select your card (1-300)\n3. Numbers are drawn\n4. Mark matching numbers\n5. Complete a row/column/diagonal to win!\n\nGood luck!',
-    bot_description: '🎮 Play Bingo Game Online (ቢንጎ ጨዋታ)\n\n🎉🔥 እንኳን ወደ ፏ BINGO🔥🎱 በሰላም መጡ!🔥🎉\n\n🎮 ከብዙ ተጫዋቾች ጋር በቀጥታ የቢንጎ ጨዋታ ይጫወቱ\n💰 ሽልማት ያሸንፉ እና የእርስዎን ገንዘብ ያስተዳድሩ\n⚡️ ፈጣን እና በብዙዎች የተወደደ የብዙ ተጫዋቾች ጨዋታ\n\n👉 አሁን ለመጀመር "Start" ይጫኑ!',
+    bot_description: '🎮 Play Bingo Game Online (ቢንጎ ጨዋታ)\n\n🎉🔥 እንኳን ወደ Nile BINGO🔥🎱 በሰላም መጡ! 🔥🎉\n\n🎮 ከብዙ ተጫዋቾች ጋር በቀጥታ የቢንጎ ጨዋታ ይጫወቱ\n💰 ሽልማት ያሸንፉ እና የእርስዎን ገንዘብ ያስተዳድሩ\n⚡️ ፈጣን እና በብዙዎች የተወደደ የብዙ ተጫዋቾች ጨዋታ\n\n👉 አሁን ለመጀመር /start ይጫኑ!',
   });
   
   // Game config specific state
@@ -104,6 +106,7 @@ export default function SettingsPage() {
     players: 5,
     maxPlayers: 100
   });
+  const [savingGame, setSavingGame] = useState(false);
 
   // Gateway specific state
   const [withdrawRequiredGames, setWithdrawRequiredGames] = useState<number>(5);
@@ -115,13 +118,14 @@ export default function SettingsPage() {
   const [telebirrMax, setTelebirrMax] = useState<number>(1000);
   const [referralBonus, setReferralBonus] = useState<number>(10);
   const [referralMinDeposit, setReferralMinDeposit] = useState<number>(50);
+  const [signupBonus, setSignupBonus] = useState<number>(0);
 
   // Branding specific state
   const [botName, setBotName] = useState('Nile BINGO');
   const [appName, setAppName] = useState('Nile BINGO');
   const [appLogo, setAppLogo] = useState('🎰');
+  const [appLogoPng, setAppLogoPng] = useState<string | null>(null);
   const [colorScheme, setColorScheme] = useState('gold');
-  const [adminVoiceEnabled, setAdminVoiceEnabled] = useState(true);
   const [adminReferralEnabled, setAdminReferralEnabled] = useState(true);
   const [appointedWinners, setAppointedWinners] = useState<Record<string, number>>({});
 
@@ -158,11 +162,11 @@ export default function SettingsPage() {
         if (config.appLogo) {
           setAppLogo(config.appLogo);
         }
+        if (config.appLogoPng) {
+          setAppLogoPng(config.appLogoPng);
+        }
         if (config.colorScheme) {
           setColorScheme(config.colorScheme);
-        }
-        if (config.voiceEnabled !== undefined) {
-          setAdminVoiceEnabled(config.voiceEnabled !== false);
         }
         if (config.referralEnabled !== undefined) {
           setAdminReferralEnabled(config.referralEnabled !== false);
@@ -178,6 +182,7 @@ export default function SettingsPage() {
         if (config.telebirr_max !== undefined) setTelebirrMax(Number(config.telebirr_max) || 1000);
         if (config.referral_bonus !== undefined) setReferralBonus(Number(config.referral_bonus) || 10);
         if (config.referral_min_deposit !== undefined) setReferralMinDeposit(Number(config.referral_min_deposit) || 50);
+        if (config.signup_bonus !== undefined) setSignupBonus(Number(config.signup_bonus) || 0);
       }
       if (msgs && typeof msgs === 'object') {
         setMessages(prev => ({ ...prev, ...msgs }));
@@ -194,8 +199,8 @@ export default function SettingsPage() {
       rooms: roomsList,
       appName,
       appLogo,
+      appLogoPng,
       colorScheme,
-      voiceEnabled: adminVoiceEnabled,
       referralEnabled: adminReferralEnabled,
       withdraw_required_games: withdrawRequiredGames,
       cbe_account: cbeAccount,
@@ -206,6 +211,7 @@ export default function SettingsPage() {
       telebirr_max: telebirrMax,
       referral_bonus: referralBonus,
       referral_min_deposit: referralMinDeposit,
+      signup_bonus: signupBonus,
       appointed_winners: appointedWinners,
     };
   };
@@ -235,7 +241,9 @@ export default function SettingsPage() {
   };
 
   const handleSaveGameSettings = async () => {
+    setSavingGame(true);
     await saveConfig(getMergedConfig());
+    setSavingGame(false);
   };
 
   const handleSaveBranding = async () => {
@@ -688,6 +696,30 @@ export default function SettingsPage() {
             </div>
 
             <div>
+              <label className="text-[10px] text-gray-400 uppercase block mb-1">Application Logo (PNG Image)</label>
+              <p className="text-[8.5px] text-gray-500 mb-1.5">Upload a PNG image to use as the app logo (replaces emoji). Max 500KB.</p>
+              <input
+                type="file"
+                accept="image/png,image/jpeg"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  if (file.size > 500 * 1024) { alert('File too large. Max 500KB.'); return; }
+                  const reader = new FileReader();
+                  reader.onload = (ev) => setAppLogoPng(ev.target?.result as string);
+                  reader.readAsDataURL(file);
+                }}
+                className="w-full text-xs text-gray-400 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-gold file:text-navy file:cursor-pointer hover:file:bg-gold/90"
+              />
+              {appLogoPng && (
+                <div className="mt-2 flex items-center gap-2">
+                  <img src={appLogoPng} alt="Logo Preview" className="w-10 h-10 rounded-lg border border-white/10 object-contain bg-navy-light" />
+                  <button onClick={() => setAppLogoPng(null)} className="text-[10px] text-red-400 hover:text-red-300">Remove</button>
+                </div>
+              )}
+            </div>
+
+            <div>
               <label className="text-[10px] text-gray-400 uppercase block mb-1">Color Accent Scheme</label>
               <select
                 value={colorScheme}
@@ -703,21 +735,6 @@ export default function SettingsPage() {
             </div>
 
             <div className="bg-navy-light p-3 rounded-lg border border-white/5 space-y-2">
-              <label className="text-[10px] text-gray-400 uppercase block">Voice Ball Calling</label>
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setAdminVoiceEnabled(!adminVoiceEnabled)}
-                  className={`w-10 h-5 rounded-full transition-colors relative select-none cursor-pointer ${adminVoiceEnabled ? 'bg-gold' : 'bg-gray-600'}`}
-                >
-                  <div className={`w-4 h-4 bg-white rounded-full transition-transform absolute top-0.5 ${adminVoiceEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                </button>
-                <span className="text-xs text-white font-medium">{adminVoiceEnabled ? 'Voice Enabled' : 'Voice Disabled (Muted)'}</span>
-              </div>
-              <p className="text-[8.5px] text-gray-500">When disabled, voice announcements for drawn balls are muted globally for all players.</p>
-            </div>
-
-            <div className="bg-navy-light p-3 rounded-lg border border-white/5 space-y-2">
               <label className="text-[10px] text-gray-400 uppercase block">Referral Program Status</label>
               <div className="flex items-center gap-3">
                 <button
@@ -729,6 +746,15 @@ export default function SettingsPage() {
                 </button>
                 <span className="text-xs text-white font-medium">{adminReferralEnabled ? 'Referral Program Active' : 'Referral Program Inactive'}</span>
               </div>
+            </div>
+
+            <div className="bg-navy-light p-3 rounded-lg border border-white/5 space-y-2">
+              <label className="text-[10px] text-gray-400 uppercase block">Signup Bonus (ETB)</label>
+              <p className="text-[8.5px] text-gray-500">New users get this amount credited to their play balance on first signup.</p>
+              <input type="number" min="0" max="1000" step="1" value={signupBonus}
+                onChange={e => setSignupBonus(Number(e.target.value) || 0)}
+                className="w-full bg-navy border border-white/10 rounded-md px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
+              />
             </div>
 
             <button onClick={handleSaveBranding} className="w-full bg-gold text-navy font-bold py-2.5 rounded-lg text-xs flex items-center justify-center gap-2 cursor-pointer transition-all">

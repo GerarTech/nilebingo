@@ -11,14 +11,14 @@ const config: Config = {
     extend: {
       colors: {
         navy: {
-          DEFAULT: '#0a0f1e',
-          light: '#111827',
-          card: '#1a1f2e',
+          DEFAULT: '#283782',
+          light: '#3547a0',
+          card: '#1e2d6e',
         },
         gold: {
-          DEFAULT: '#f5a623',
-          dark: '#d4891a',
-          light: '#fbbf24',
+          DEFAULT: '#FEE800',
+          dark: '#e5d100',
+          light: '#fef04d',
         },
         accent: {
           violet: '#8b5cf6',
@@ -32,10 +32,10 @@ const config: Config = {
         display: ['Inter', 'system-ui', 'sans-serif'],
       },
       backgroundImage: {
-        'gradient-gold': 'linear-gradient(135deg, #f5a623 0%, #d4891a 100%)',
+        'gradient-gold': 'linear-gradient(135deg, #FEE800 0%, #e5d100 100%)',
         'gradient-violet': 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
         'gradient-green': 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-        'gradient-card': 'linear-gradient(135deg, rgba(245, 166, 35, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%)',
+        'gradient-card': 'linear-gradient(135deg, rgba(254, 232, 0, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%)',
       },
     },
   },

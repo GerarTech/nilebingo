@@ -90,7 +90,7 @@ export default function RoomLobby({
 
           <button onClick={onUnregister}
             className="w-full bg-red-500/10 border border-red-500/20 text-red-400 font-black py-4 rounded-xl text-xs hover:bg-red-500/20 active:scale-[0.99] transition-all uppercase tracking-wider cursor-pointer shadow-md">
-            ❌ Cancel & Refund {(fee * selectedCards.length).toLocaleString()} ብር
+            ❌ Cancel & Refund {(fee * selectedCards.length).toLocaleString()} {t('birr')}
           </button>
         </div>
       </div>
@@ -118,15 +118,15 @@ export default function RoomLobby({
       <div className="flex items-stretch gap-1.5 mb-4">
         <div className="bg-[#141f33] border border-[#233c66]/30 p-2.5 rounded-xl flex-1 text-center shadow-lg">
           <div className="text-[7.5px] text-gray-400 font-extrabold uppercase tracking-wider">WALLET</div>
-          <div className="text-sm font-black text-white mt-1">{totalBalance.toLocaleString()} ብር</div>
+          <div className="text-sm font-black text-white mt-1">{totalBalance.toLocaleString()} {t('birr')}</div>
         </div>
         <div className="bg-[#141f33] border border-[#233c66]/30 p-2.5 rounded-xl flex-1 text-center shadow-lg">
           <div className="text-[7.5px] text-gray-400 font-extrabold uppercase tracking-wider">STAKE</div>
-          <div className="text-sm font-black text-amber-400 mt-1">{(fee * selectedCards.length).toLocaleString()} ብር</div>
+          <div className="text-sm font-black text-amber-400 mt-1">{(fee * selectedCards.length).toLocaleString()} {t('birr')}</div>
         </div>
         <div className="bg-[#141f33] border border-[#233c66]/30 p-2.5 rounded-xl flex-1 text-center shadow-lg">
           <div className="text-[7.5px] text-gray-400 font-extrabold uppercase tracking-wider">PRIZE</div>
-          <div className="text-sm font-black text-gold mt-1">{(selectedCards.length > 0 ? (room.winAmount * selectedCards.length) : 0).toLocaleString()} ብር</div>
+          <div className="text-sm font-black text-gold mt-1">{(selectedCards.length > 0 ? (room.winAmount * selectedCards.length) : 0).toLocaleString()} {t('birr')}</div>
         </div>
         <div className="bg-gradient-to-br from-[#ff5a00] to-amber-600 rounded-xl px-2.5 flex flex-col items-center justify-center font-black text-center shadow-lg shadow-[#ff5a00]/20 w-14 border border-white/10 select-none h-12 self-center shrink-0">
           <span className="text-[7px] text-white/80 uppercase font-bold tracking-tight">WAIT</span>
@@ -190,7 +190,7 @@ export default function RoomLobby({
           <div className="bg-red-500/10 border border-red-500/20 text-red-300 text-[11px] py-2 px-3 rounded-xl font-medium flex items-center justify-between font-sans shadow-md animate-fade-in">
             <span className="flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 bg-red-400 rounded-full animate-ping" />
-              Need {(fee * selectedCards.length).toLocaleString()} ብር
+              Need {(fee * selectedCards.length).toLocaleString()} {t('birr')}
             </span>
             <button onClick={onDeposit} className="bg-amber-500 text-white text-[9.5px] font-extrabold px-3 py-1 rounded bg-[#ff5a00] hover:opacity-90 shadow-sm">
               Deposit
@@ -200,13 +200,13 @@ export default function RoomLobby({
         <div className="flex gap-2.5">
           {selectedCards.length > 0 && isBalanceEligible ? (
             <button onClick={onPlay}
-              className="flex-1 bg-gradient-to-r from-[#ffd000] to-amber-500 text-navy font-black py-3.5 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-gold/20 hover:scale-[1.01] active:scale-[0.99] transition-all uppercase tracking-widest animate-pulse cursor-pointer">
-              <Play size={10} fill="currentColor" /> Play {selectedCards.length} Cards ({(fee * selectedCards.length).toLocaleString()} ብር)
+              className="flex-1 bg-gradient-to-r from-[#FEE800] to-amber-500 text-navy font-black py-3.5 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-gold/20 hover:scale-[1.01] active:scale-[0.99] transition-all uppercase tracking-widest animate-pulse cursor-pointer">
+              <Play size={10} fill="currentColor" /> Play {selectedCards.length} Cards ({(fee * selectedCards.length).toLocaleString()} {t('birr')})
             </button>
           ) : (
             <button disabled
               className="flex-1 bg-gray-500/10 border border-white/5 text-gray-500 font-extrabold py-3.5 rounded-xl text-xs transition-all uppercase tracking-widest cursor-not-allowed text-center">
-              {selectedCards.length === 0 ? `SELECT A CARD (${fee} ብር)` : 'SELECT A CARD'}
+              {selectedCards.length === 0 ? `SELECT A CARD (${fee} ${t('birr')})` : 'SELECT A CARD'}
             </button>
           )}
         </div>

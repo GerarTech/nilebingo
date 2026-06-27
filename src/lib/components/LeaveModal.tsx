@@ -6,9 +6,10 @@ interface LeaveModalProps {
   onResume: () => void;
   onForfeit: () => void;
   onClose: () => void;
+  t: (key: string) => string;
 }
 
-export default function LeaveModal({ show, stake, onResume, onForfeit, onClose }: LeaveModalProps) {
+export default function LeaveModal({ show, stake, onResume, onForfeit, onClose, t }: LeaveModalProps) {
   if (!show) return null;
 
   return (
@@ -19,10 +20,9 @@ export default function LeaveModal({ show, stake, onResume, onForfeit, onClose }
           <span className="text-2xl text-red-500">⚠️</span>
         </div>
         <h3 className="text-lg font-black text-white uppercase tracking-tight">Abandon Game?</h3>
-        <p className="text-xs text-amber-500 font-extrabold mt-1">( ከጨዋታው መውጣት ይፈልጋሉ? )</p>
+        <p className="text-xs text-amber-500 font-extrabold mt-1">{t('forfeit_warning')}</p>
         <p className="text-xs text-gray-400 mt-3.5 leading-relaxed font-sans text-center">
-          Leaving now counts as an <span className="text-red-400 font-bold">immediate forfeit (loss)</span>.
-          Your active card bet stake of <span className="text-amber-400 font-bold">{stake.toLocaleString()} ETB</span> will be lost.
+          {t('leave_warning')} <span className="text-amber-400 font-bold">{stake.toLocaleString()} {t('birr')}</span> {t('will_be_lost')}
         </p>
         <div className="grid grid-cols-2 gap-3 mt-6">
           <button onClick={onResume} className="bg-[#14223d] border border-white/5 hover:bg-white/5 text-gray-300 font-extrabold py-3 rounded-xl text-xs transition-all uppercase tracking-wider cursor-pointer">

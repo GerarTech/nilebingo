@@ -3,6 +3,11 @@ import { supabase } from '../supabase';
 import type { Profile, Wallet, TabType } from '../types';
 import { useT, type Language } from '../i18n';
 
+function isValidUUID(id: string | undefined): boolean {
+  if (!id) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+}
+
 function fallbackProfile(id: string): Profile {
   return {
     id: 'local-' + Date.now(),
@@ -10,7 +15,6 @@ function fallbackProfile(id: string): Profile {
     username: 'Player',
     first_name: 'Player',
     language: 'en',
-    sound_on: true,
     verified: false,
     created_at: new Date().toISOString(),
   };
@@ -40,7 +44,6 @@ interface AppContextType extends AppState {
   t: (key: string) => string;
   setLanguage: (lang: Language) => void;
   setActiveTab: (tab: TabType) => void;
-  toggleSound: () => void;
   initialize: (telegramId: string, firstName?: string, username?: string) => Promise<void>;
   setCurrentGame: (gameId: string | null) => void;
   refreshWallet: () => Promise<void>;
@@ -77,16 +80,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setState(prev => ({ ...prev, activeTab: tab }));
   }, []);
 
-  const toggleSound = useCallback(async () => {
-    if (!state.profile) return;
-    const newSound = !state.profile.sound_on;
-    setState(prev => ({
-      ...prev,
-      profile: prev.profile ? { ...prev.profile, sound_on: newSound } : null,
-    }));
-    await supabase.from('profiles').update({ sound_on: newSound }).eq('id', state.profile.id);
-  }, [state.profile]);
-
   const refreshWallet = useCallback(async () => {
     if (!state.profile) return;
     const { data } = await supabase
@@ -121,7 +114,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
             first_name: firstName || 'Player',
             username: username || 'Player',
             language: 'en',
-            sound_on: true,
             verified: false,
           })
           .select()
@@ -184,7 +176,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
             username: username || 'Player',
             first_name: firstName || 'Player',
             language: 'en',
-            sound_on: true,
             verified: false,
             created_at: new Date().toISOString(),
           } as Profile,
@@ -210,7 +201,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
           username: username || 'Player',
           first_name: firstName || 'Player',
           language: 'en',
-          sound_on: true,
           verified: false,
           created_at: new Date().toISOString(),
         } as Profile,
@@ -244,21 +234,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
 
     const profile = profileRef.current;
-    if (profile) {
+    if (profile && isValidUUID(profile.id)) {
       try {
-        const { data: latestWallet } = await supabase
-          .from('wallets')
-          .select('main_balance, play_balance')
-          .eq('user_id', profile.id)
-          .single();
-        
-        const dbVal = latestWallet ? (Number((latestWallet as any)[type]) || 0) : 0;
-        const newVal = Math.max(0, dbVal + amount);
-
-        await supabase
-          .from('wallets')
-          .update({ [type]: newVal })
-          .eq('user_id', profile.id);
+        const rpcMethod = type === 'main_balance' ? 'adjust_main_balance' : 'adjust_play_balance';
+        const result = await (supabase as any).rpc(rpcMethod, {
+          p_user_id: profile.id,
+          p_amount: amount
+        });
+        if (result.error) {
+          console.warn(`Could not persist balance update via ${rpcMethod}:`, result.error);
+        }
       } catch (e) {
         console.warn('Could not persist wallet balance update to Supabase:', e);
       }
@@ -288,7 +273,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         t: t as (key: string) => string,
         setLanguage,
         setActiveTab,
-        toggleSound,
         initialize,
         setCurrentGame,
         refreshWallet,

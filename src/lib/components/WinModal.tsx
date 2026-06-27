@@ -16,12 +16,13 @@ interface WinModalProps {
   countdown: number | null;
   onSkip: () => void;
   children?: ReactNode;
+  t: (key: string) => string;
 }
 
 export default function WinModal({
   show, stake, livePlayerCount, commissionRate,
   card, drawnNumbers, winningCells, cardNumber,
-  playerName, countdown, onSkip, children,
+  playerName, countdown, onSkip, children, t,
 }: WinModalProps) {
   if (!show) return null;
 
@@ -48,7 +49,7 @@ export default function WinModal({
       <div className="max-w-sm w-full mx-auto my-auto space-y-6" onClick={e => e.stopPropagation()}>
         <div className="text-center">
           <span className="text-3xl animate-bounce inline-block">🎉</span>
-          <h1 className="text-3xl font-black text-[#ffd000] tracking-tight uppercase mt-1 drop-shadow-md">
+          <h1 className="text-3xl font-black text-[#FEE800] tracking-tight uppercase mt-1 drop-shadow-md">
             BINGO! 🎉
           </h1>
           <div className="text-[10px] font-black uppercase text-[#8da0c4] mt-1.5 tracking-widest">
@@ -58,12 +59,12 @@ export default function WinModal({
 
         <div className="space-y-2.5">
           <div className="flex items-center justify-between bg-[#141f33]/80 border border-amber-500 px-5 py-4 rounded-2xl shadow-lg relative overflow-hidden">
-            <span className="font-extrabold text-[#ffd000] text-sm tracking-wide flex items-center gap-1.5">
+            <span className="font-extrabold text-[#FEE800] text-sm tracking-wide flex items-center gap-1.5">
               <span>👑</span> {playerName}
             </span>
             <div className="text-right">
               <span className="font-black text-amber-500 text-sm block">
-                +{singlePrize.toLocaleString()} ብር
+                +{singlePrize.toLocaleString()} {t('birr')}
               </span>
               <span className="text-[9px] text-gray-400 block font-mono">
                 (House commission of {commissionRate}% deducted)

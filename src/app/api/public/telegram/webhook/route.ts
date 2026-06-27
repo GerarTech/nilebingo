@@ -138,7 +138,7 @@ const EN = {
   winning_patterns: '🎯 Winning patterns',
   language: '🌐 Language',
   balance_info: '💰 *Your Balance*\n\nMain Wallet: {main} ETB (Withdrawable)\nPlay Wallet: {play} ETB (Non-withdrawable, Play only)\nTotal: {total} ETB',
-  how_to_play: '*How to Play BINGO:*\n\n1. Choose your stake (10/20/50 ETB)\n2. Select your card (1-300)\n3. Numbers are drawn\n4. Mark matching numbers\n5. Complete a row/column/diagonal to win!\n\nGood luck!',
+  how_to_play: '*How to Play BINGO:*\n\n1. Choose a room (Bronze 10 ETB / Silver 20 / Gold 50 / Diamond 100 / Premium 200 / VIP 500)\n2. Select up to 2 card numbers (1-100) — each card is a unique 5x5 grid\n3. Wait for game to start (auto-starts on room timer)\n4. Numbers 1-75 are drawn every 2 seconds — cards auto-mark\n5. First to complete a row, column, or diagonal wins the prize pool\n6. Prize = stakes × players minus commission (%)\n\nGood luck!',
   deposit_choose: '💳 *Choose payment method:*\n\nSelect your preferred option below:',
   deposit_cbe: 'CBE (Commercial Bank of Ethiopia)',
   deposit_telebirr: 'Telebirr',
@@ -146,7 +146,7 @@ const EN = {
   deposit_telebirr_info: '*Telebirr Deposit Instructions*\n\nNumber: 0925502345\nName: Ashe\n\nSend up to 1000 ETB, then forward SMS confirmation here.',
   withdraw_info: '*Withdraw Funds*\n\nOnly Main Wallet funds can be withdrawn. Play Wallet (Referral bonus) is for gameplay only and cannot be withdrawn.\n\nContact support to withdraw. Min: 50 ETB',
   contact_info: '*Contact Support*\n\nEmail: support@fuabingo.com\nTelegram: @fua_bingo_support',
-  winning_patterns_info: '*Winning Patterns*\n\n1. Horizontal Line\n2. Vertical Line\n3. Diagonal Line\n4. Four Corners\n5. Blackout\n\nFirst to complete a pattern wins!',
+  winning_patterns_info: '*Winning Patterns*\n\n1. Horizontal Row — 5 numbers in a row\n2. Vertical Column — 5 numbers in a column\n3. Diagonal Line — 5 numbers diagonally\n\nComplete any one of these to win! The game auto-detects your BINGO instantly.',
   language_menu: 'Choose your language / Select your language:',
   transactions_prompt: 'Open the Mini App Wallet tab to view transactions.',
   // Admin commands
@@ -176,7 +176,7 @@ const AM = {
   winning_patterns: '🎯 የማሸነፊያ ዘዴዎች',
   language: '🌐 ቋንቋ',
   balance_info: '💰 *ቀሪ ሂሳብ*\n\nዋና ዋሌት: {main} ETB (ማውጣት የሚቻል)\nየጨዋታ ዋሌት: {play} ETB (ማውጣት የማይቻል፣ ለጨዋታ ብቻ)\nጠቅላላ: {total} ETB',
-  how_to_play: '*እንዴት እንደሚጫወት:*\n\n1. ውርርድ ምረጥ (10/20/50 ETB)\n2. ካርድ ምረጥ (1-300)\n3. ቁጥሮች ይመረጣሉ\n4. የተጣመሩ ቁጥሮች ላይ ምልክት አድርግ\n5. ረድፍ/አምድ/ሰያፍ ሙሉ ሲሆን አሸንፈሃል!',
+  how_to_play: '*እንዴት እንደሚጫወት:*\n\n1. ክፍል ምረጥ (ነሐስ 10 / ብር 20 / ወርቅ 50 / አልማዝ 100 / ፕሪሚየም 200 / ቪአይፒ 500)\n2. እስከ 2 ካርዶች ምረጥ (1-100) — እያንዳንዱ ካርድ ልዩ 5×5 ሰንጠረዥ ነው\n3. ጨዋታው እስኪጀመር ጠብቅ (በራስ-ሰር ይጀምራል)\n4. ቁጥሮች 1-75 በየ2 ሰከንድ ይመረጣሉ — ካርዶች በራስ-ሰር ምልክት ያደርጋሉ\n5. መጀመሪያ ረድፍ/አምድ/ሰያፍ ሙሉ ያደረገ ሰው ያሸንፋል\n6. ሽልማት = ውርርድ × ተጫዋቾች ሲቀነስ ኮሚሽን (%)\n\nመልካም ጨዋታ!',
   deposit_choose: '💳 *የክፍያ ዘዴ ምረጥ:*',
   deposit_cbe: 'CBE ባንክ',
   deposit_telebirr: 'ቴሌብር',
@@ -184,7 +184,7 @@ const AM = {
   deposit_telebirr_info: '*ቴሌብር መመሪያ*\n\nቁጥር: 0925502345\nስም: አሸ',
   withdraw_info: '*ገንዘብ ማውጣት*\n\nዋና ዋሌት ውስጥ ያለው ገንዘብ ብቻ ነው ማውጣት የሚቻለው። የጨዋታ ዋሌት (የሪፈራል ቦነስ) ለጨዋታ ብቻ የሚያገለግል ሲሆን ማውጣት አይቻልም።\n\nድጋፍ ያግኙ። ዝቅተኛ: 50 ETB',
   contact_info: '*ድጋፍ*\n\nEmail: support@fuabingo.com\nTelegram: @fua_bingo_support',
-  winning_patterns_info: '*የማሸነፊያ ዘዴዎች*\n\n1. አግዳሚ ረድፍ\n2. አቀባዊ አምድ\n3. ሰያፍ መስመር\n4. አራት ማዕዘኖች\n5. ሙሉ ካርድ',
+  winning_patterns_info: '*የማሸነፊያ ዘዴዎች*\n\n1. አግዳሚ ረድፍ — 5 ቁጥሮች በአንድ ረድፍ\n2. አቀባዊ አምድ — 5 ቁጥሮች በአንድ አምድ\n3. ሰያፍ መስመር — 5 ቁጥሮች በሰያፍ\n\nከነዚህ ውስጥ አንዱን ሙሉ ያድርጉ እና ያሸንፉ! ጨዋታው ቢንጎዎን ወዲያውኑ ያውቃል።',
   language_menu: 'ቋንቋ ምረጥ:',
   transactions_prompt: 'ወደ ሚኒ አፕ ዋሌት ትር ይሂዱ።',
 };
@@ -410,10 +410,8 @@ async function executeApprove(chatId: number, tx: any, finalAmount: number) {
   await supabase.from('transactions').update({ status: 'completed', amount: finalAmount }).eq('id', tx.id);
 
   if (tx.type === 'deposit') {
-    const { data: wallet } = await supabase.from('wallets').select('main_balance').eq('user_id', tx.user_id).single();
-    if (wallet) {
-      await supabase.from('wallets').update({ main_balance: Number(wallet.main_balance) + finalAmount }).eq('user_id', tx.user_id);
-    }
+    const newMain = await supabase.rpc('adjust_main_balance', { p_user_id: tx.user_id, p_amount: finalAmount });
+    if (newMain.error) console.error('adjust_main_balance error:', newMain.error);
 
     const { data: prof } = await supabase.from('profiles').select('telegram_id, language, referred_by, referral_claimed, first_name').eq('id', tx.user_id).single();
     if (prof?.telegram_id) {
@@ -530,6 +528,7 @@ export async function POST(request: NextRequest) {
       transactions: '📒 Transactions',
       winning_patterns: '🎯 Winning patterns',
       language: '🌐 Language',
+      mycode: '🔗 My Invite Code',
     };
     
     const plainCommands = {
@@ -542,6 +541,7 @@ export async function POST(request: NextRequest) {
       transactions: 'transactions',
       winning_patterns: 'winning_patterns',
       language: 'language',
+      mycode: 'mycode',
     };
     
     const userCommands = { ...defaultCommands, ...commands };
@@ -685,9 +685,13 @@ export async function POST(request: NextRequest) {
 
       // Sync bot profile (description, name, photo) from DB config
       try {
-        const { data: cfg } = await supabase.from('bot_config').select('commands').eq('id', 'main').single();
-        const cmds = cfg?.commands || {};
-        const bio = cmds.bot_description || getText(lang, 'welcome');
+        const [cfgRes, msgRes] = await Promise.allSettled([
+          supabase.from('bot_config').select('commands').eq('id', 'main').single(),
+          supabase.from('bot_messages').select('messages').eq('id', 'main').single(),
+        ]);
+        const cmds = (cfgRes.status === 'fulfilled' ? cfgRes.value.data?.commands : {}) || {};
+        const botMessages = (msgRes.status === 'fulfilled' ? msgRes.value.data?.messages : {}) || {};
+        const bio = cmds.bot_description || botMessages.bot_description || getText(lang, 'welcome');
         const botName = cmds.botName || 'Nile BINGO';
 
         await Promise.allSettled([
@@ -695,7 +699,7 @@ export async function POST(request: NextRequest) {
           tgCall('setMyShortDescription', { short_description: bio.substring(0, 120) }),
           tgCall('setMyName', { name: botName }),
           tgCall('setChatMenuButton', {
-            menu_button: { type: 'web_app', text: 'Menu', web_app: { url: miniAppUrl } }
+            menu_button: { type: 'commands', text: 'Menu' }
           }),
         ]);
       } catch (e) {
@@ -715,7 +719,6 @@ export async function POST(request: NextRequest) {
           first_name: firstName || null,
           username: username || null,
           language: 'en',
-          sound_on: true,
           verified: false,
           referred_by: referredByUUID,
           telegram_state: 'idle'
@@ -732,6 +735,18 @@ export async function POST(request: NextRequest) {
             main_balance: 0,
             play_balance: 0,
           });
+          // Signup bonus
+          const signupAmt = Number(commands.signup_bonus) || 0;
+          if (signupAmt > 0) {
+            await supabase.rpc('adjust_play_balance', { p_user_id: newProfile.id, p_amount: signupAmt });
+            await supabase.from('transactions').insert({
+              user_id: newProfile.id,
+              type: 'deposit',
+              amount: signupAmt,
+              status: 'completed',
+              reference: `SIGNUP_BONUS_${Date.now()}`,
+            });
+          }
         }
       } else {
         // Always update existing user's name/username from latest Telegram data
@@ -1028,7 +1043,7 @@ export async function POST(request: NextRequest) {
       } else {
         await sendMessage(chatId, 'No transactions found.');
       }
-    } else if (text === '/invite' || text.toLowerCase() === 'invite' || text === '👥 Invite Friends' || text.includes('invite')) {
+    } else if (text === '/invite' || text.toLowerCase() === 'invite' || text === '👥 Invite Friends' || text.includes('invite') || matchesCommand(userCommands.mycode, plainCommands.mycode)) {
       const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'fuabingobot';
       const refLink = `https://t.me/${botUsername}?start=ref_${from.id}`;
       const refBonus = commands.referral_bonus || 10;

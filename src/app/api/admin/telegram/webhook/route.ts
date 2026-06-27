@@ -244,9 +244,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    // Only allow admin chat
-    if (String(chatId) !== adminChatId) {
-      return NextResponse.json({ ok: true });
+    const chatIdStr = String(chatId);
+    const isEnvAdmin = adminChatId && chatIdStr === adminChatId;
+
+    if (!isEnvAdmin) {
+      const { data: configData } = await supabase
+        .from('bot_config')
+        .select('commands')
+        .eq('id', 'main')
+        .single();
+
+      const adminIds: string[] = (configData?.commands as any)?.admin_chat_ids || [];
+      const isWhitelisted = adminIds.some((id: string) => String(id) === chatIdStr);
+
+      if (!isWhitelisted) {
+        await sendMessage(chatId, '🚫 Access Denied\n\nThis bot is for authorized administrators only.');
+        return NextResponse.json({ ok: true });
+      }
     }
 
     // Handle /start command
@@ -285,7 +299,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true });
     }
     if (text === '❓ Help') {
-      await sendMessage(chatId, `*🔐 Admin Commands*\n\n${commands.admin_stats} - View dashboard stats\n${commands.admin_users} - List recent users\n${commands.admin_pending} - View pending transactions\n${commands.admin_games || '/admin_games'} - View recent matches & winners\n${commands.admin_approve}<tx_id> - Approve a transaction\n${commands.admin_reject}<tx_id> - Reject a transaction\n${commands.admin_help} - Show this help`, { parse_mode: 'Markdown' });
+      await sendMessage(chatId, `*🔐 Admin Bot Commands*\n\n${commands.admin_stats || '/admin_stats'} - Dashboard stats\n${commands.admin_users || '/admin_users'} - Recent users\n${commands.admin_pending || '/admin_pending'} - Pending transactions\n${commands.admin_games || '/admin_games'} - Matches & winners\n/appoint_<gameId>_<cardNum> - Assign winner card\n${commands.admin_approve}<tx_id> - Approve transaction\n${commands.admin_reject}<tx_id> - Reject transaction\n${commands.admin_help || '/admin_help'} - This help`, { parse_mode: 'Markdown' });
       return NextResponse.json({ ok: true });
     }
     
@@ -306,7 +320,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true });
     }
     if (text === commands.admin_help) {
-      await sendMessage(chatId, `*🔐 Admin Commands*\n\n${commands.admin_stats} - View dashboard stats\n${commands.admin_users} - List recent users\n${commands.admin_pending} - View pending transactions\n${commands.admin_games || '/admin_games'} - View recent matches & winners\n${commands.admin_approve}<tx_id> - Approve a transaction\n${commands.admin_reject}<tx_id> - Reject a transaction\n${commands.admin_help} - Show this help`, { parse_mode: 'Markdown' });
+      await sendMessage(chatId, `*🔐 Admin Bot Commands*\n\n${commands.admin_stats || '/admin_stats'} - Dashboard stats\n${commands.admin_users || '/admin_users'} - Recent users\n${commands.admin_pending || '/admin_pending'} - Pending transactions\n${commands.admin_games || '/admin_games'} - Matches & winners\n/appoint_<gameId>_<cardNum> - Assign winner card\n${commands.admin_approve}<tx_id> - Approve transaction\n${commands.admin_reject}<tx_id> - Reject transaction\n${commands.admin_help || '/admin_help'} - This help`, { parse_mode: 'Markdown' });
       return NextResponse.json({ ok: true });
     }
     if (text.startsWith('/appoint')) {
@@ -400,10 +414,8 @@ export async function POST(request: NextRequest) {
         await supabase.from('transactions').update({ status: 'completed' }).eq('id', txId);
 
         if (tx.type === 'deposit') {
-          const { data: wallet } = await supabase.from('wallets').select('main_balance').eq('user_id', tx.user_id).single();
-          if (wallet) {
-            await supabase.from('wallets').update({ main_balance: Number(wallet.main_balance) + Number(tx.amount) }).eq('user_id', tx.user_id);
-          }
+          const newMain = await supabase.rpc('adjust_main_balance', { p_user_id: tx.user_id, p_amount: Number(tx.amount) });
+          if (newMain.error) console.error('adjust_main_balance error:', newMain.error);
         }
 
         // Notify the user

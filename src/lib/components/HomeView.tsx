@@ -20,6 +20,7 @@ interface HomeViewProps {
   wallet: Wallet | null;
   appName: string;
   appLogo: string;
+  appLogoPng: string | null;
   commissionRate: number;
   t: (key: string) => string;
   onSelectStake: (amount: number) => void;
@@ -29,7 +30,7 @@ interface HomeViewProps {
 }
 
 export default function HomeView({
-  rooms, selectedStake, wallet, appName, appLogo, commissionRate,
+  rooms, selectedStake, wallet, appName, appLogo, appLogoPng, commissionRate,
   t, onSelectStake, onPlay, onShowRules, onGoToWallet,
 }: HomeViewProps) {
   const walletBalance = (wallet?.main_balance || 0) + (wallet?.play_balance || 0);
@@ -44,12 +45,12 @@ export default function HomeView({
       <div className="flex items-center justify-between mb-5 border-[#233c66]/30 pb-3 border-b">
         <div className="font-sans">
           <span className="text-[10px] uppercase font-black tracking-widest text-gray-400 block">WELCOME TO</span>
-          <span className="text-2xl font-black text-[#ffd000] tracking-tight uppercase flex items-center gap-1.5 mt-0.5 animate-pulse">
-            {appLogo} {appName}
+          <span className="text-2xl font-black text-[#FEE800] tracking-tight uppercase flex items-center gap-1.5 mt-0.5 animate-pulse">
+            {appLogoPng ? <img src={appLogoPng} alt="Logo" className="h-7 w-7 object-contain inline-block" /> : appLogo} {appName}
           </span>
         </div>
         <button onClick={onGoToWallet} className="flex items-center gap-1 bg-[#ff5a00] hover:bg-[#ff7a22] text-white font-extrabold text-[11px] px-3.5 py-2 rounded-xl shadow-md shadow-[#ff5a00]/15 transition-all cursor-pointer">
-          💰 {walletBalance.toLocaleString()} ብር
+          💰 {walletBalance.toLocaleString()} {t('birr')}
         </button>
       </div>
 
@@ -78,7 +79,7 @@ export default function HomeView({
                 {room.countdown}S
               </span>
               <span className="text-xl font-black text-white block">{room.entry}</span>
-              <span className="text-[10px] text-gray-400 font-extrabold uppercase mt-1 tracking-wider block">ብር</span>
+              <span className="text-[10px] text-gray-400 font-extrabold uppercase mt-1 tracking-wider block">{t('birr')}</span>
               {isSelected && <span className="w-1.5 h-1.5 bg-[#ff5a00] rounded-full mt-2" />}
             </button>
           );
@@ -90,7 +91,7 @@ export default function HomeView({
         {selectedStake ? (
           <button onClick={onPlay}
             className="w-full bg-gradient-to-r from-amber-500 via-[#ff5a00] to-orange-600 hover:opacity-95 text-white font-black py-4 rounded-2xl text-[13px] tracking-widest flex items-center justify-center gap-2 shadow-xl shadow-[#ff5a00]/25 transition-transform hover:scale-[1.01] active:translate-y-0.5 cursor-pointer uppercase font-sans animate-pulse">
-            🚀 PLAY WITH {selectedStake} ብር
+            🚀 PLAY WITH {selectedStake} {t('birr')}
           </button>
         ) : (
           <button disabled
@@ -105,20 +106,20 @@ export default function HomeView({
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom,rgba(35,60,102,0.04)_0%,transparent_80%)] pointer-events-none" />
         <div className="flex items-center justify-between border-b border-white/5 pb-2 mb-3">
           <span className="text-[9px] font-black uppercase tracking-wider text-gray-400 flex items-center gap-1.5">💳 WALLET BALANCE</span>
-          <span className="text-[10px] text-amber-400 font-bold">ETB</span>
+          <span className="text-[10px] text-amber-400 font-bold">{t('birr')}</span>
         </div>
         <div className="space-y-2">
           <div className="flex justify-between items-center text-xs">
             <span className="text-gray-400">Main Balance</span>
-            <span className="font-extrabold text-white">{(wallet?.main_balance || 0).toLocaleString()} ብር</span>
+            <span className="font-extrabold text-white">{(wallet?.main_balance || 0).toLocaleString()} {t('birr')}</span>
           </div>
           <div className="flex justify-between items-center text-xs">
             <span className="text-gray-400">Play Balance</span>
-            <span className="font-extrabold text-white">{(wallet?.play_balance || 0).toLocaleString()} ብር</span>
+            <span className="font-extrabold text-white">{(wallet?.play_balance || 0).toLocaleString()} {t('birr')}</span>
           </div>
           <div className="border-t border-dashed border-white/5 pt-1.5 flex justify-between items-center text-[13px] font-black">
             <span className="text-amber-500">Total</span>
-            <span className="text-[#ffd000]">{walletBalance.toLocaleString()} ብር</span>
+            <span className="text-[#FEE800]">{walletBalance.toLocaleString()} {t('birr')}</span>
           </div>
         </div>
       </div>

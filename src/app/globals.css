@@ -5,13 +5,13 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 
 :root {
-  --tg-theme-bg-color: #0a0f1e;
+  --tg-theme-bg-color: #283782;
   --tg-theme-text-color: #ffffff;
   --tg-theme-hint-color: #94a3b8;
-  --tg-theme-link-color: #f5a623;
-  --tg-theme-button-color: #f5a623;
-  --tg-theme-button-text-color: #0a0f1e;
-  --tg-theme-secondary-bg-color: #111827;
+  --tg-theme-link-color: #FEE800;
+  --tg-theme-button-color: #FEE800;
+  --tg-theme-button-text-color: #283782;
+  --tg-theme-secondary-bg-color: #3547a0;
 }
 
 * {
@@ -63,12 +63,12 @@ body {
   }
   
   .card-gradient {
-    background: linear-gradient(135deg, rgba(245, 166, 35, 0.12) 0%, rgba(139, 92, 246, 0.12) 100%);
-    border: 1px solid rgba(245, 166, 35, 0.15);
+    background: linear-gradient(135deg, rgba(254, 232, 0, 0.12) 0%, rgba(139, 92, 246, 0.12) 100%);
+    border: 1px solid rgba(254, 232, 0, 0.15);
   }
   
   .gold-glow {
-    box-shadow: 0 0 20px rgba(245, 166, 35, 0.3);
+    box-shadow: 0 0 20px rgba(254, 232, 0, 0.3);
   }
   
   .number-grid {

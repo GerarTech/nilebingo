@@ -13,11 +13,12 @@ interface LossModalProps {
   drawnNumbers: number[];
   countdown: number | null;
   onSkip: () => void;
+  t: (key: string) => string;
 }
 
 export default function LossModal({
   show, opponentName, stake, livePlayerCount, commissionRate,
-  gameCards, cardNumbers, drawnNumbers, countdown, onSkip,
+  gameCards, cardNumbers, drawnNumbers, countdown, onSkip, t,
 }: LossModalProps) {
   if (!show) return null;
 
@@ -50,11 +51,11 @@ export default function LossModal({
 
         <div className="space-y-2.5">
           <div className="flex items-center justify-between bg-[#141f33]/80 border border-red-500/20 px-5 py-4 rounded-2xl shadow-lg">
-            <span className="font-extrabold text-[#ffd000] text-sm tracking-wide flex items-center gap-1.5">
+            <span className="font-extrabold text-[#FEE800] text-sm tracking-wide flex items-center gap-1.5">
               <span>👑</span> {opponentName}
             </span>
             <span className="font-black text-amber-500 text-sm">
-              +{singlePrize.toLocaleString()} ብር
+              +{singlePrize.toLocaleString()} {t('birr')}
             </span>
           </div>
           <div className="flex items-center justify-between bg-[#141f33]/80 border border-white/5 opacity-50 px-5 py-4 rounded-2xl shadow-lg">
@@ -62,7 +63,7 @@ export default function LossModal({
               <span>👤</span> You
             </span>
             <span className="font-black text-gray-400 text-sm">
-              +0 ብር
+              +0 {t('birr')}
             </span>
           </div>
         </div>

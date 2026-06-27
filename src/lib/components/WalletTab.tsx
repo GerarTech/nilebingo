@@ -1,15 +1,12 @@
 'use client';
 
-import { Info, RefreshCw, Check } from 'lucide-react';
-import { useState, useCallback } from 'react';
-import { supabase } from '../supabase';
+import { Info, RefreshCw, Check, ExternalLink } from 'lucide-react';
 import type { Profile, Wallet } from '../types';
 
 interface WalletTabProps {
-  profile: Profile | null;
   wallet: Wallet | null;
+  botUsername: string;
   t: (key: string) => string;
-  onBalanceUpdate: (amount: number, type: 'play_balance' | 'main_balance') => void;
   referralEnabled: boolean;
   referralBonus: number;
   referralCount: number;
@@ -20,37 +17,11 @@ interface WalletTabProps {
 }
 
 export default function WalletTab({
-  profile, wallet, t, onBalanceUpdate,
+  wallet, botUsername, t,
   referralEnabled, referralBonus, referralCount,
   inviteLink, onCopyRefLink, copiedLink, onSimulateReferral,
 }: WalletTabProps) {
-  const [depositAmount, setDepositAmount] = useState('');
-  const [showDepositForm, setShowDepositForm] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const handleDeposit = useCallback(async () => {
-    const amount = parseFloat(depositAmount);
-    if (!amount || amount <= 0 || !profile) return;
-    setIsSubmitting(true);
-    try {
-      const { error } = await supabase.from('transactions').insert({
-        user_id: profile.id,
-        type: 'deposit',
-        amount,
-        status: 'pending',
-        reference: `app_deposit_${Date.now()}`,
-      });
-      if (!error) {
-        onBalanceUpdate(amount, 'main_balance');
-        setShowDepositForm(false);
-        setDepositAmount('');
-      }
-    } catch (e) {
-      console.error('Deposit error:', e);
-    } finally {
-      setIsSubmitting(false);
-    }
-  }, [depositAmount, profile, onBalanceUpdate]);
+  const telegramBotLink = `https://t.me/${botUsername}`;
 
   return (
     <div className="px-4 pt-4 animate-fade-in pb-20">
@@ -65,35 +36,14 @@ export default function WalletTab({
         </div>
       </div>
 
-      {!showDepositForm ? (
-        <button
-          onClick={() => setShowDepositForm(true)}
-          className="w-full bg-[#ff5a00] hover:bg-[#ff7a22] text-white font-black py-3.5 rounded-xl text-xs transition-all uppercase tracking-wider mb-4 cursor-pointer"
-        >
-          💳 {t('deposit')}
-        </button>
-      ) : (
-        <div className="bg-[#142036] border border-[#233c66]/50 rounded-2xl p-4 mb-4 space-y-3">
-          <div className="flex justify-between items-center">
-            <span className="text-xs font-bold text-gray-300">{t('enter_amount')}</span>
-            <button onClick={() => setShowDepositForm(false)} className="text-[10px] text-gray-400 hover:text-white">Cancel</button>
-          </div>
-          <input
-            type="number"
-            placeholder="Amount in ETB"
-            value={depositAmount}
-            onChange={e => setDepositAmount(e.target.value)}
-            className="w-full bg-[#0a0f1a] border border-[#233c66]/40 text-white p-3 rounded-xl text-sm font-mono focus:outline-none focus:border-amber-500"
-          />
-          <button
-            onClick={handleDeposit}
-            disabled={isSubmitting || !depositAmount}
-            className="w-full bg-amber-500 hover:bg-amber-600 text-navy font-black py-3 rounded-xl text-xs transition-all uppercase tracking-wider disabled:opacity-50 cursor-pointer"
-          >
-            {isSubmitting ? 'Processing...' : `${t('submit')} (${t('deposit')})`}
-          </button>
-        </div>
-      )}
+      <a
+        href={telegramBotLink}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="w-full bg-[#ff5a00] hover:bg-[#ff7a22] text-white font-black py-3.5 rounded-xl text-xs transition-all uppercase tracking-wider mb-4 flex items-center justify-center gap-2"
+      >
+        <ExternalLink size={14} /> 💳 {t('deposit')} via Telegram
+      </a>
 
       {referralEnabled && (
         <div className="bg-gradient-to-b from-[#142036] to-[#0d1624] border border-[#233c66]/50 rounded-2xl p-4.5 mb-5 shadow-xl relative overflow-hidden">
@@ -102,7 +52,7 @@ export default function WalletTab({
             <span>👥</span> Referral & Earn Program
           </h3>
           <p className="text-[10.5px] text-gray-300 leading-relaxed mb-3.5">
-            Get <span className="text-emerald-400 font-extrabold">{referralBonus} Birr</span> in your{' '}
+            Get <span className="text-emerald-400 font-extrabold">{referralBonus} {t('birr')}</span> in your{' '}
             <span className="text-gold font-bold">Play Balance</span> for each referral!
           </p>
           <div className="grid grid-cols-2 gap-3 mb-4">
@@ -112,7 +62,7 @@ export default function WalletTab({
             </div>
             <div className="bg-[#0b101c] border border-white/5 rounded-xl p-2.5 text-center">
               <div className="text-[9px] text-emerald-400 font-bold lowercase leading-none mb-1">earned</div>
-              <div className="text-base font-black text-emerald-400">+{referralCount * referralBonus} Birr</div>
+              <div className="text-base font-black text-emerald-400">+{referralCount * referralBonus} {t('birr')}</div>
             </div>
           </div>
           <div className="space-y-2 mb-4">

@@ -21,8 +21,9 @@ export async function GET(request: NextRequest) {
     const commission = typeof config.commission === 'number' ? config.commission : 10;
     const appName = config.appName || 'Nile BINGO';
     const appLogo = config.appLogo || '🎰';
+    const appLogoPng = config.appLogoPng || null;
+    const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'yenedating_bot';
     const colorScheme = config.colorScheme || 'gold';
-    const voiceEnabled = config.voiceEnabled !== false;
     const referralEnabled = config.referralEnabled !== false;
     const referralBonus = typeof config.referralBonus === 'number' ? config.referralBonus : 1;
     const rooms = Array.isArray(config.rooms) ? config.rooms : [
@@ -34,7 +35,7 @@ export async function GET(request: NextRequest) {
       { id: 'vip', name: 'VIP Room', entry: 500, players: 2, maxPlayers: 100 }
     ];
 
-    return NextResponse.json({ commission, rooms, appName, appLogo, colorScheme, voiceEnabled, referralEnabled, referralBonus }, {
+    return NextResponse.json({ commission, rooms, appName, appLogo, appLogoPng, botUsername, colorScheme, referralEnabled, referralBonus }, {
       headers: {
         'Cache-Control': 'no-store, max-age=0'
       }
@@ -45,8 +46,8 @@ export async function GET(request: NextRequest) {
       commission: 10, 
       appName: 'Nile BINGO',
       appLogo: '🎰',
+      appLogoPng: null,
       colorScheme: 'gold',
-      voiceEnabled: true,
       referralEnabled: true,
       referralBonus: 1,
       rooms: [

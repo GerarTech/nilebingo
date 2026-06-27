@@ -14,7 +14,6 @@ import WalletTab from '@/lib/components/WalletTab';
 import ProfileTab from '@/lib/components/ProfileTab';
 import RulesModal from '@/lib/components/RulesModal';
 import { generateCard, getSeededCard, getWinningCells, getColumnLabel, getAvailableCards, drawNumber, checkWin } from '@/lib/server/bingo';
-import { triggerHaptic, speakNumber } from '@/lib/utils/voice';
 
 type VirtualPlayer = {
   username: string;
@@ -48,7 +47,7 @@ function getRoomPeriod(roomId: string): number {
 }
 
 function HomePage() {
-  const { profile, wallet, language, activeTab, loading, t, setActiveTab, setLanguage, toggleSound, initialize, updateBalance, updateAvatar, refreshWallet } = useApp();
+  const { profile, wallet, language, activeTab, loading, t, setActiveTab, setLanguage, initialize, updateBalance, updateAvatar, refreshWallet } = useApp();
 
   const [inGame, setInGame] = useState(false);
   const [gameCard, setGameCard] = useState<number[][]>([]);
@@ -67,7 +66,6 @@ function HomePage() {
   const [livePlayerCount, setLivePlayerCount] = useState(20);
   const [gameId, setGameId] = useState('');
   const [previewCard, setPreviewCard] = useState<number[][]>([]);
-  const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [showWinModal, setShowWinModal] = useState(false);
   const [resultCountdown, setResultCountdown] = useState<number | null>(null);
   const [winningCard, setWinningCard] = useState<number[][]>([]);
@@ -82,6 +80,8 @@ function HomePage() {
   const [commissionRate, setCommissionRate] = useState<number>(10);
   const [appName, setAppName] = useState<string>('Nile BINGO');
   const [appLogo, setAppLogo] = useState<string>('🎰');
+  const [appLogoPng, setAppLogoPng] = useState<string | null>(null);
+  const [botUsername, setBotUsername] = useState<string>('yenedating_bot');
   const [colorScheme, setColorScheme] = useState<string>('gold');
 
   const [rooms, setRooms] = useState<RoomConfig[]>([
@@ -195,8 +195,9 @@ function HomePage() {
       if (typeof data.commission === 'number') setCommissionRate(data.commission);
       if (data.appName) setAppName(data.appName);
       if (data.appLogo) setAppLogo(data.appLogo);
+      if (data.appLogoPng) setAppLogoPng(data.appLogoPng);
+      if (data.botUsername) setBotUsername(data.botUsername);
       if (data.colorScheme) setColorScheme(data.colorScheme);
-      if (data.voiceEnabled !== undefined) setVoiceEnabled(data.voiceEnabled !== false);
       if (data.referralEnabled !== undefined) setReferralEnabled(data.referralEnabled !== false);
       if (data.referralBonus !== undefined) setReferralBonus(Number(data.referralBonus) || 1);
       if (Array.isArray(data.rooms)) {
@@ -323,9 +324,13 @@ function HomePage() {
     }
     setOtherPlayers(virtualCompetitors);
     setShowCardPicker(false); setInGame(true);
+
+    // Generate the deterministic draw sequence for this game
+    const sequence = getDeterministicDrawSequence(activeGameId, appointedCard);
+    setDeterministicSequence(sequence);
+
     setIsRegistered(false); setIsSpectatingReady(false);
-    triggerHaptic('success');
-  }, [selectedRoom, selectedCards, registerLiveGame]);
+  }, [selectedRoom, selectedCards, registerLiveGame, appointedCard, getDeterministicDrawSequence]);
 
   // ============ ROOM COUNTDOWN TICK ============
   useEffect(() => {
@@ -369,7 +374,6 @@ function HomePage() {
       drawnRef.current = newDrawn;
       setDrawnNumbers(newDrawn);
       setRecentCalled(prev => [{ num, label: `${getColumnLabel(num)}-${num}` }, ...prev].slice(0, 10));
-      if (voiceEnabled) speakNumber(num, language);
 
       if ((autoMark || autoWin) && !isWatching && playerCards.length > 0) {
         const wonCard = playerCards.find(c => checkWin(c, newDrawn));
@@ -406,7 +410,7 @@ function HomePage() {
       }
     }, 2000);
     return () => { if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; } };
-  }, [inGame, opponentWinner, voiceEnabled, language, isWatching, gameId, selectedStake, addGameToHistory, playerCards, autoMark, autoWin, deterministicSequence]);
+  }, [inGame, opponentWinner, language, isWatching, gameId, selectedStake, addGameToHistory, playerCards, autoMark, autoWin, deterministicSequence]);
 
   // ============ REF SYNC ============
   useEffect(() => { drawnRef.current = drawnNumbers; }, [drawnNumbers]);
@@ -436,7 +440,6 @@ function HomePage() {
   // ============ TRIGGER WIN ============
   const triggerWin = useCallback((card: number[][], drawn: number[]) => {
     if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
-    triggerHaptic('success');
     setWinningCard(card);
     setWinningCells(getWinningCells(card, drawn));
     setShowWinModal(true);
@@ -458,7 +461,7 @@ function HomePage() {
 
   // ============ PLAY / REGISTER / LEAVE ============
   const watchGame = useCallback(() => {
-    setIsSpectatingReady(true); triggerHaptic('light');
+    setIsSpectatingReady(true);
     const uid = profile?.id;
     if (gameId && isValidUUID(uid)) supabase.from('game_card_reservations').insert({ game_code: gameId, user_id: uid, card_number: -(Math.floor(Date.now() / 1000) % 100000) }).then();
   }, [gameId, profile?.id]);
@@ -472,7 +475,7 @@ function HomePage() {
     const playBal = wallet?.play_balance || 0;
     if (playBal >= stakeAmount) updateBalance(-stakeAmount, 'play_balance');
     else { updateBalance(-playBal, 'play_balance'); updateBalance(-(stakeAmount - playBal), 'main_balance'); }
-    setIsRegistered(true); triggerHaptic('success');
+    setIsRegistered(true);
   }, [selectedCards, selectedRoom, wallet, updateBalance]);
 
   const unregisterLobby = useCallback(() => {
@@ -483,7 +486,7 @@ function HomePage() {
     }
     const uid = profile?.id;
     if (gameId && isValidUUID(uid)) supabase.from('game_card_reservations').delete().eq('game_code', gameId).eq('user_id', uid).then();
-    setIsSpectatingReady(false); setTakenCards([]); setLobbyPlayerCount(0); triggerHaptic('light');
+    setIsSpectatingReady(false); setTakenCards([]); setLobbyPlayerCount(0);
   }, [isRegistered, selectedCards, selectedRoom, updateBalance, gameId, profile?.id]);
 
   const leaveGame = useCallback(() => {
@@ -501,7 +504,7 @@ function HomePage() {
 
   const handleLeaveAttempt = useCallback(() => {
     if (isWatching) leaveGame();
-    else { setPendingTab(null); setShowLeaveModal(true); triggerHaptic('warning'); }
+    else { setPendingTab(null); setShowLeaveModal(true); }
   }, [isWatching, leaveGame]);
 
   // ============ MANUAL DRAW ============
@@ -513,17 +516,16 @@ function HomePage() {
     const newDrawn = [...currentDrawn, num];
     drawnRef.current = newDrawn; setDrawnNumbers(newDrawn);
     setRecentCalled(prev => [{ num, label: `${getColumnLabel(num)}-${num}` }, ...prev].slice(0, 10));
-    if (voiceEnabled) speakNumber(num, language);
     if (gameCard.length > 0 && !isWatching && checkWin(gameCard, newDrawn)) triggerWin(gameCard, newDrawn);
-  }, [voiceEnabled, language, gameCard, isWatching]);
+  }, [language, gameCard, isWatching]);
 
   // ============ BINGO CLAIM ============
   const handleBingo = useCallback(() => {
     if (playerCards.length > 0) {
       const checkAgainst = autoMark ? drawnRef.current : userMarkedNumbers;
       const wonCard = playerCards.find(c => checkWin(c, checkAgainst));
-      if (wonCard) { triggerHaptic('success'); triggerWin(wonCard, drawnRef.current); }
-      else { triggerHaptic('error'); alert(language === 'en' ? 'Not a valid BINGO yet!' : 'ትክክለኛ ቢንጎ የለም!'); }
+      if (wonCard) { triggerWin(wonCard, drawnRef.current); }
+      else { alert(language === 'en' ? 'Not a valid BINGO yet!' : 'ትክክለኛ ቢንጎ የለም!'); }
     }
   }, [playerCards, autoMark, userMarkedNumbers, language]);
 
@@ -545,7 +547,7 @@ function HomePage() {
     if (typeof window !== 'undefined') { try { const saved = localStorage.getItem('nile_bingo_referrals'); if (saved) setReferralCount(parseInt(saved, 10)); } catch {} }
   }, []);
 
-  const inviteLink = `https://t.me/NileBingoBot?start=ref_${profile?.id || 'player'}`;
+  const inviteLink = `https://t.me/${botUsername}?start=ref_${profile?.id || 'player'}`;
 
   const copyRefLink = useCallback(() => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) { navigator.clipboard.writeText(inviteLink); setCopiedLink(true); setTimeout(() => setCopiedLink(false), 2000); }
@@ -563,21 +565,20 @@ function HomePage() {
 
   // ============ TAB HANDLING ============
   const handleTabChange = useCallback((tab: 'game' | 'scores' | 'history' | 'wallet' | 'profile') => {
-    if (inGame && !isWatching) { setPendingTab(tab); setShowLeaveModal(true); triggerHaptic('warning'); }
-    else { setActiveTab(tab); triggerHaptic('light'); }
+    if (inGame && !isWatching) { setPendingTab(tab); setShowLeaveModal(true); }
+    else { setActiveTab(tab); }
   }, [inGame, isWatching, setActiveTab]);
 
   const handleMarkNumber = useCallback((num: number) => {
     setUserMarkedNumbers(prev => prev.includes(num) ? prev.filter(n => n !== num) : [...prev, num]);
-    triggerHaptic('medium');
   }, []);
 
   // ============ RENDER ============
   const renderContent = () => {
     if (activeTab === 'scores') return <ScoresTab profile={profile} wallet={wallet} dbLeaderboard={dbLeaderboard} t={t} />;
     if (activeTab === 'history') return <HistoryTab stakeHistory={stakeHistory} t={t} />;
-    if (activeTab === 'wallet') return <WalletTab profile={profile} wallet={wallet} referralEnabled={referralEnabled} referralBonus={referralBonus} referralCount={referralCount} inviteLink={inviteLink} copiedLink={copiedLink} t={t} onCopyRefLink={copyRefLink} onSimulateReferral={simulateReferralJoin} onBalanceUpdate={updateBalance} />;
-    if (activeTab === 'profile') return <ProfileTab profile={profile} wallet={wallet} stakeHistory={stakeHistory} language={language} t={t} onSetLanguage={setLanguage} onToggleSound={toggleSound} onUpdateAvatar={updateAvatar} triggerHaptic={triggerHaptic} />;
+    if (activeTab === 'wallet') return <WalletTab wallet={wallet} botUsername={botUsername} referralEnabled={referralEnabled} referralBonus={referralBonus} referralCount={referralCount} inviteLink={inviteLink} copiedLink={copiedLink} t={t} onCopyRefLink={copyRefLink} onSimulateReferral={simulateReferralJoin} />;
+    if (activeTab === 'profile') return <ProfileTab profile={profile} wallet={wallet} stakeHistory={stakeHistory} language={language} t={t} onSetLanguage={setLanguage} onUpdateAvatar={updateAvatar} />;
 
     // Game tab
     if (inGame) {
@@ -588,12 +589,12 @@ function HomePage() {
             profile={profile} gameCard={gameCard} playerCards={playerCards} selectedCards={selectedCards}
             drawnNumbers={drawnNumbers} gameId={gameId} selectedStake={selectedStake || 10}
             inGame={inGame} isWatching={isWatching} autoMark={autoMark} autoWin={autoWin}
-            voiceEnabled={voiceEnabled} language={language} livePlayerCount={livePlayerCount}
+            language={language} livePlayerCount={livePlayerCount}
             recentCalled={recentCalled} otherPlayers={otherPlayers} opponentWinner={opponentWinner}
             showWinModal={showWinModal} showLossModal={opponentWinner !== null} showLeaveModal={showLeaveModal}
             winningCard={winningCard} winningCells={winningCells} commissionRate={commissionRate}
             resultCountdown={resultCountdown} t={t}
-            onSetAutoMark={setAutoMark} onSetAutoWin={setAutoWin} onSetVoiceEnabled={setVoiceEnabled}
+            onSetAutoMark={setAutoMark} onSetAutoWin={setAutoWin}
             onManualDraw={manualDraw} onBingo={handleBingo} onLeave={leaveGame}
             onLeaveAttempt={handleLeaveAttempt}
             onForfeitExit={() => { setShowLeaveModal(false); leaveGame(); if (pendingTab) { setActiveTab(pendingTab); setPendingTab(null); } }}
@@ -627,7 +628,7 @@ function HomePage() {
       <>
         <HomeView
           rooms={rooms} selectedStake={selectedStake} wallet={wallet}
-          appName={appName} appLogo={appLogo} commissionRate={commissionRate} t={t}
+          appName={appName} appLogo={appLogo} appLogoPng={appLogoPng} commissionRate={commissionRate} t={t}
           onSelectStake={selectStake}
           onPlay={() => {
             if (selectedStake !== null) {
@@ -646,18 +647,18 @@ function HomePage() {
   // ============ THEME ============
   const getThemeColor = () => {
     const map: Record<string, string> = { emerald: '#10b981', ruby: '#ef4444', sapphire: '#3b82f6', amethyst: '#a855f7' };
-    return map[colorScheme] || '#ffd000';
+    return map[colorScheme] || '#FEE800';
   };
   const getThemeColorDark = () => {
     const map: Record<string, string> = { emerald: '#059669', ruby: '#991b1b', sapphire: '#1d4ed8', amethyst: '#6b21a8' };
-    return map[colorScheme] || '#d4891a';
+    return map[colorScheme] || '#e5d100';
   };
   const getThemeGlow = () => {
     const map: Record<string, string> = { emerald: 'rgba(16,185,129,0.3)', ruby: 'rgba(239,68,68,0.3)', sapphire: 'rgba(59,130,246,0.3)', amethyst: 'rgba(168,85,247,0.3)' };
-    return map[colorScheme] || 'rgba(255,208,0,0.3)';
+    return map[colorScheme] || 'rgba(254,232,0,0.3)';
   };
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="text-center"><div className="text-4xl font-black text-gold mb-4 animate-pulse">{appName}</div><div className="text-gray-400 text-sm">{t('loading')}</div></div></div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="text-center">{appLogoPng ? <img src={appLogoPng} alt="Logo" className="h-12 w-12 object-contain mx-auto mb-4" /> : <div className="text-4xl font-black text-gold mb-4 animate-pulse">{appLogo}</div>}<div className="text-4xl font-black text-gold mb-4 animate-pulse">{appName}</div><div className="text-gray-400 text-sm">{t('loading')}</div></div></div>;
 
   return (
     <div className="min-h-screen pb-20">

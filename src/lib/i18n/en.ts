@@ -82,7 +82,6 @@ export const en = {
   game_win: 'Game Win',
   played: 'Played',
   total_earned: 'Total Earned',
-  sound_effects: 'Sound Effects',
   language: 'Language',
   game_settings: 'Game Settings',
   
@@ -132,13 +131,13 @@ export const en = {
   // Rules
   how_to_play: 'How to Play',
   objective: 'Objective',
-  objective_desc: 'Mark all numbers in a complete row, column, or diagonal on your BINGO card before other players.',
+  objective_desc: 'Get a complete row, column, or diagonal of 5 marked numbers on your 5×5 BINGO card before other players. Each card is unique and assigned from card numbers 1-100.',
   gameplay: 'Gameplay',
-  gameplay_desc: 'Numbers are drawn randomly from 1-75. Each number appears in your card if it matches the column range (B:1-15, I:16-30, N:31-45, G:46-60, O:61-75).',
+  gameplay_desc: 'Numbers 1-75 are drawn one by one every 2 seconds. Your card auto-marks matching numbers. You can also tap numbers manually to mark them. Virtual opponents play alongside you — beat them all to win!',
   winning: 'Winning',
-  winning_desc: 'Complete any horizontal row, vertical column, or diagonal line of 5 numbers to call BINGO! The first player to complete a line wins the prize pool.',
+  winning_desc: 'Complete any horizontal row, vertical column, or diagonal of 5 numbers and the game auto-declares your BINGO! The first player (human or virtual) to complete a line wins the prize pool. A commission (%) is deducted from the pool.',
   stakes: 'Stakes & Bets',
-  stakes_desc: 'Choose your stake amount (10/50/100 ETB) before each game. Higher stakes mean bigger prizes! Prize pool grows as more players join.',
+  stakes_desc: 'Choose a room (Bronze 10 ETB, Silver 20, Gold 50, Diamond 100, Premium 200, VIP 500). Higher stakes = bigger prizes. You can select up to 2 cards per game for more chances to win. Prize pool = stakes × players minus commission.',
   got_it: 'Got it!',
   leaderboard: 'Leaderboard',
   
@@ -146,4 +145,9 @@ export const en = {
   minutes: 'min',
   seconds: 'sec',
   just_now: 'Just now',
+
+  // Leave/Forfeit
+  forfeit_warning: '(Abandoning the game)',
+  leave_warning: 'Leaving now counts as an immediate forfeit (loss). Your bet stake of',
+  will_be_lost: 'will be lost.',
 };

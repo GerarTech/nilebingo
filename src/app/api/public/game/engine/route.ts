@@ -20,6 +20,46 @@ async function tgSend(botToken: string, chatId: string | number, text: string, p
   }
 }
 
+async function sendGameStats(botToken: string, gameId: string) {
+  try {
+    const { data: game } = await supabase.from('games').select('*, winner:profiles(first_name, username)').eq('id', gameId).single();
+    if (!game) return;
+
+    const { data: players } = await supabase.from('game_players').select('*, profiles(first_name, username)').eq('game_id', gameId);
+    const playerCount = players ? players.filter((p: any) => !p.is_watching).length : 0;
+    const winnerName = game.winner?.first_name || game.winner?.username || 'N/A';
+    const prize = Number(game.prize_pool || 0).toLocaleString();
+    const drawnCount = (game.drawn_numbers || []).length;
+
+    let statsMsg = `*🏁 GAME FINISHED*\n\n`;
+    statsMsg += `🆔 Game ID: \`${game.code}\`\n`;
+    statsMsg += `👥 Players: ${playerCount}\n`;
+    statsMsg += `💰 Prize Pool: ${prize} ETB\n`;
+    statsMsg += `🎱 Numbers Drawn: ${drawnCount}/75\n`;
+    statsMsg += `🏆 Winner: ${winnerName}\n`;
+
+    if (game.winner_id && players) {
+      const winnerPlayer = players.find((p: any) => p.user_id === game.winner_id);
+      if (winnerPlayer?.card) {
+        const cardNums = winnerPlayer.card.flat().filter((n: number) => n > 0).slice(0, 5).join(', ');
+        statsMsg += `🎴 Winning Card (sample): ${cardNums}...\n`;
+      }
+    }
+
+    if (players) {
+      const names = players.filter((p: any) => !p.is_watching).map((p: any) => p.profiles?.first_name || 'Player').join(', ');
+      statsMsg += `\nParticipants: ${names || 'None'}`;
+    }
+
+    const adminChatIdEnv = process.env.ADMIN_CHAT_ID || '';
+    if (adminChatIdEnv) {
+      await tgSend(botToken, adminChatIdEnv, statsMsg, 'Markdown');
+    }
+  } catch (e) {
+    console.error('sendGameStats error:', e);
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -151,18 +191,8 @@ export async function POST(request: NextRequest) {
         })
         .eq('id', gameId);
 
-      const { data: wallet } = await supabase
-        .from('wallets')
-        .select('main_balance')
-        .eq('user_id', userId)
-        .single();
-
-      if (wallet) {
-        await supabase
-          .from('wallets')
-          .update({ main_balance: Number(wallet.main_balance) + winAmount })
-          .eq('user_id', userId);
-      }
+      const newMain = await supabase.rpc('adjust_main_balance', { p_user_id: userId, p_amount: winAmount });
+      if (newMain.error) console.error('adjust_main_balance error:', newMain.error);
 
       await supabase.from('transactions').insert({
         user_id: userId,
@@ -189,11 +219,16 @@ export async function POST(request: NextRequest) {
         .single();
 
       if (profile?.telegram_id && botToken) {
-        await tgSend(
-          botToken,
-          profile.telegram_id,
-          `🎉 *BINGO WIN!*\n\nCongratulations ${profile.first_name || 'Player'}! You won *${winAmount.toLocaleString()} ETB* in game #${game.code}!\n\nKeep playing and winning! 🍀`,
-        );
+        const { data: players } = await supabase.from('game_players').select('user_id').eq('game_id', gameId).eq('is_watching', false);
+        const playerCount = players ? players.length : 0;
+        const { data: winnerProfile } = await supabase.from('profiles').select('first_name, username').eq('id', userId).single();
+        const winnerName = winnerProfile?.first_name || winnerProfile?.username || 'Player';
+        const statsMsg = `🎉 *BINGO WIN!*\n\nCongratulations ${profile.first_name || 'Player'}! You won *${winAmount.toLocaleString()} ETB* in game #${game.code}!\n\n📊 *Game Stats:*\n  🆔 Game ID: ${game.code}\n  👥 Total Players: ${playerCount}\n  💰 Prize Pool: ${Number(game.prize_pool || 0).toLocaleString()} ETB\n  🏆 Winner: ${winnerName}\n\nKeep playing and winning! 🍀`;
+        await tgSend(botToken, profile.telegram_id, statsMsg, 'Markdown');
+      }
+
+      if (botToken) {
+        await sendGameStats(botToken, gameId);
       }
 
       return NextResponse.json({
@@ -249,6 +284,10 @@ export async function POST(request: NextRequest) {
           win_amount: 0,
           numbers_matched: numbersMatched,
         });
+      }
+
+      if (botToken) {
+        await sendGameStats(botToken, gameId);
       }
 
       return NextResponse.json({

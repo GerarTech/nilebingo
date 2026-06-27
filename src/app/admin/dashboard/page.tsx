@@ -10,9 +10,11 @@ interface Stats {
   totalMainBalance: number;
   totalPlayBalance: number;
   totalDeposits: number;
+  totalDepositsApproved: number;
   totalWithdrawals: number;
   totalBets: number;
   totalWins: number;
+  totalCommissionEarned: number;
   pendingDeposits: number;
   pendingWithdrawals: number;
   revenue: number;
@@ -20,12 +22,15 @@ interface Stats {
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null);
+  const [branding, setBranding] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/admin/data?action=dashboard')
-      .then(r => r.json())
-      .then(d => { setStats(d); setLoading(false); })
+    Promise.all([
+      fetch('/api/admin/data?action=dashboard').then(r => r.json()),
+      fetch('/api/admin/data?action=bot_config').then(r => r.json()),
+    ])
+      .then(([d, cfg]) => { setStats(d); setBranding(cfg); setLoading(false); })
       .catch(() => setLoading(false));
   }, []);
 
@@ -38,7 +43,9 @@ export default function DashboardPage() {
     { label: 'Total Games', value: stats.totalGames, icon: Activity, color: 'bg-violet-500/20 text-violet-400' },
     { label: 'Main Balance', value: `${stats.totalMainBalance.toLocaleString()} ETB`, icon: Wallet, color: 'bg-gold/20 text-gold' },
     { label: 'Play Balance', value: `${stats.totalPlayBalance.toLocaleString()} ETB`, icon: Coins, color: 'bg-amber-500/20 text-amber-400' },
-    { label: 'Revenue', value: `${stats.revenue.toLocaleString()} ETB`, icon: ArrowUp, color: stats.revenue >= 0 ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400' },
+    { label: 'Revenue (Bets-Wins)', value: `${stats.revenue.toLocaleString()} ETB`, icon: ArrowUp, color: stats.revenue >= 0 ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400' },
+    { label: 'Deposits Approved', value: `${stats.totalDepositsApproved.toLocaleString()} ETB`, icon: ArrowDown, color: 'bg-emerald-500/20 text-emerald-400' },
+    { label: 'Commission Earned', value: `${stats.totalCommissionEarned.toLocaleString()} ETB`, icon: Coins, color: 'bg-purple-500/20 text-purple-400' },
   ];
 
   return (
@@ -59,6 +66,41 @@ export default function DashboardPage() {
           </div>
         ))}
       </div>
+
+      {/* Branding Preview */}
+      {branding && (
+        <div className="glass rounded-xl p-4 mb-6">
+          <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+            <span role="img" aria-label="branding">🎨</span>
+            Bot Branding Preview
+          </h3>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <div className="bg-navy rounded-lg p-3">
+              <div className="text-[9px] text-gray-400 uppercase mb-1">Telegram Bot Name</div>
+              <div className="text-sm font-bold text-gold">{branding.botName || 'Nile BINGO'}</div>
+            </div>
+            <div className="bg-navy rounded-lg p-3">
+              <div className="text-[9px] text-gray-400 uppercase mb-1">Web App Name</div>
+              <div className="text-sm font-bold text-white">{branding.appName || 'Nile BINGO'}</div>
+            </div>
+            <div className="bg-navy rounded-lg p-3">
+              <div className="text-[9px] text-gray-400 uppercase mb-1">Logo</div>
+              <div className="text-sm font-bold text-white flex items-center gap-2">
+                {branding.appLogoPng ? (
+                  <img src={branding.appLogoPng} alt="Logo" className="w-8 h-8 rounded" />
+                ) : (
+                  <span className="text-2xl">{branding.appLogo || '🎰'}</span>
+                )}
+                <span>{branding.appName || 'Nile BINGO'}</span>
+              </div>
+            </div>
+            <div className="bg-navy rounded-lg p-3">
+              <div className="text-[9px] text-gray-400 uppercase mb-1">Bot Description (preview)</div>
+              <div className="text-[10px] text-gray-300 line-clamp-2">{(branding.bot_description || 'No description set').substring(0, 120)}</div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Pending Actions */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

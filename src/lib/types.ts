@@ -7,7 +7,6 @@ export interface Profile {
   photo_url?: string;
   phone?: string;
   language: 'en' | 'am';
-  sound_on: boolean;
   verified: boolean;
   created_at: string;
 }
