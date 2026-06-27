@@ -125,6 +125,15 @@ function HomePage() {
   const [withdrawMinAmount, setWithdrawMinAmount] = useState<number>(50);
   const [withdrawRequiredGames, setWithdrawRequiredGames] = useState<number>(5);
 
+  // Refs for values used in the room tick interval to prevent unnecessary re-creation
+  const selectedRoomRef = useRef<RoomConfig | null>(null);
+  const isRegisteredRef = useRef(false);
+  const isSpectatingReadyRef = useRef(false);
+  const inGameRef = useRef(false);
+  const commissionRateRef = useRef(10);
+  const startGameplayRef = useRef<any>(null);
+  const tickReadyRef = useRef(false);
+
   // ============ DETERMINISTIC DRAW SEQUENCE ============
   const getDeterministicDrawSequence = useCallback((gId: string, targetCardNum?: number | null) => {
     let seed = 0;
@@ -317,9 +326,7 @@ function HomePage() {
   // ============ START GAMEPLAY ============
   const startGameplay = useCallback(async (isSpectateMode: boolean) => {
     if (!selectedRoom) return;
-    const period = getRoomPeriod(selectedRoom.id);
-    const cycle = Math.floor(Date.now() / 1000 / period);
-    const activeGameId = generateDeterministicGameId(selectedRoom.id, cycle);
+    const activeGameId = gameId || generateDeterministicGameId(selectedRoom.id, Math.floor(Date.now() / 1000 / getRoomPeriod(selectedRoom.id)));
     const entryFee = selectedRoom.entry;
 
     let cardsToPlay: number[][][] = [];
@@ -361,28 +368,41 @@ function HomePage() {
     setIsRegistered(false); setIsSpectatingReady(false);
   }, [selectedRoom, selectedCards, registerLiveGame, appointedCard, getDeterministicDrawSequence]);
 
+  // Sync refs for tick interval to avoid stale closure issues
+  useEffect(() => {
+    startGameplayRef.current = startGameplay;
+    isRegisteredRef.current = isRegistered;
+    isSpectatingReadyRef.current = isSpectatingReady;
+    inGameRef.current = inGame;
+    selectedRoomRef.current = selectedRoom;
+    commissionRateRef.current = commissionRate;
+  }, [startGameplay, isRegistered, isSpectatingReady, inGame, selectedRoom, commissionRate]);
+
   // ============ ROOM COUNTDOWN TICK ============
   useEffect(() => {
     const tick = setInterval(() => {
       const currentSec = Math.floor(Date.now() / 1000);
+      const sr = selectedRoomRef.current;
+      const ig = inGameRef.current;
+      const ir = isRegisteredRef.current;
+      const isr = isSpectatingReadyRef.current;
+      const sg = startGameplayRef.current;
+      const cr = commissionRateRef.current;
       setRooms(prevRooms => prevRooms.map(r => {
         const period = getRoomPeriod(r.id);
         const elapsed = currentSec % period;
         const remaining = period - elapsed;
-        if (remaining === period && selectedRoom && selectedRoom.id === r.id && !inGame) {
-          if (isRegistered) startGameplay(false);
-          else if (isSpectatingReady) startGameplay(true);
+        if (remaining === period && sr && sr.id === r.id && !ig) {
+          if (ir) sg(false);
+          else if (isr) sg(true);
         }
-        return { ...r, status: 'starting_soon' as const, countdown: remaining, winAmount: Math.round((r.entry * r.players) * (1 - commissionRate / 100)) };
+        return { ...r, status: 'starting_soon' as const, countdown: remaining, winAmount: Math.round((r.entry * r.players) * (1 - cr / 100)) };
       }));
-      if (selectedRoom && !inGame) {
-        const period = getRoomPeriod(selectedRoom.id);
-        const cycle = Math.floor(currentSec / period);
-        setGameId(generateDeterministicGameId(selectedRoom.id, cycle));
+      if (sr && !ig) {
       }
     }, 1000);
     return () => clearInterval(tick);
-  }, [inGame, selectedRoom, isRegistered, isSpectatingReady, startGameplay, commissionRate]);
+  }, [inGame, selectedRoom]);
 
   // ============ DRAW INTERVAL ============
   useEffect(() => {
@@ -538,8 +558,12 @@ function HomePage() {
 
   const handleJoinRoom = useCallback((room: RoomConfig) => {
     const period = getRoomPeriod(room.id);
-    const cycle = Math.floor(Date.now() / 1000 / period);
-    setSelectedRoom(room); setSelectedStake(room.entry); setSelectedCards([]); setPreviewCard([]); setGameId(generateDeterministicGameId(room.id, cycle));
+    const currentSec = Math.floor(Date.now() / 1000);
+    const elapsed = currentSec % period;
+    const remaining = period - elapsed;
+    const targetCycle = elapsed === 0 ? Math.floor(currentSec / period) : Math.floor((currentSec + remaining) / period);
+    const nextGameId = generateDeterministicGameId(room.id, targetCycle);
+    setSelectedRoom(room); setSelectedStake(room.entry); setSelectedCards([]); setPreviewCard([]); setGameId(nextGameId);
   }, []);
 
   // ============ PLAY / REGISTER / LEAVE ============

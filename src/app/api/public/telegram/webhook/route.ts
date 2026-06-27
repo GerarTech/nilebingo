@@ -352,7 +352,7 @@ function parseDepositSMS(text: string, method: 'cbe' | 'telebirr'): ParsedSMS | 
 function isCommandText(text: string, userCommands: any, plainCommands: any): boolean {
   const t = text.trim();
   if (t.startsWith('/')) return true;
-  if (t.toLowerCase() === 'cancel') return true;
+  if (t.toLowerCase() === 'cancel' || t === 'Cancel ❌' || t === '❌ Cancel') return true;
   if (t === '👥 Invite Friends') return true;
   
   for (const val of Object.values(userCommands)) {
@@ -589,22 +589,16 @@ export async function POST(request: NextRequest) {
       const data = callbackQuery.data;
       if (data === 'deposit_cbe') {
         await answerCallbackQuery(callbackQuery.id);
-        const { data: prof } = await supabase.from('profiles').select('id').eq('telegram_id', String(from.id)).maybeSingle();
-        if (prof) {
-          await supabase.from('profiles').update({ telegram_state: 'waiting_deposit_amount', telegram_state_data: { bank_id: 'cbe' } }).eq('id', prof.id);
-        }
+        await supabase.from('profiles').update({ telegram_state: 'waiting_deposit_amount', telegram_state_data: { bank_id: 'cbe' } }).eq('telegram_id', String(from.id));
         const cbeMax = commands.cbe_max || '5000';
         const msgText = getText(lang, 'deposit_amount_prompt').replace('{min}', '50').replace('{max}', cbeMax);
-        await sendMessage(chatId, msgText, { parse_mode: 'Markdown' });
+        await sendMessage(chatId, msgText, { parse_mode: 'Markdown', reply_markup: { keyboard: [[{ text: 'Cancel ❌' }]], resize_keyboard: true, one_time_keyboard: false } });
       } else if (data === 'deposit_telebirr') {
         await answerCallbackQuery(callbackQuery.id);
-        const { data: prof } = await supabase.from('profiles').select('id').eq('telegram_id', String(from.id)).maybeSingle();
-        if (prof) {
-          await supabase.from('profiles').update({ telegram_state: 'waiting_deposit_amount', telegram_state_data: { bank_id: 'telebirr' } }).eq('id', prof.id);
-        }
+        await supabase.from('profiles').update({ telegram_state: 'waiting_deposit_amount', telegram_state_data: { bank_id: 'telebirr' } }).eq('telegram_id', String(from.id));
         const telebirrMax = commands.telebirr_max || '1000';
         const msgText = getText(lang, 'deposit_amount_prompt').replace('{min}', '10').replace('{max}', telebirrMax);
-        await sendMessage(chatId, msgText, { parse_mode: 'Markdown' });
+        await sendMessage(chatId, msgText, { parse_mode: 'Markdown', reply_markup: { keyboard: [[{ text: 'Cancel ❌' }]], resize_keyboard: true, one_time_keyboard: false } });
       } else if (data === 'lang_en') {
         await answerCallbackQuery(callbackQuery.id, 'Language set to English');
         await sendMessage(chatId, 'Use the buttons below:', getMainKeyboard('en'));
@@ -614,15 +608,12 @@ export async function POST(request: NextRequest) {
       } else if (data.startsWith('deposit_bank_')) {
         const bankId = data.replace('deposit_bank_', '');
         await answerCallbackQuery(callbackQuery.id);
-        const { data: prof } = await supabase.from('profiles').select('id').eq('telegram_id', String(from.id)).maybeSingle();
-        if (prof) {
-          await supabase.from('profiles').update({ telegram_state: 'waiting_deposit_amount', telegram_state_data: { bank_id: bankId } }).eq('id', prof.id);
-        }
+        await supabase.from('profiles').update({ telegram_state: 'waiting_deposit_amount', telegram_state_data: { bank_id: bankId } }).eq('telegram_id', String(from.id));
         const banks: any[] = commands.banks || [];
         const bank = banks.find((b: any) => b.id === bankId);
         const maxAmt = bank?.max || '5000';
         const msgText = getText(lang, 'deposit_amount_prompt').replace('{min}', '50').replace('{max}', maxAmt);
-        await sendMessage(chatId, msgText, { parse_mode: 'Markdown' });
+        await sendMessage(chatId, msgText, { parse_mode: 'Markdown', reply_markup: { keyboard: [[{ text: 'Cancel ❌' }]], resize_keyboard: true, one_time_keyboard: false } });
       } else if (data.startsWith('pub_approve_')) {
         const txId = data.replace('pub_approve_', '');
         await answerCallbackQuery(callbackQuery.id, 'Processing...');
