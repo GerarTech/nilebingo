@@ -193,6 +193,9 @@ function HomePage() {
   const [winningCells, setWinningCells] = useState<boolean[][]>([]);
   const drawnRef = useRef<number[]>([]);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const realtimeChannelRef = useRef<any>(null);
+  const [takenCards, setTakenCards] = useState<number[]>([]);
+  const [lobbyPlayerCount, setLobbyPlayerCount] = useState<number>(0);
 
   // Dedicated state controls for Room selection and Custom Wallet views
   const [selectedRoom, setSelectedRoom] = useState<{
@@ -227,6 +230,59 @@ function HomePage() {
   ]);
 
   const [dbLeaderboard, setDbLeaderboard] = useState<{ id: string; username: string; earnings: number; avatar: string; isUser: boolean; change?: string }[]>([]);
+
+  // Fetch taken cards and live player count for the current game lobby
+  const refreshGameState = useCallback(async (gId: string) => {
+    if (!gId) return;
+
+    const { data: reservations } = await supabase
+      .from('game_card_reservations')
+      .select('card_number, user_id')
+      .eq('game_code', gId);
+
+    if (reservations && reservations.length > 0) {
+      const otherCards = reservations
+        .filter(r => r.user_id !== profile?.id)
+        .map(r => r.card_number);
+      setTakenCards(otherCards);
+      const distinctUsers = new Set(reservations.map(r => r.user_id));
+      setLobbyPlayerCount(distinctUsers.size);
+    } else {
+      setTakenCards([]);
+      setLobbyPlayerCount(0);
+    }
+  }, [profile?.id]);
+
+  useEffect(() => {
+    if (!selectedRoom || !gameId || inGame) return;
+    refreshGameState(gameId);
+  }, [selectedRoom?.id, gameId, inGame, refreshGameState]);
+
+  // Live realtime subscription for game card reservations
+  useEffect(() => {
+    if (!selectedRoom || !gameId || inGame) return;
+
+    const channel = supabase
+      .channel(`game-${gameId}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'game_card_reservations',
+        filter: `game_code=eq.${gameId}`
+      }, () => {
+        refreshGameState(gameId);
+      })
+      .subscribe();
+
+    realtimeChannelRef.current = channel;
+
+    return () => {
+      if (realtimeChannelRef.current) {
+        supabase.removeChannel(realtimeChannelRef.current);
+        realtimeChannelRef.current = null;
+      }
+    };
+  }, [selectedRoom?.id, gameId, inGame, refreshGameState]);
 
   // Fetch leaderboard from DB when score tab is opened
   useEffect(() => {
@@ -551,7 +607,15 @@ function HomePage() {
         if (newStake) stakeId = newStake.id;
       }
 
-      // 2. Check if game with code = gId already exists
+      // 2. Get actual player count for prize pool
+      const { data: reservations } = await supabase
+        .from('game_card_reservations')
+        .select('user_id')
+        .eq('game_code', gId);
+      const distinctUsers = reservations ? new Set(reservations.map(r => r.user_id)).size : 0;
+      const actualPlayerCount = Math.max(distinctUsers, 1);
+
+      // 3. Check if game with code = gId already exists
       let dbGameId: string;
       const { data: existingGame } = await supabase
         .from('games')
@@ -564,15 +628,20 @@ function HomePage() {
         if (existingGame.status !== 'active') {
           await supabase.from('games').update({ status: 'active' }).eq('id', dbGameId);
         }
+        const { count } = await supabase
+          .from('game_players')
+          .select('*', { count: 'exact', head: true })
+          .eq('game_id', dbGameId);
+        const totalCount = (count || 0) + 1;
+        await supabase.from('games').update({ prize_pool: Math.round(stakeAmt * totalCount) }).eq('id', dbGameId);
       } else {
-        // Create new active game row
         const { data: newGame, error: err } = await supabase
           .from('games')
           .insert({
             stake_id: stakeId,
             code: gId,
             status: 'active',
-            prize_pool: stakeAmt * (selectedRoom ? selectedRoom.players : 10),
+            prize_pool: Math.round(stakeAmt * actualPlayerCount),
             called_count: 0,
             drawn_numbers: []
           })
@@ -585,28 +654,41 @@ function HomePage() {
         dbGameId = newGame.id;
       }
 
-      // 3. Register user in game_players table
-      const playerCard = cardsToPlay[0] || generateCard();
-      const { error: gpErr } = await supabase
-        .from('game_players')
-        .upsert({
-          game_id: dbGameId,
-          user_id: profile.id,
-          card: playerCard,
-          is_watching: isSpec,
-          auto_mark: autoMark
-        }, { onConflict: 'game_id,user_id' });
+      // 4. Register user in game_players table with card_number
+      const cardsToStore = cardsToPlay.length > 0 ? cardsToPlay : [generateCard()];
+      for (let i = 0; i < Math.min(cardsToStore.length, 1); i++) {
+        const cardNum = selectedCards[i] || 0;
+        const { error: gpErr } = await supabase
+          .from('game_players')
+          .upsert({
+            game_id: dbGameId,
+            user_id: profile.id,
+            card: cardsToStore[i],
+            card_number: cardNum,
+            is_watching: isSpec,
+            auto_mark: autoMark
+          }, { onConflict: 'game_id,user_id' });
 
-      if (gpErr) {
-        console.error('Error upserting game_player:', gpErr);
+        if (gpErr) {
+          console.error('Error upserting game_player:', gpErr);
+        }
+      }
+
+      // 5. Clean up reservations after successful registration
+      if (gId && profile.id) {
+        await supabase
+          .from('game_card_reservations')
+          .delete()
+          .eq('game_code', gId)
+          .eq('user_id', profile.id);
       }
     } catch (e) {
       console.error('Error registering live game:', e);
     }
-  }, [profile, autoMark, selectedRoom]);
+  }, [profile, autoMark, selectedRoom, selectedCards]);
 
-  // Toggle card selection in picker (supports up to 2 cards!)
-  const toggleCard = useCallback((num: number) => {
+  // Toggle card selection in picker (supports up to 2 cards! locks to one user)
+  const toggleCard = useCallback(async (num: number) => {
     setSelectedCards(prev => {
       const isSelected = prev.includes(num);
       if (isSelected) {
@@ -616,21 +698,42 @@ function HomePage() {
         } else {
           setPreviewCard([]);
         }
+        if (gameId && profile?.id) {
+          supabase
+            .from('game_card_reservations')
+            .delete()
+            .eq('game_code', gameId)
+            .eq('user_id', profile.id)
+            .eq('card_number', num)
+            .then(({ error }) => {
+              if (error) {
+                console.error('Failed to release reservation:', error);
+                setSelectedCards(prev => [...prev, num]);
+              }
+            });
+        }
         return next;
       } else {
         if (prev.length >= 2) {
-          // Keep maximum of 2 cards. Replace the oldest one:
-          const next = [prev[1], num];
-          setPreviewCard(getSeededCard(num));
-          return next;
-        } else {
-          const next = [...prev, num];
-          setPreviewCard(getSeededCard(num));
-          return next;
+          return prev;
         }
+        const next = [...prev, num];
+        setPreviewCard(getSeededCard(num));
+        if (gameId && profile?.id) {
+          supabase
+            .from('game_card_reservations')
+            .insert({ game_code: gameId, user_id: profile.id, card_number: num })
+            .then(({ error }) => {
+              if (error) {
+                console.error('Failed to reserve card:', error);
+                setSelectedCards(prev => prev.filter(c => c !== num));
+              }
+            });
+        }
+        return next;
       }
     });
-  }, []);
+  }, [gameId, profile?.id]);
 
   // Central gameplay initializer for synchronized room starts (players and spectators)
   const startGameplay = useCallback((isSpectateMode: boolean) => {
@@ -665,7 +768,43 @@ function HomePage() {
     setRecentCalled([]);
     setOpponentWinner(null);
 
-    // Competitors list
+    // Register active session in database (stores cards and actual count)
+    registerLiveGame(activeGameId, entryFee, isSpectateMode, cardsToPlay);
+
+    // Fetch actual player count from DB after registration
+    const updateActualCount = async () => {
+      try {
+        const { data: existingGame } = await supabase
+          .from('games')
+          .select('id')
+          .eq('code', activeGameId)
+          .maybeSingle();
+
+        let actualCount = 0;
+        if (existingGame) {
+          const { count } = await supabase
+            .from('game_players')
+            .select('*', { count: 'exact', head: true })
+            .eq('game_id', existingGame.id);
+          actualCount = count || 1;
+        } else {
+          const { data: reservations } = await supabase
+            .from('game_card_reservations')
+            .select('user_id')
+            .eq('game_code', activeGameId);
+          if (reservations) {
+            actualCount = new Set(reservations.map(r => r.user_id)).size || 1;
+          }
+        }
+        setLivePlayerCount(actualCount);
+      } catch (e) {
+        console.error('Error updating actual player count:', e);
+        setLivePlayerCount(selectedRoom ? selectedRoom.players : 1);
+      }
+    };
+    updateActualCount();
+
+    // Competitors list based on room config for visual engagement
     const virtualNames = ['Abebe', 'Aster', 'Kebede', 'Almaz', 'Chala', 'Tigist', 'Sintayehu', 'Solomon', 'Marta', 'Biniam'];
     const activePlayerCount = selectedRoom.players;
     const virtualCompetitors: VirtualPlayer[] = [];
@@ -682,12 +821,8 @@ function HomePage() {
     }
     setOtherPlayers(virtualCompetitors);
 
-    setLivePlayerCount(activePlayerCount);
     setShowCardPicker(false);
     setInGame(true);
-
-    // Register active session in database
-    registerLiveGame(activeGameId, entryFee, isSpectateMode, cardsToPlay);
 
     // Clear ready indicators
     setIsRegistered(false);
@@ -1004,13 +1139,24 @@ function HomePage() {
       const cardCount = selectedCards.length;
       const fee = selectedRoom ? selectedRoom.entry : 10;
       const stakeAmount = fee * cardCount;
-      // Refund back to play_balance
       updateBalance(stakeAmount, 'play_balance');
       setIsRegistered(false);
     }
+    if (gameId && profile?.id) {
+      supabase
+        .from('game_card_reservations')
+        .delete()
+        .eq('game_code', gameId)
+        .eq('user_id', profile.id)
+        .then(({ error }) => {
+          if (error) console.error('Failed to release reservations:', error);
+        });
+    }
     setIsSpectatingReady(false);
+    setTakenCards([]);
+    setLobbyPlayerCount(0);
     triggerHaptic('light');
-  }, [isRegistered, selectedCards, selectedRoom, updateBalance]);
+  }, [isRegistered, selectedCards, selectedRoom, updateBalance, gameId, profile?.id]);
 
   const leaveGame = useCallback(() => {
     if (intervalRef.current) {
@@ -1021,6 +1167,17 @@ function HomePage() {
     // Capture exit as a forfeiture/loss if in active play
     if (inGame && !isWatching && gameId && !showWinModal && !opponentWinner) {
       addGameToHistory(gameId, selectedStake || 10, 'loss');
+    }
+
+    if (gameId && profile?.id) {
+      supabase
+        .from('game_card_reservations')
+        .delete()
+        .eq('game_code', gameId)
+        .eq('user_id', profile.id)
+        .then(({ error }) => {
+          if (error) console.error('Failed to release reservations:', error);
+        });
     }
 
     setInGame(false);
@@ -1038,7 +1195,13 @@ function HomePage() {
     setOtherPlayers([]);
     setOpponentWinner(null);
     setSelectedRoom(null);
-  }, [inGame, isWatching, gameId, showWinModal, opponentWinner, selectedStake, addGameToHistory]);
+    setTakenCards([]);
+    setLobbyPlayerCount(0);
+    if (realtimeChannelRef.current) {
+      supabase.removeChannel(realtimeChannelRef.current);
+      realtimeChannelRef.current = null;
+    }
+  }, [inGame, isWatching, gameId, showWinModal, opponentWinner, selectedStake, addGameToHistory, profile?.id]);
 
   const handleLeaveAttempt = useCallback(() => {
     if (isWatching) {
@@ -1633,16 +1796,16 @@ function HomePage() {
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
                     CONNECTING PLAYERS (ተወዳዳሪዎች)
                   </span>
-                  <span className="text-[8px] text-gray-400 font-bold uppercase">{roomTick.players} registered</span>
+                  <span className="text-[8px] text-gray-400 font-bold uppercase">{lobbyPlayerCount} registered</span>
                 </div>
                 <div className="flex flex-wrap gap-2 justify-center">
-                  {['Abebe', 'Aster', 'Kebede', 'Almaz', 'Chala', 'Tigist', 'Sintayehu', 'Solomon'].slice(0, roomTick.players).map((name, i) => (
+                  {['Abebe', 'Aster', 'Kebede', 'Almaz', 'Chala', 'Tigist', 'Sintayehu', 'Solomon'].slice(0, lobbyPlayerCount).map((name, i) => (
                     <span key={i} className="bg-[#0c1322] border border-[#233c66]/20 text-gray-300 text-[9px] font-extrabold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-sm animate-pulse">
                       <span className="w-1 h-1 bg-emerald-400 rounded-full" />
                       {name}
                     </span>
                   ))}
-                  {roomTick.players === 0 && <span className="text-[10px] text-gray-500 italic">Waiting for players to join...</span>}
+                  {lobbyPlayerCount === 0 && <span className="text-[10px] text-gray-500 italic">Waiting for players to join...</span>}
                 </div>
               </div>
 
@@ -1718,8 +1881,7 @@ function HomePage() {
                 <div className="grid grid-cols-10 gap-[5px] sm:gap-1.5 max-h-[35vh] overflow-y-auto pb-1 relative z-10 scrollbar-none">
                   {cards.map((num) => {
                     const isSelected = selectedCards.includes(num);
-                    // No pre-taken cards when no one is active in the room
-                    const isTaken = false;
+                    const isTaken = takenCards.includes(num);
 
                     return (
                       <button 

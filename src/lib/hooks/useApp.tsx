@@ -41,7 +41,7 @@ interface AppContextType extends AppState {
   setLanguage: (lang: Language) => void;
   setActiveTab: (tab: TabType) => void;
   toggleSound: () => void;
-  initialize: (telegramId: string) => Promise<void>;
+  initialize: (telegramId: string, firstName?: string, username?: string) => Promise<void>;
   setCurrentGame: (gameId: string | null) => void;
   refreshWallet: () => Promise<void>;
   updateBalance: (amount: number, type: 'play_balance' | 'main_balance') => Promise<void>;
@@ -94,7 +94,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (data) setState(prev => ({ ...prev, wallet: data as Wallet }));
   }, [state.profile]);
 
-  const initialize = useCallback(async (telegramId: string) => {
+  const initialize = useCallback(async (telegramId: string, firstName?: string, username?: string) => {
     setState(prev => ({ ...prev, loading: true }));
     
     try {
@@ -115,6 +115,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           .from('profiles')
           .insert({
             telegram_id: telegramId,
+            first_name: firstName || 'Player',
+            username: username || 'Player',
             language: 'en',
             sound_on: true,
             verified: false,
@@ -132,6 +134,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
             main_balance: 0,
             play_balance: 0,
           });
+        }
+      } else {
+        // Update first_name and username if they are provided and differ
+        const updates: any = {};
+        if (firstName && profile.first_name !== firstName) updates.first_name = firstName;
+        if (username && profile.username !== username) updates.username = username;
+        
+        if (Object.keys(updates).length > 0) {
+          const { data: updatedProfile } = await supabase
+            .from('profiles')
+            .update(updates)
+            .eq('id', profile.id)
+            .select()
+            .single();
+          if (updatedProfile) {
+            profile = updatedProfile as Profile;
+          }
         }
       }
 
@@ -159,8 +178,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           profile: {
             id: 'local',
             telegram_id: telegramId,
-            username: 'Player',
-            first_name: 'Player',
+            username: username || 'Player',
+            first_name: firstName || 'Player',
             language: 'en',
             sound_on: true,
             verified: false,
@@ -185,8 +204,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         profile: {
           id: 'local-' + Date.now(),
           telegram_id: telegramId,
-          username: 'Player',
-          first_name: 'Player',
+          username: username || 'Player',
+          first_name: firstName || 'Player',
           language: 'en',
           sound_on: true,
           verified: false,
