@@ -194,6 +194,7 @@ function HomePage() {
   const drawnRef = useRef<number[]>([]);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const realtimeChannelRef = useRef<any>(null);
+  const pendingTogglesRef = useRef<Map<number, Promise<void>>>(new Map());
   const [takenCards, setTakenCards] = useState<number[]>([]);
   const [lobbyPlayerCount, setLobbyPlayerCount] = useState<number>(0);
 
@@ -231,9 +232,19 @@ function HomePage() {
 
   const [dbLeaderboard, setDbLeaderboard] = useState<{ id: string; username: string; earnings: number; avatar: string; isUser: boolean; change?: string }[]>([]);
 
-  // Fetch taken cards and live player count for the current game lobby
+  // Clean up stale reservations (older than 2 minutes) and fetch fresh state
   const refreshGameState = useCallback(async (gId: string) => {
     if (!gId) return;
+
+    try {
+      await supabase
+        .from('game_card_reservations')
+        .delete()
+        .eq('game_code', gId)
+        .lt('created_at', new Date(Date.now() - 120000).toISOString());
+    } catch (e) {
+      console.error('Failed to cleanup stale reservations:', e);
+    }
 
     const { data: reservations } = await supabase
       .from('game_card_reservations')
@@ -607,15 +618,7 @@ function HomePage() {
         if (newStake) stakeId = newStake.id;
       }
 
-      // 2. Get actual player count for prize pool
-      const { data: reservations } = await supabase
-        .from('game_card_reservations')
-        .select('user_id')
-        .eq('game_code', gId);
-      const distinctUsers = reservations ? new Set(reservations.map(r => r.user_id)).size : 0;
-      const actualPlayerCount = Math.max(distinctUsers, 1);
-
-      // 3. Check if game with code = gId already exists
+      // 2. Check if game with code = gId already exists
       let dbGameId: string;
       const { data: existingGame } = await supabase
         .from('games')
@@ -628,12 +631,6 @@ function HomePage() {
         if (existingGame.status !== 'active') {
           await supabase.from('games').update({ status: 'active' }).eq('id', dbGameId);
         }
-        const { count } = await supabase
-          .from('game_players')
-          .select('*', { count: 'exact', head: true })
-          .eq('game_id', dbGameId);
-        const totalCount = (count || 0) + 1;
-        await supabase.from('games').update({ prize_pool: Math.round(stakeAmt * totalCount) }).eq('id', dbGameId);
       } else {
         const { data: newGame, error: err } = await supabase
           .from('games')
@@ -641,7 +638,7 @@ function HomePage() {
             stake_id: stakeId,
             code: gId,
             status: 'active',
-            prize_pool: Math.round(stakeAmt * actualPlayerCount),
+            prize_pool: 0,
             called_count: 0,
             drawn_numbers: []
           })
@@ -654,7 +651,7 @@ function HomePage() {
         dbGameId = newGame.id;
       }
 
-      // 4. Register user in game_players table with card_number
+      // 3. Register user in game_players table with card_number
       const cardsToStore = cardsToPlay.length > 0 ? cardsToPlay : [generateCard()];
       for (let i = 0; i < Math.min(cardsToStore.length, 1); i++) {
         const cardNum = selectedCards[i] || 0;
@@ -674,6 +671,12 @@ function HomePage() {
         }
       }
 
+      // 4. Atomically recalculate prize pool based on actual player count
+      await supabase.rpc('update_game_prize_pool', {
+        p_game_code: gId,
+        p_stake_amt: stakeAmt
+      });
+
       // 5. Clean up reservations after successful registration
       if (gId && profile.id) {
         await supabase
@@ -689,54 +692,79 @@ function HomePage() {
 
   // Toggle card selection in picker (supports up to 2 cards! locks to one user)
   const toggleCard = useCallback(async (num: number) => {
-    setSelectedCards(prev => {
-      const isSelected = prev.includes(num);
+    const existing = pendingTogglesRef.current.get(num);
+    if (existing) {
+      try {
+        await existing;
+      } catch (e) {
+        // ignore previous failure
+      }
+    }
+
+    let isSelected = selectedCards.includes(num);
+
+    const opPromise = (async () => {
       if (isSelected) {
-        const next = prev.filter(c => c !== num);
-        if (next.length > 0) {
-          setPreviewCard(getSeededCard(next[next.length - 1]));
-        } else {
-          setPreviewCard([]);
-        }
+        setSelectedCards(prev => {
+          const next = prev.filter(c => c !== num);
+          if (next.length > 0) {
+            setPreviewCard(getSeededCard(next[next.length - 1]));
+          } else {
+            setPreviewCard([]);
+          }
+          return next;
+        });
+
         if (gameId && profile?.id) {
-          supabase
+          const { error } = await supabase
             .from('game_card_reservations')
             .delete()
             .eq('game_code', gameId)
             .eq('user_id', profile.id)
-            .eq('card_number', num)
-            .then(({ error }) => {
-              if (error) {
-                console.error('Failed to release reservation:', error);
-                setSelectedCards(prev => [...prev, num]);
-              }
-            });
+            .eq('card_number', num);
+
+          if (error) {
+            console.error('Failed to release reservation:', error);
+            setSelectedCards(prev => [...prev, num]);
+            throw error;
+          }
         }
-        return next;
       } else {
-        if (prev.length >= 2) {
-          return prev;
-        }
-        const next = [...prev, num];
-        setPreviewCard(getSeededCard(num));
+        setSelectedCards(prev => {
+          if (prev.length >= 2) return prev;
+          const next = [...prev, num];
+          setPreviewCard(getSeededCard(num));
+          return next;
+        });
+
         if (gameId && profile?.id) {
-          supabase
+          const { error } = await supabase
             .from('game_card_reservations')
-            .insert({ game_code: gameId, user_id: profile.id, card_number: num })
-            .then(({ error }) => {
-              if (error) {
-                console.error('Failed to reserve card:', error);
-                setSelectedCards(prev => prev.filter(c => c !== num));
-              }
-            });
+            .insert({ game_code: gameId, user_id: profile.id, card_number: num });
+
+          if (error) {
+            console.error('Failed to reserve card:', error);
+            setSelectedCards(prev => prev.filter(c => c !== num));
+            throw error;
+          }
         }
-        return next;
       }
+    })();
+
+    pendingTogglesRef.current.set(num, opPromise);
+    opPromise.finally(() => {
+      pendingTogglesRef.current.delete(num);
     });
-  }, [gameId, profile?.id]);
+
+    try {
+      await opPromise;
+    } catch (e) {
+      // already rolled back inside
+    }
+  }, [gameId, profile?.id, selectedCards]);
 
   // Central gameplay initializer for synchronized room starts (players and spectators)
-  const startGameplay = useCallback((isSpectateMode: boolean) => {
+  const startGameplay = useCallback(async (isSpectateMode: boolean) => {
     if (!selectedRoom) return;
 
     const period = getRoomPeriod(selectedRoom.id);
@@ -769,7 +797,7 @@ function HomePage() {
     setOpponentWinner(null);
 
     // Register active session in database (stores cards and actual count)
-    registerLiveGame(activeGameId, entryFee, isSpectateMode, cardsToPlay);
+    await registerLiveGame(activeGameId, entryFee, isSpectateMode, cardsToPlay);
 
     // Fetch actual player count from DB after registration
     const updateActualCount = async () => {
@@ -1105,7 +1133,16 @@ function HomePage() {
   const watchGame = useCallback(() => {
     setIsSpectatingReady(true);
     triggerHaptic('light');
-  }, []);
+    if (gameId && profile?.id) {
+      const spectatorCardNum = -(Math.floor(Date.now() / 1000) % 100000);
+      supabase
+        .from('game_card_reservations')
+        .insert({ game_code: gameId, user_id: profile.id, card_number: spectatorCardNum })
+        .then(({ error }) => {
+          if (error) console.error('Failed to register spectator:', error);
+        });
+    }
+  }, [gameId, profile?.id]);
 
   // Register player waiting for game start (deducts stake to join the countdown lobby)
   const playWithCard = useCallback(() => {

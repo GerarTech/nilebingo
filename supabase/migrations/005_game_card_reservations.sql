@@ -10,9 +10,9 @@ CREATE TABLE IF NOT EXISTS game_card_reservations (
 
 ALTER TABLE game_card_reservations ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Anyone can view game card reservations"
+CREATE POLICY "Users can view game card reservations"
   ON game_card_reservations FOR SELECT
-  USING (true);
+  USING (auth.uid() = user_id OR auth.role() = 'authenticated');
 
 CREATE POLICY "Users can insert their own reservations"
   ON game_card_reservations FOR INSERT
