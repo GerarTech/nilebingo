@@ -402,6 +402,23 @@ export async function POST(request: NextRequest) {
           }
         });
       } else {
+        // Update profile name from Telegram if it changed
+        const { data: currentProfile } = await supabase
+          .from('profiles')
+          .select('first_name, username')
+          .eq('telegram_id', telegramId)
+          .single();
+        
+        if (currentProfile && (currentProfile.first_name !== firstName || currentProfile.username !== username)) {
+          await supabase
+            .from('profiles')
+            .update({ 
+              first_name: firstName || null, 
+              username: username || null 
+            })
+            .eq('telegram_id', telegramId);
+        }
+        
         // Phone already shared - show full experience
         await sendMessage(chatId, getText(lang, 'welcome'), {
           reply_markup: {

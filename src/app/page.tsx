@@ -1370,20 +1370,16 @@ function HomePage() {
             )}
           </div>
 
-          {/* Game Session ID Display */}
+          {/* Game ID Display */}
           <div className="bg-[#141f33]/60 border border-[#233c66]/30 rounded-xl p-2.5 mb-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-[8px] text-gray-400 font-extrabold uppercase tracking-wider">SESSION ID:</span>
+              <span className="text-[8px] text-gray-400 font-extrabold uppercase tracking-wider">GAME ID:</span>
               <span className="text-[10px] font-mono font-black text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded">
-                {(() => {
-                  const roomKey = selectedRoom?.name || 'Quick_Lobby';
-                  const timeSlot = Math.floor(Date.now() / 45000);
-                  return `${roomKey.replace(/\s/g, '_')}_${timeSlot}`;
-                })()}
+                {gameId || 'N/A'}
               </span>
             </div>
             <div className="text-[8px] text-gray-500 font-mono">
-              Refreshes in: {45 - Math.floor(Date.now() / 1000) % 45}s
+              Active Session
             </div>
           </div>
 
@@ -1646,37 +1642,7 @@ function HomePage() {
           </div>
         </div>
 
-        {/* Secondary High-Stakes Arena list */}
-        <div className="mb-4">
-          <span className="text-[9.5px] font-black uppercase text-gray-500 tracking-wider block mb-2 px-0.5">
-            💎 HIGH STAKES CHAMPIONSHIPS (ከፍተኛ መደቦች)
-          </span>
-
-          <div className="space-y-2.5">
-            {rooms.filter(r => r.entry >= 100).map((room) => {
-              return (
-                <div 
-                  key={room.id}
-                  className="bg-[#0a1120] border border-[#1e2f4d]/60 rounded-2xl p-3 flex items-center justify-between"
-                >
-                  <div>
-                    <span className="text-xs font-black text-white block uppercase">{room.name}</span>
-                    <span className="text-[10px] text-gray-400 font-bold block mt-0.5">
-                      Entry: <span className="text-amber-500">{room.entry} ብር</span> • {room.players} active
-                    </span>
-                  </div>
-
-                  <button
-                    onClick={() => handleJoinRoom(room)}
-                    className="bg-[#ff5a00] hover:bg-[#ff7a22] text-white text-[10px] font-black px-3.5 py-1.5 rounded-xl uppercase transition-all shadow-sm shadow-[#ff5a00]/10 cursor-pointer"
-                  >
-                    ENTER
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        {/* High Stakes Championship - Removed for now, will be added back in admin panel later */}
 
         {/* How to Play Manual Guide Buttons */}
         <button 
