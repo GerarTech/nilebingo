@@ -1,7 +1,8 @@
 'use client';
 
-import { Info, RefreshCw, Check, ExternalLink } from 'lucide-react';
+import { Info, RefreshCw, Check, ExternalLink, ArrowUpRight } from 'lucide-react';
 import type { Profile, Wallet } from '../types';
+import { useState } from 'react';
 
 interface WalletTabProps {
   wallet: Wallet | null;
@@ -14,25 +15,98 @@ interface WalletTabProps {
   onCopyRefLink: () => void;
   copiedLink: boolean;
   onSimulateReferral: () => void;
+  withdrawMinAmount: number;
+  withdrawRequiredGames: number;
 }
 
 export default function WalletTab({
   wallet, botUsername, t,
   referralEnabled, referralBonus, referralCount,
   inviteLink, onCopyRefLink, copiedLink, onSimulateReferral,
+  withdrawMinAmount, withdrawRequiredGames,
 }: WalletTabProps) {
   const telegramBotLink = `https://t.me/${botUsername}`;
+  const [withdrawAmount, setWithdrawAmount] = useState<string>('');
+  const [withdrawMethod, setWithdrawMethod] = useState<'cbe' | 'telebirr' | ''>('');
+  const [withdrawAccount, setWithdrawAccount] = useState<string>('');
+  const [withdrawName, setWithdrawName] = useState<string>('');
+  const [withdrawError, setWithdrawError] = useState<string>('');
+  const [withdrawSuccess, setWithdrawSuccess] = useState<string>('');
+  const [withdrawLoading, setWithdrawLoading] = useState(false);
+
+  const mainBalance = wallet?.main_balance ?? 0;
+  const playBalance = wallet?.play_balance ?? 0;
+
+  const handleWithdraw = async () => {
+    setWithdrawError('');
+    setWithdrawSuccess('');
+    const amount = parseFloat(withdrawAmount);
+
+    if (!amount || amount <= 0) {
+      setWithdrawError('Please enter a valid amount.');
+      return;
+    }
+    if (amount < withdrawMinAmount) {
+      setWithdrawError(`Minimum withdrawal is ${withdrawMinAmount} ETB.`);
+      return;
+    }
+    if (amount > mainBalance) {
+      setWithdrawError('Insufficient main wallet balance.');
+      return;
+    }
+    if (!withdrawMethod) {
+      setWithdrawError('Please select a withdrawal method.');
+      return;
+    }
+    if (!withdrawAccount.trim()) {
+      setWithdrawError('Please enter your account number.');
+      return;
+    }
+    if (!withdrawName.trim()) {
+      setWithdrawError('Please enter the account holder name.');
+      return;
+    }
+
+    setWithdrawLoading(true);
+    try {
+      const res = await fetch('/api/public/withdraw', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: wallet?.user_id,
+          amount,
+          method: withdrawMethod,
+          accountNumber: withdrawAccount,
+          accountName: withdrawName,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setWithdrawError(data.error || 'Withdrawal request failed.');
+      } else {
+        setWithdrawSuccess(`Withdrawal request for ${amount.toLocaleString()} ETB submitted successfully!`);
+        setWithdrawAmount('');
+        setWithdrawAccount('');
+        setWithdrawName('');
+        setWithdrawMethod('');
+      }
+    } catch {
+      setWithdrawError('Network error. Please try again.');
+    } finally {
+      setWithdrawLoading(false);
+    }
+  };
 
   return (
     <div className="px-4 pt-4 animate-fade-in pb-20">
       <div className="space-y-3 mb-5">
         <div className="bg-gradient-gold rounded-2xl p-5 flex justify-between items-center shadow-lg">
           <span className="text-navy font-black text-sm">{t('main_wallet')}</span>
-          <span className="text-navy text-2xl font-black">{(wallet?.main_balance ?? 0).toLocaleString()} {t('birr')}</span>
+          <span className="text-navy text-2xl font-black">{mainBalance.toLocaleString()} {t('birr')}</span>
         </div>
         <div className="glass rounded-2xl p-5 flex justify-between items-center shadow-md">
           <span className="text-white font-bold text-sm">{t('play_wallet')}</span>
-          <span className="text-gold text-2xl font-black">{(wallet?.play_balance ?? 0).toLocaleString()} {t('birr')}</span>
+          <span className="text-gold text-2xl font-black">{playBalance.toLocaleString()} {t('birr')}</span>
         </div>
       </div>
 
@@ -42,8 +116,94 @@ export default function WalletTab({
         rel="noopener noreferrer"
         className="w-full bg-[#ff5a00] hover:bg-[#ff7a22] text-white font-black py-3.5 rounded-xl text-xs transition-all uppercase tracking-wider mb-4 flex items-center justify-center gap-2"
       >
-        <ExternalLink size={14} /> 💳 {t('deposit')} via Telegram
+        <ExternalLink size={14} /> 💳 Deposit via Telegram
       </a>
+
+      {/* Withdraw Section */}
+      <div className="bg-gradient-to-b from-[#142036] to-[#0d1624] border border-[#233c66]/50 rounded-2xl p-4.5 mb-5 shadow-xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 bg-gold/10 text-gold text-[8px] font-black tracking-widest px-2 py-0.5 rounded-bl uppercase">Withdraw</div>
+        <h3 className="text-gold font-bold text-xs uppercase tracking-wider mb-3 flex items-center gap-1.5 font-sans">
+          <span>💸</span> Withdraw Funds
+        </h3>
+
+        <div className="space-y-2.5">
+          <div>
+            <label className="text-[10px] text-gray-400 block mb-0.5">Amount (ETB)</label>
+            <input
+              type="number"
+              value={withdrawAmount}
+              onChange={(e) => setWithdrawAmount(e.target.value)}
+              placeholder={`Min ${withdrawMinAmount} ETB`}
+              className="w-full bg-[#0a1120] border border-[#233c66]/40 rounded-xl px-3 py-2.5 text-white text-sm font-bold focus:outline-none focus:border-gold/50"
+            />
+            <p className="text-[8.5px] text-gray-500 mt-0.5">Available: {mainBalance.toLocaleString()} ETB (Main Wallet only)</p>
+          </div>
+
+          <div>
+            <label className="text-[10px] text-gray-400 block mb-0.5">Withdrawal Method</label>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setWithdrawMethod('cbe')}
+                className={`flex-1 py-2 rounded-xl text-[11px] font-bold border transition-all ${withdrawMethod === 'cbe' ? 'bg-gold text-navy border-gold' : 'bg-[#0a1120] border-[#233c66]/40 text-gray-300 hover:border-white/20'}`}
+              >
+                🏦 CBE Birr
+              </button>
+              <button
+                onClick={() => setWithdrawMethod('telebirr')}
+                className={`flex-1 py-2 rounded-xl text-[11px] font-bold border transition-all ${withdrawMethod === 'telebirr' ? 'bg-gold text-navy border-gold' : 'bg-[#0a1120] border-[#233c66]/40 text-gray-300 hover:border-white/20'}`}
+              >
+                📱 Telebirr
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[10px] text-gray-400 block mb-0.5">Account Number</label>
+            <input
+              type="text"
+              value={withdrawAccount}
+              onChange={(e) => setWithdrawAccount(e.target.value)}
+              placeholder="Enter account number"
+              className="w-full bg-[#0a1120] border border-[#233c66]/40 rounded-xl px-3 py-2.5 text-white text-sm font-bold focus:outline-none focus:border-gold/50"
+            />
+          </div>
+
+          <div>
+            <label className="text-[10px] text-gray-400 block mb-0.5">Account Holder Name</label>
+            <input
+              type="text"
+              value={withdrawName}
+              onChange={(e) => setWithdrawName(e.target.value)}
+              placeholder="Enter full name"
+              className="w-full bg-[#0a1120] border border-[#233c66]/40 rounded-xl px-3 py-2.5 text-white text-sm font-bold focus:outline-none focus:border-gold/50"
+            />
+          </div>
+
+          {withdrawError && (
+            <div className="bg-red-500/10 border border-red-500/20 text-red-300 text-[11px] py-2 px-3 rounded-xl font-medium">
+              {withdrawError}
+            </div>
+          )}
+
+          {withdrawSuccess && (
+            <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-[11px] py-2 px-3 rounded-xl font-medium">
+              {withdrawSuccess}
+            </div>
+          )}
+
+          <button
+            onClick={handleWithdraw}
+            disabled={withdrawLoading}
+            className="w-full bg-gradient-to-r from-amber-500 to-[#ff5a00] text-white font-black py-3 rounded-xl text-xs uppercase tracking-widest shadow-lg shadow-[#ff5a00]/20 hover:scale-[1.01] active:scale-[0.99] transition-all disabled:opacity-50 cursor-pointer"
+          >
+            {withdrawLoading ? 'Processing...' : `💸 Withdraw Now`}
+          </button>
+
+          <p className="text-[8.5px] text-gray-500 text-center">
+            Min: {withdrawMinAmount} ETB | Must have played {withdrawRequiredGames}+ games
+          </p>
+        </div>
+      </div>
 
       {referralEnabled && (
         <div className="bg-gradient-to-b from-[#142036] to-[#0d1624] border border-[#233c66]/50 rounded-2xl p-4.5 mb-5 shadow-xl relative overflow-hidden">

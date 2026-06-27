@@ -1,12 +1,12 @@
 import { BINGO_COLUMNS, COLUMN_LABELS } from '../types';
 
 // Generate a BINGO card (15 rows x 5 cols) using a card number for uniqueness
-export function generateCard(cardNumber?: number): number[][] {
+export function generateCard(cardNumber?: number, gameId?: string): number[][] {
   if (cardNumber) {
-    return getSeededCard(cardNumber);
+    return getSeededCard(cardNumber, gameId);
   }
   const randomCard = Math.floor(Math.random() * 300) + 1;
-  return getSeededCard(randomCard);
+  return getSeededCard(randomCard, gameId);
 }
 
 // Get all available card numbers (1-300)
@@ -15,9 +15,13 @@ export function getAvailableCards(): number[] {
 }
 
 // Get a specific card by number using seeded randomness
-export function getSeededCard(cardNumber: number): number[][] {
+export function getSeededCard(cardNumber: number, gameId?: string): number[][] {
   const columns: number[][] = [];
-  const seed = cardNumber * 7919;
+  let gameSeed = 0;
+  if (gameId) {
+    for (let i = 0; i < gameId.length; i++) gameSeed = ((gameSeed << 5) - gameSeed) + gameId.charCodeAt(i);
+  }
+  const seed = cardNumber * 7919 + gameSeed;
 
   for (let col = 0; col < 5; col++) {
     const label = COLUMN_LABELS[col];

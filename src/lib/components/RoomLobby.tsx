@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import BingoGrid from './BingoGrid';
 import { getSeededCard } from '../server/bingo';
@@ -82,7 +82,7 @@ export default function RoomLobby({
               {selectedCards.map((cardNum) => (
                 <div key={cardNum} className="bg-gradient-to-b from-[#142036] to-[#0e1726] rounded-xl p-3 border border-[#233c66]/55 shadow-md">
                   <div className="text-[10px] font-black tracking-wider text-amber-400 text-center mb-2">CARD #{cardNum}</div>
-                  <BingoGrid card={getSeededCard(cardNum)} drawnNumbers={[]} compact={true} />
+                  <BingoGrid card={getSeededCard(cardNum, gameId)} drawnNumbers={[]} compact={true} />
                 </div>
               ))}
             </div>
@@ -117,16 +117,16 @@ export default function RoomLobby({
 
       <div className="flex items-stretch gap-1.5 mb-4">
         <div className="bg-[#141f33] border border-[#233c66]/30 p-2.5 rounded-xl flex-1 text-center shadow-lg">
-          <div className="text-[7.5px] text-gray-400 font-extrabold uppercase tracking-wider">WALLET</div>
-          <div className="text-sm font-black text-white mt-1">{totalBalance.toLocaleString()} {t('birr')}</div>
+          <div className="text-[7.5px] text-gray-400 font-extrabold uppercase tracking-wider">MAIN</div>
+          <div className="text-sm font-black text-white mt-1">{(wallet?.main_balance || 0).toLocaleString()} {t('birr')}</div>
+        </div>
+        <div className="bg-[#141f33] border border-[#233c66]/30 p-2.5 rounded-xl flex-1 text-center shadow-lg">
+          <div className="text-[7.5px] text-gray-400 font-extrabold uppercase tracking-wider">PLAY</div>
+          <div className="text-sm font-black text-amber-400 mt-1">{(wallet?.play_balance || 0).toLocaleString()} {t('birr')}</div>
         </div>
         <div className="bg-[#141f33] border border-[#233c66]/30 p-2.5 rounded-xl flex-1 text-center shadow-lg">
           <div className="text-[7.5px] text-gray-400 font-extrabold uppercase tracking-wider">STAKE</div>
           <div className="text-sm font-black text-amber-400 mt-1">{(fee * selectedCards.length).toLocaleString()} {t('birr')}</div>
-        </div>
-        <div className="bg-[#141f33] border border-[#233c66]/30 p-2.5 rounded-xl flex-1 text-center shadow-lg">
-          <div className="text-[7.5px] text-gray-400 font-extrabold uppercase tracking-wider">PRIZE</div>
-          <div className="text-sm font-black text-gold mt-1">{(selectedCards.length > 0 ? (room.winAmount * selectedCards.length) : 0).toLocaleString()} {t('birr')}</div>
         </div>
         <div className="bg-gradient-to-br from-[#ff5a00] to-amber-600 rounded-xl px-2.5 flex flex-col items-center justify-center font-black text-center shadow-lg shadow-[#ff5a00]/20 w-14 border border-white/10 select-none h-12 self-center shrink-0">
           <span className="text-[7px] text-white/80 uppercase font-bold tracking-tight">WAIT</span>
@@ -178,7 +178,7 @@ export default function RoomLobby({
                   <span className="text-[9px] font-black tracking-wider text-[#8da0c4]">CARD #{cardNum}</span>
                   <span className="text-[7.5px] font-black text-amber-400 bg-amber-400/10 px-1 rounded uppercase">Selected</span>
                 </div>
-                <BingoGrid card={getSeededCard(cardNum)} drawnNumbers={[]} compact={true} />
+                <BingoGrid card={getSeededCard(cardNum, gameId)} drawnNumbers={[]} compact={true} />
               </div>
             ))}
           </div>

@@ -191,6 +191,8 @@ export async function POST(request: NextRequest) {
         })
         .eq('id', gameId);
 
+      await supabase.from('game_card_reservations').delete().eq('game_code', game.code);
+
       const newMain = await supabase.rpc('adjust_main_balance', { p_user_id: userId, p_amount: winAmount });
       if (newMain.error) console.error('adjust_main_balance error:', newMain.error);
 
@@ -254,6 +256,8 @@ export async function POST(request: NextRequest) {
       if (game && game.status !== 'finished') {
         await supabase.from('games').update({ status: 'finished' }).eq('id', gameId);
       }
+
+      await supabase.from('game_card_reservations').delete().eq('game_code', game.code);
 
       const { data: gamePlayer } = await supabase
         .from('game_players')

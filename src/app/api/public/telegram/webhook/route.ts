@@ -46,7 +46,8 @@ async function getBotCommands(): Promise<Record<string, any>> {
       cbe_max: '5000',
       withdraw_required_games: '5',
       referral_bonus: '10',
-      referral_min_deposit: '50'
+      referral_min_deposit: '50',
+      banks: []
     };
     commandsCacheTime = now;
     return cachedCommands;
@@ -66,7 +67,8 @@ async function getBotCommands(): Promise<Record<string, any>> {
       cbe_max: '5000',
       withdraw_required_games: '5',
       referral_bonus: '10',
-      referral_min_deposit: '50'
+      referral_min_deposit: '50',
+      banks: []
     };
   }
 }
@@ -118,75 +120,108 @@ async function answerCallbackQuery(callbackQueryId: string, text?: string) {
   return tgCall('answerCallbackQuery', { callback_query_id: callbackQueryId, text });
 }
 
+const BOT_COMMANDS = [
+  { command: 'start', description: 'Start the bot and open the main menu' },
+  { command: 'play', description: 'Open BINGO game' },
+  { command: 'balance', description: 'Check your wallet balances' },
+  { command: 'deposit', description: 'Deposit funds to your wallet' },
+  { command: 'withdraw', description: 'Withdraw funds from your wallet' },
+  { command: 'invite', description: 'Get your referral link' },
+  { command: 'transactions', description: 'View recent transactions' },
+  { command: 'instructions', description: 'Learn how to play BINGO' },
+  { command: 'patterns', description: 'View winning patterns' },
+  { command: 'support', description: 'Contact support team' },
+  { command: 'language', description: 'Change your language setting' },
+  { command: 'stats', description: 'View your game statistics' },
+];
+
+async function registerBotCommands() {
+  try {
+    await tgCall('setMyCommands', { commands: BOT_COMMANDS });
+  } catch (e) {
+    console.error('setMyCommands error:', e);
+  }
+}
+
 function getUserLang(from: any): 'en' | 'am' {
   return (from?.language_code === 'am' || from?.language_code === 'ar') ? 'am' : 'en';
 }
 
 const EN = {
-  welcome: '🎰 Welcome to Nile Bingo!\n\nThe most exciting BINGO experience on Telegram.\n\nTap the button below to start playing!',
-  share_contact: '📱 Please share your phone number to continue.\n\nThis helps us identify you and provide better support.',
+  welcome: '🎰 *Welcome to Nile BINGO!*\n\nExperience the thrill of real-time BINGO right here on Telegram. Quick matches, fair play, and real prizes await!\n\n👇 Tap the button below to jump in!',
+  share_contact: '📱 *Let\'s get started!*\n\nPlease share your phone number so we can set up your account. Your number is kept private and used only for account verification.',
   share_contact_btn: '📱 Share Phone Number',
-  contact_received: '✅ Thank you! Your contact has been shared with our support team.',
-  contact_already: '✅ Your phone number is already shared with us.',
+  contact_received: '✅ *Welcome aboard!* Your phone number has been verified and your account is ready to go.',
+  contact_already: '✅ Your phone number is already on file — you\'re all set!',
   play: '🎮 Play BINGO',
   check_balance: '💰 Check Balance',
   deposit: '💳 Deposit',
   withdraw: '💸 Withdraw',
   contact: '📞 Contact Us',
-  instructions: '📜 Game Instruction',
+  instructions: '📜 How to Play',
   transactions: '📒 Transactions',
-  winning_patterns: '🎯 Winning patterns',
+  winning_patterns: '🎯 Winning Patterns',
   language: '🌐 Language',
-  balance_info: '💰 *Your Balance*\n\nMain Wallet: {main} ETB (Withdrawable)\nPlay Wallet: {play} ETB (Non-withdrawable, Play only)\nTotal: {total} ETB',
-  how_to_play: '*How to Play BINGO:*\n\n1. Choose a room (Bronze 10 ETB / Silver 20 / Gold 50 / Diamond 100 / Premium 200 / VIP 500)\n2. Select up to 2 card numbers (1-100) — each card is a unique 5x5 grid\n3. Wait for game to start (auto-starts on room timer)\n4. Numbers 1-75 are drawn every 2 seconds — cards auto-mark\n5. First to complete a row, column, or diagonal wins the prize pool\n6. Prize = stakes × players minus commission (%)\n\nGood luck!',
-  deposit_choose: '💳 *Choose payment method:*\n\nSelect your preferred option below:',
+  balance_info: '💰 *Your Wallet*\n\n• Main Balance: *{main} ETB* (withdrawable)\n• Play Balance: *{play} ETB* (gameplay only)\n• Total: *{total} ETB*\n\n💡 *Tip:* Main balance is for withdrawals. Play balance is for entering games and cannot be withdrawn.',
+  how_to_play: '*🎯 How to Play BINGO*\n\n1️⃣ Pick a room — Bronze (10 ETB) up to VIP (500 ETB)\n2️⃣ Choose 1–2 card numbers (each has a unique 5×5 grid)\n3️⃣ Wait for the game to auto-start when the timer hits zero\n4️⃣ Numbers 1–75 are drawn every 2 seconds — cards mark automatically\n5️⃣ First to complete a full row or column wins the prize pool\n6️⃣ Prize = total stakes × players minus commission\n\nGood luck and have fun! 🍀',
+  deposit_choose: '💳 *Deposit Funds*\n\nSelect your preferred payment method below:',
   deposit_cbe: 'CBE (Commercial Bank of Ethiopia)',
   deposit_telebirr: 'Telebirr',
-  deposit_cbe_info: '*CBE Deposit Instructions*\n\nAccount: 1000256789123\nName: Nile Bingo\nBank: CBE\n\nSend amount, then forward SMS confirmation here.',
-  deposit_telebirr_info: '*Telebirr Deposit Instructions*\n\nNumber: 0925502345\nName: Ashe\n\nSend up to 1000 ETB, then forward SMS confirmation here.',
-  withdraw_info: '*Withdraw Funds*\n\nOnly Main Wallet funds can be withdrawn. Play Wallet (Referral bonus) is for gameplay only and cannot be withdrawn.\n\nContact support to withdraw. Min: 50 ETB',
-  contact_info: '*Contact Support*\n\nEmail: support@fuabingo.com\nTelegram: @fua_bingo_support',
-  winning_patterns_info: '*Winning Patterns*\n\n1. Horizontal Row — 5 numbers in a row\n2. Vertical Column — 5 numbers in a column\n3. Diagonal Line — 5 numbers diagonally\n\nComplete any one of these to win! The game auto-detects your BINGO instantly.',
-  language_menu: 'Choose your language / Select your language:',
-  transactions_prompt: 'Open the Mini App Wallet tab to view transactions.',
+  deposit_amount_prompt: '💵 *Enter Amount*\n\nHow much would you like to deposit?\n\nMinimum: *{min} ETB*\nMaximum: *{max} ETB*\n\nPlease reply with the amount only (e.g., `200`).',
+  deposit_txid_prompt: '📝 *Transaction Reference*\n\nSend your payment to the account below, then reply with the transaction/reference ID:\n\n🏦 *{bank_name}*\nAccount: `{account}`\nRecipient: {recipient}\nAmount: *{amount} ETB*\n\nOnce you\'ve sent the payment, type the transaction ID you received.',
+  deposit_submitted: '⏳ *Deposit Submitted*\n\nYour deposit of *{amount} ETB* via *{bank}* has been received and is pending review.\n\n🆔 Reference: `{txid}`\n\nOur team will verify and approve it shortly. You\'ll receive a notification once credited! ✅',
+  withdraw_info: '💸 *Withdraw Funds*\n\nOnly your *Main Balance* can be withdrawn. Play balance is for gameplay only.\n\n📋 *Requirements:*\n• Play at least {required_games} games first\n• Minimum withdrawal: {min_amount} ETB\n\nTo request a withdrawal, please contact support with your amount and preferred method.',
+  withdraw_required: '🚫 *Withdrawal Locked*\n\nYou need to play at least *{required} games* before you can withdraw.\n\n✅ Games played: *{played}*\n❌ Remaining: *{remaining}*\n\nKeep playing — you\'re almost there! 💪',
+  contact_info: '*📬 Contact Support*\n\nHave a question or need help?\n\n📧 Email: support@nilebingo.com\n💬 Telegram: @nile_bingo_support\n\nWe typically respond within 24 hours.',
+  winning_patterns_info: '*🏆 Winning Patterns*\n\nComplete any of these to win:\n\n1️⃣ *Horizontal Row* — Mark all 5 numbers in any row\n2️⃣ *Vertical Column* — Mark all 5 numbers in any column\n\nWin detection is automatic — no need to shout BINGO! The game instantly checks after every draw.',
+  language_menu: '🌍 *Select Language / ቋንቋ ምረጥ*',
+  transactions_prompt: '📒 *Recent Transactions*\n\n{transactions}\n\nFor full history, open the Mini App Wallet tab.',
+  transactions_empty: '📒 *Transactions*\n\nNo transactions yet. Start playing to see your history here!',
+  broadcast_usage: '📢 *Broadcast*\n\nUsage: `/broadcast Your message here`\n\nSends a message to all registered users.',
+  broadcast_done: '✅ Broadcast sent to {count} users.',
   // Admin commands
-  admin_stats: '*📊 Admin Dashboard*\n\n👥 Users: {users}\n🎮 Games: {games}\n🟢 Active: {active}\n💰 Deposits: {deposits} ETB\n💸 Withdrawals: {withdrawals} ETB\n📈 Revenue: {revenue} ETB\n⏳ Pending Deposits: {pendingDep}\n⏳ Pending Withdrawals: {pendingWit}',
-  admin_users: '*👥 Recent Users*\n\n{users}',
+  admin_stats: '*📊 Admin Dashboard*\n\n👥 Users: {users}\n🎮 Total Games: {games}\n🟢 Active Now: {active}\n💰 Total Deposits: {deposits} ETB\n💸 Total Withdrawals: {withdrawals} ETB\n📈 Revenue: {revenue} ETB\n⏳ Pending Deposits: {pendingDep}\n⏳ Pending Withdrawals: {pendingWit}',
+  admin_users: '*👥 Recent Users (Last 10)*\n\n{users}',
   admin_pending: '*⏳ Pending Transactions*\n\n{transactions}',
-  admin_approved: '✅ Transaction {id} approved.',
+  admin_approved: '✅ Transaction {id} approved. Amount: {amount} ETB.',
   admin_rejected: '❌ Transaction {id} rejected.',
-  admin_no_pending: 'No pending transactions.',
-  admin_no_users: 'No users found.',
-  admin_help: '*🔐 Admin Commands*\n\n/admin_stats - View dashboard stats\n/admin_users - List recent users\n/admin_pending - View pending transactions\n/admin_approve <tx_id> - Approve a transaction\n/admin_reject <tx_id> - Reject a transaction\n/admin_help - Show this help',
+  admin_no_pending: 'No pending transactions at the moment.',
+  admin_no_users: 'No users found yet.',
+  admin_help: '*🔐 Admin Commands*\n\n/admin_stats — Dashboard statistics\n/admin_users — Recent 10 users\n/admin_pending — View pending transactions\n/approve_<tx_id> — Approve a transaction\n/reject_<tx_id> — Reject a transaction\n/broadcast <message> — Send message to all users\n/admin_help — Show this help',
 };
 
 const AM = {
-  welcome: '🎰 እንኳን ወደ Nile Bingo በደህና መጡ!\n\nመጫወት ለመጀመር ከታች ያለውን ቁልፍ ይጫኑ!',
-  share_contact: '📱 እባክዎ ለመቀጠል ስልክ ቁጥርዎን ያጋሩ።',
+  welcome: '🎰 *እንኳን ወደ Nile BINGO በደህና መጡ!*\n\nቀጥታ የቢንጎ ደስታ በቴሌግራም ላይ! ፈጣን ጨዋታዎች፣ ፍትሃዊ ውድድር፣ እና እውነተኛ ሽልማቶች ይጠብቃሉ።\n\n👇 ለመጀመር ከታች ያለውን ቁልፍ ይጫኑ!',
+  share_contact: '📱 *እንጀምር!*\n\nእባክዎ መለያዎን ለማዘጋጀት ስልክ ቁጥርዎን ያጋሩ። ቁጥርዎ ሚስጥራዊ ነው እና ለማረጋገጫ ብቻ ያገለግላል።',
   share_contact_btn: '📱 ስልክ ቁጥር አጋራ',
-  contact_received: '✅ እናመሰግናለን! ስልክ ቁጥርዎ ደርሷል።',
-  contact_already: '✅ ስልክ ቁጥርዎ ቀደም ሲል ተጋርቷል።',
+  contact_received: '✅ *እንኳን ደህና መጡ!* ስልክ ቁጥርዎ ተረጋግጧል። መለያዎ ዝግጁ ነው!',
+  contact_already: '✅ ስልክ ቁጥርዎ ቀደም ሲል ተመዝግቧል — ሁሉም ዝግጁ ነው!',
   play: '🎮 ቢንጎ ተጫወት',
   check_balance: '💰 ቀሪ ሂሳብ',
   deposit: '💳 ተቀማጭ',
   withdraw: '💸 አውጣ',
   contact: '📞 ያግኙን',
-  instructions: '📜 መመሪያ',
+  instructions: '📜 እንዴት እንደሚጫወት',
   transactions: '📒 ግብይቶች',
   winning_patterns: '🎯 የማሸነፊያ ዘዴዎች',
   language: '🌐 ቋንቋ',
-  balance_info: '💰 *ቀሪ ሂሳብ*\n\nዋና ዋሌት: {main} ETB (ማውጣት የሚቻል)\nየጨዋታ ዋሌት: {play} ETB (ማውጣት የማይቻል፣ ለጨዋታ ብቻ)\nጠቅላላ: {total} ETB',
-  how_to_play: '*እንዴት እንደሚጫወት:*\n\n1. ክፍል ምረጥ (ነሐስ 10 / ብር 20 / ወርቅ 50 / አልማዝ 100 / ፕሪሚየም 200 / ቪአይፒ 500)\n2. እስከ 2 ካርዶች ምረጥ (1-100) — እያንዳንዱ ካርድ ልዩ 5×5 ሰንጠረዥ ነው\n3. ጨዋታው እስኪጀመር ጠብቅ (በራስ-ሰር ይጀምራል)\n4. ቁጥሮች 1-75 በየ2 ሰከንድ ይመረጣሉ — ካርዶች በራስ-ሰር ምልክት ያደርጋሉ\n5. መጀመሪያ ረድፍ/አምድ/ሰያፍ ሙሉ ያደረገ ሰው ያሸንፋል\n6. ሽልማት = ውርርድ × ተጫዋቾች ሲቀነስ ኮሚሽን (%)\n\nመልካም ጨዋታ!',
-  deposit_choose: '💳 *የክፍያ ዘዴ ምረጥ:*',
+  balance_info: '💰 *የእርስዎ ዋሌት*\n\n• ዋና ቀሪ: *{main} ETB* (ማውጣት የሚቻል)\n• የጨዋታ ቀሪ: *{play} ETB* (ለጨዋታ ብቻ)\n• ጠቅላላ: *{total} ETB*\n\n💡 ዋና ቀሪ ለማውጣት፣ የጨዋታ ቀሪ ለመጫወት የሚያገለግል ነው።',
+  how_to_play: '*🎯 እንዴት ቢንጎ እንደሚጫወት*\n\n1️⃣ ክፍል ምረጥ — ነሐስ (10 ETB) እስከ ቪአይፒ (500 ETB)\n2️⃣ 1–2 ካርዶች ምረጥ (እያንዳንዱ ልዩ 5×5 ሰንጠረዥ አለው)\n3️⃣ ጨዋታው በራስ-ሰር እስኪጀመር ጠብቅ\n4️⃣ ቁጥሮች 1–75 በየ2 ሰከንድ ይመረጣሉ\n5️⃣ መጀመሪያ ሙሉ ረድፍ ወይም አምድ ያጠናቀቀ ሰው ያሸንፋል\n6️⃣ ሽልማት = ጠቅላላ ውርርድ ሲቀነስ ኮሚሽን\n\nመልካም ጨዋታ! 🍀',
+  deposit_choose: '💳 *ገንዘብ ማስገቢያ*\n\nየሚፈልጉትን የክፍያ ዘዴ ይምረጡ:',
   deposit_cbe: 'CBE ባንክ',
   deposit_telebirr: 'ቴሌብር',
-  deposit_cbe_info: '*CBE መመሪያ*\n\nአካውንት: 1000256789123\nስም: Nile Bingo\nባንክ: CBE',
-  deposit_telebirr_info: '*ቴሌብር መመሪያ*\n\nቁጥር: 0925502345\nስም: አሸ',
-  withdraw_info: '*ገንዘብ ማውጣት*\n\nዋና ዋሌት ውስጥ ያለው ገንዘብ ብቻ ነው ማውጣት የሚቻለው። የጨዋታ ዋሌት (የሪፈራል ቦነስ) ለጨዋታ ብቻ የሚያገለግል ሲሆን ማውጣት አይቻልም።\n\nድጋፍ ያግኙ። ዝቅተኛ: 50 ETB',
-  contact_info: '*ድጋፍ*\n\nEmail: support@fuabingo.com\nTelegram: @fua_bingo_support',
-  winning_patterns_info: '*የማሸነፊያ ዘዴዎች*\n\n1. አግዳሚ ረድፍ — 5 ቁጥሮች በአንድ ረድፍ\n2. አቀባዊ አምድ — 5 ቁጥሮች በአንድ አምድ\n3. ሰያፍ መስመር — 5 ቁጥሮች በሰያፍ\n\nከነዚህ ውስጥ አንዱን ሙሉ ያድርጉ እና ያሸንፉ! ጨዋታው ቢንጎዎን ወዲያውኑ ያውቃል።',
-  language_menu: 'ቋንቋ ምረጥ:',
-  transactions_prompt: 'ወደ ሚኒ አፕ ዋሌት ትር ይሂዱ።',
+  deposit_amount_prompt: '💵 *መጠን ያስገቡ*\n\nምን ያህል ማስገባት ይፈልጋሉ?\n\nዝቅተኛ: *{min} ETB*\nከፍተኛ: *{max} ETB*\n\nእባክዎ መጠኑን ብቻ ይፃፉ (ለምሳሌ `200`)።',
+  deposit_txid_prompt: '📝 *የግብይት ማረጋገጫ*\n\nገንዘቡን ከታች ወደተመለከተው ሂሳብ ከላኩ በኋላ፣ የግብይት መለያ ቁጥሩን (Transaction ID) ይላኩ:\n\n🏦 *{bank_name}*\nሂሳብ: `{account}`\nተቀባይ: {recipient}\nመጠን: *{amount} ETB*\n\nገንዘቡን ከላኩ በኋላ የተቀበሉትን የግብይት መለያ ቁጥር ይላኩ።',
+  deposit_submitted: '⏳ *ገንዘብ ማስገቢያ ተልኳል*\n\nየ *{amount} ETB* ገንዘብ ማስገቢያዎ በ*{bank}* በኩል ደርሷል እና በመገምገም ላይ ነው።\n\n🆔 ማመሳከሪያ: `{txid}`\n\nቡድናችን በቅርቡ ያረጋግጠዋል። ሲፀድቅ ማሳወቂያ ያገኛሉ! ✅',
+  withdraw_info: '💸 *ገንዘብ ማውጣት*\n\nየ*ዋና ቀሪ* ሂሳብዎ ውስጥ ያለው ገንዘብ ብቻ ነው ማውጣት የሚቻለው። የጨዋታ ቀሪ ለጨዋታ ብቻ ነው።\n\n📋 *መስፈርቶች:*\n• ቢያንስ {required_games} ጨዋታዎችን ይጫወቱ\n• ዝቅተኛ ማውጫ: {min_amount} ETB\n\nለማውጣት እባክዎ ድጋፍን ያግኙ።',
+  withdraw_required: '🚫 *ማውጣት አይቻልም*\n\nማውጣት ከመቻልዎ በፊት ቢያንስ *{required} ጨዋታዎችን* መጫወት ያስፈልጋል።\n\n✅ የተጫወቷቸው: *{played}*\n❌ የቀሩ: *{remaining}*\n\nመጫወትዎን ይቀጥሉ — ቅርብ ነዎት! 💪',
+  contact_info: '*📬 ድጋፍ*\n\nጥያቄ ወይም እርዳታ ይፈልጋሉ?\n\n📧 ኢሜይል: support@nilebingo.com\n💬 ቴሌግራም: @nile_bingo_support',
+  winning_patterns_info: '*🏆 የማሸነፊያ ዘዴዎች*\n\nከነዚህ ውስጥ አንዱን ሙሉ ያድርጉ እና ያሸንፉ:\n\n1️⃣ *አግዳሚ ረድፍ* — በማንኛውም ረድፍ 5 ቁጥሮች ሙሉ\n2️⃣ *አቀባዊ አምድ* — በማንኛውም አምድ 5 ቁጥሮች ሙሉ\n\nማሸነፍዎ በራስ-ሰር ይታወቃል — ቢንጎ ማለት አያስፈልግም!',
+  language_menu: '🌍 *ቋንቋ ምረጥ / Select Language*',
+  transactions_prompt: '📒 *የቅርብ ግብይቶች*\n\n{transactions}\n\nሙሉ ታሪክ ለማየት ወደ ሚኒ አፕ ዋሌት ይሂዱ።',
+  transactions_empty: '📒 *ግብይቶች*\n\nእስካሁን ምንም ግብይት የለም። መጫወት ይጀምሩ!',
+  broadcast_usage: '📢 *መልእክት ማሰራጫ*\n\nአጠቃቀም: `/broadcast መልእክትዎ`\n\nለሁሉም ተመዝጋቢዎች መልእክት ይላኩ።',
+  broadcast_done: '✅ መልእክት ለ{count} ተጠቃሚዎች ተልኳል።',
 };
 
 function getText(lang: 'en' | 'am', key: string): string {
@@ -556,25 +591,19 @@ export async function POST(request: NextRequest) {
         await answerCallbackQuery(callbackQuery.id);
         const { data: prof } = await supabase.from('profiles').select('id').eq('telegram_id', String(from.id)).maybeSingle();
         if (prof) {
-          await supabase.from('profiles').update({ telegram_state: 'waiting_deposit_cbe' }).eq('id', prof.id);
+          await supabase.from('profiles').update({ telegram_state: 'waiting_deposit_amount', telegram_state_data: { bank_id: 'cbe' } }).eq('id', prof.id);
         }
-        
-        const cbeAcc = commands.cbe_account || '1000256789123';
-        const cbeName = commands.cbe_name || 'Nile Bingo';
         const cbeMax = commands.cbe_max || '5000';
-        const msgText = `💰 *Manual Deposit Instructions - CBE*\n\nAccount: \`${cbeAcc}\`\nRecipient name: *${cbeName}*\n\n1. Send up to ${cbeMax} ETB using CBE Birr\n2. Copy the full SMS confirmation from the wallet\n3. Send that confirmation message here\n\nNow send your transaction ID or payment confirmation text.\nType *Cancel* any time to stop.`;
+        const msgText = getText(lang, 'deposit_amount_prompt').replace('{min}', '50').replace('{max}', cbeMax);
         await sendMessage(chatId, msgText, { parse_mode: 'Markdown' });
       } else if (data === 'deposit_telebirr') {
         await answerCallbackQuery(callbackQuery.id);
         const { data: prof } = await supabase.from('profiles').select('id').eq('telegram_id', String(from.id)).maybeSingle();
         if (prof) {
-          await supabase.from('profiles').update({ telegram_state: 'waiting_deposit_telebirr' }).eq('id', prof.id);
+          await supabase.from('profiles').update({ telegram_state: 'waiting_deposit_amount', telegram_state_data: { bank_id: 'telebirr' } }).eq('id', prof.id);
         }
-
-        const telebirrNum = commands.telebirr_number || '0918281072';
-        const telebirrName = commands.telebirr_name || 'Melkie';
         const telebirrMax = commands.telebirr_max || '1000';
-        const msgText = `💰 *Manual Deposit Instructions - Telebirr*\n\nNumber: \`${telebirrNum}\`\nRecipient name: *${telebirrName}*\n\n1. Send up to ${telebirrMax} ETB using Telebirr\n2. Copy the full SMS confirmation from the wallet\n3. Send that confirmation message here\n\nNow send your transaction ID or payment confirmation text.\nType *Cancel* any time to stop.`;
+        const msgText = getText(lang, 'deposit_amount_prompt').replace('{min}', '10').replace('{max}', telebirrMax);
         await sendMessage(chatId, msgText, { parse_mode: 'Markdown' });
       } else if (data === 'lang_en') {
         await answerCallbackQuery(callbackQuery.id, 'Language set to English');
@@ -582,6 +611,18 @@ export async function POST(request: NextRequest) {
       } else if (data === 'lang_am') {
         await answerCallbackQuery(callbackQuery.id, 'Language set to Amharic');
         await sendMessage(chatId, 'Use the buttons below:', getMainKeyboard('am'));
+      } else if (data.startsWith('deposit_bank_')) {
+        const bankId = data.replace('deposit_bank_', '');
+        await answerCallbackQuery(callbackQuery.id);
+        const { data: prof } = await supabase.from('profiles').select('id').eq('telegram_id', String(from.id)).maybeSingle();
+        if (prof) {
+          await supabase.from('profiles').update({ telegram_state: 'waiting_deposit_amount', telegram_state_data: { bank_id: bankId } }).eq('id', prof.id);
+        }
+        const banks: any[] = commands.banks || [];
+        const bank = banks.find((b: any) => b.id === bankId);
+        const maxAmt = bank?.max || '5000';
+        const msgText = getText(lang, 'deposit_amount_prompt').replace('{min}', '50').replace('{max}', maxAmt);
+        await sendMessage(chatId, msgText, { parse_mode: 'Markdown' });
       } else if (data.startsWith('pub_approve_')) {
         const txId = data.replace('pub_approve_', '');
         await answerCallbackQuery(callbackQuery.id, 'Processing...');
@@ -705,6 +746,9 @@ export async function POST(request: NextRequest) {
       } catch (e) {
         console.error('Error setting bot profile:', e);
       }
+
+      // Register bot commands for menu
+      await registerBotCommands();
 
       // Create or update profile
       const { data: existing } = await supabase
@@ -853,75 +897,132 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // State Handler: If they send non-command text while waiting for CBE/Telebirr SMS
+    // State Handler: If they send non-command text while in a waiting state
     if (userProfile && userProfile.telegram_state && userProfile.telegram_state !== 'idle' && !stateCancelledMessageSent) {
       const state = userProfile.telegram_state;
-      const method = state === 'waiting_deposit_cbe' ? 'cbe' : 'telebirr';
-      const parsed = parseDepositSMS(text, method);
+      const stateData: any = userProfile.telegram_state_data || {};
 
-      // Reset state to idle
-      await supabase
-        .from('profiles')
-        .update({ telegram_state: 'idle', telegram_state_data: {} })
-        .eq('id', userProfile.id);
+      if (state === 'waiting_deposit_amount') {
+        // User sent an amount to deposit
+        const amount = parseFloat(text.replace(/,/g, ''));
+        if (isNaN(amount) || amount <= 0) {
+          await sendMessage(chatId, '❌ Invalid amount. Please enter a valid number (e.g., `200`).', { parse_mode: 'Markdown' });
+          return NextResponse.json({ ok: true });
+        }
 
-      if (parsed) {
+        // Update state to waiting for tx ID
+        await supabase
+          .from('profiles')
+          .update({ telegram_state: 'waiting_deposit_txid', telegram_state_data: { ...stateData, amount } })
+          .eq('id', userProfile.id);
+
+        // Look up bank details
+        const banks: any[] = commands.banks || [];
+        const bankId = stateData.bank_id || 'cbe';
+        const bank = banks.find((b: any) => b.id === bankId);
+        const bankName = bank?.name || (bankId === 'cbe' ? 'CBE' : 'Telebirr');
+        const account = bank?.account || (bankId === 'cbe' ? (commands.cbe_account || '1000256789123') : (commands.telebirr_number || '0918281072'));
+        const recipient = bank?.recipient || (bankId === 'cbe' ? (commands.cbe_name || 'Nile Bingo') : (commands.telebirr_name || 'Melkie'));
+
+        const msgText = getText(lang, 'deposit_txid_prompt')
+          .replace('{bank_name}', bankName)
+          .replace('{account}', account)
+          .replace('{recipient}', recipient)
+          .replace('{amount}', String(amount));
+
+        await sendMessage(chatId, msgText, { parse_mode: 'Markdown' });
+        return NextResponse.json({ ok: true });
+      }
+
+      if (state === 'waiting_deposit_txid') {
+        // User sent a transaction ID
+        const txId = text.trim();
+        if (!txId || txId.length < 3) {
+          await sendMessage(chatId, '❌ Please enter a valid transaction/reference ID.');
+          return NextResponse.json({ ok: true });
+        }
+
+        const amount = Number(stateData.amount) || 0;
+        const bankId = stateData.bank_id || 'cbe';
+        const banks: any[] = commands.banks || [];
+        const bank = banks.find((b: any) => b.id === bankId);
+        const bankName = bank?.name || (bankId === 'cbe' ? 'CBE' : 'Telebirr');
+
         // Double spent protection
         const { data: existingTx } = await supabase
           .from('transactions')
           .select('id')
-          .eq('reference', parsed.txId)
+          .eq('reference', txId)
           .maybeSingle();
 
         if (existingTx) {
-          await sendMessage(chatId, `❌ *Duplicate Transaction*\n\nThis transaction reference ID (\`${parsed.txId}\`) has already been submitted or processed. If you believe this is an error, please contact support.`, { parse_mode: 'Markdown', ...getMainKeyboard(lang) });
+          await sendMessage(chatId, `❌ *Duplicate Transaction*\n\nThis transaction reference ID (\`${txId}\`) has already been submitted or processed.`, { parse_mode: 'Markdown', ...getMainKeyboard(lang) });
+          await supabase.from('profiles').update({ telegram_state: 'idle', telegram_state_data: {} }).eq('id', userProfile.id);
           return NextResponse.json({ ok: true });
         }
 
-        // Insert as pending — admin must approve before credit
+        // Reset state
+        await supabase.from('profiles').update({ telegram_state: 'idle', telegram_state_data: {} }).eq('id', userProfile.id);
+
+        // Insert pending deposit
         const { data: tx } = await supabase
           .from('transactions')
           .insert({
             user_id: userProfile.id,
             type: 'deposit',
-            amount: parsed.amount,
+            amount,
             status: 'pending',
-            reference: parsed.txId
+            reference: txId
           })
           .select()
           .single();
 
         if (tx) {
-          await sendMessage(chatId, `⏳ *Deposit Submitted for Review*\n\nWe received your SMS confirmation:\n- Transaction ID: \`${parsed.txId}\`\n- Amount: *${parsed.amount.toLocaleString()} ETB*\n\nAn admin will verify and approve your deposit shortly. You'll get a notification once credited!`, { parse_mode: 'Markdown', ...getMainKeyboard(lang) });
+          const msgText = getText(lang, 'deposit_submitted')
+            .replace('{amount}', amount.toLocaleString())
+            .replace('{bank}', bankName)
+            .replace('{txid}', txId);
+          await sendMessage(chatId, msgText, { parse_mode: 'Markdown', ...getMainKeyboard(lang) });
 
           if (adminChatId) {
-            await sendMessage(adminChatId, `⏳ *Pending Deposit - SMS Auto-Detected*\n\n👤 User: ${userProfile.first_name || 'Unknown'}${userProfile.username ? ` (@${userProfile.username})` : ''}\n💰 Amount: *${parsed.amount} ETB*\n🆔 ID: \`${parsed.txId}\`\n🏦 Method: *${method.toUpperCase()}*\n\nApprove: /approve_${tx.id.slice(0, 8)}\nReject: /reject_${tx.id.slice(0, 8)}`, { parse_mode: 'Markdown' });
+            await sendMessage(adminChatId, `⏳ *New Deposit Request*\n\n👤 User: ${userProfile.first_name || 'Unknown'}${userProfile.username ? ` (@${userProfile.username})` : ''}\n📞 Phone: ${userProfile.phone || 'N/A'}\n💰 Amount: *${amount} ETB*\n🏦 Bank: *${bankName}*\n🆔 TX ID: \`${txId}\`\n\nApprove: /approve_${tx.id.slice(0, 8)}\nReject: /reject_${tx.id.slice(0, 8)}`, { parse_mode: 'Markdown' });
           }
         }
-      } else {
-        // Fallback to manual verification
-        const referenceText = text;
-        const { data: tx } = await supabase
-          .from('transactions')
-          .insert({
-            user_id: userProfile.id,
-            type: 'deposit',
-            amount: 0,
-            status: 'pending',
-            reference: referenceText
-          })
-          .select()
-          .single();
-
-        if (tx) {
-          await sendMessage(chatId, `⏳ *Deposit Pending Review*\n\nWe couldn't automatically verify your SMS pattern, but our team has received it.\n\nAn admin will review and approve your deposit manually shortly! Thank you for your patience.`, getMainKeyboard(lang));
-
-          if (adminChatId) {
-            await sendMessage(adminChatId, `⏳ *Manual Deposit Submission*\n\n👤 User: ${userProfile.first_name || 'Unknown'}${userProfile.username ? ` (@${userProfile.username})` : ''}\n📞 Phone: ${userProfile.phone || 'N/A'}\n📝 Submitted Text:\n\`\`\`\n${referenceText}\n\`\`\`\n\nApprove: /approve_${tx.id.slice(0, 8)}\nReject: /reject_${tx.id.slice(0, 8)}`, { parse_mode: 'Markdown' });
-          }
-        }
+        return NextResponse.json({ ok: true });
       }
-      return NextResponse.json({ ok: true });
+
+      // Legacy SMS parse states (backward compat)
+      if (state === 'waiting_deposit_cbe' || state === 'waiting_deposit_telebirr') {
+        const method = state === 'waiting_deposit_cbe' ? 'cbe' : 'telebirr';
+        const parsed = parseDepositSMS(text, method);
+
+        await supabase.from('profiles').update({ telegram_state: 'idle', telegram_state_data: {} }).eq('id', userProfile.id);
+
+        if (parsed) {
+          const { data: existingTx } = await supabase.from('transactions').select('id').eq('reference', parsed.txId).maybeSingle();
+          if (existingTx) {
+            await sendMessage(chatId, `❌ *Duplicate Transaction*\n\nThis transaction reference ID (\`${parsed.txId}\`) has already been submitted.`, { parse_mode: 'Markdown', ...getMainKeyboard(lang) });
+            return NextResponse.json({ ok: true });
+          }
+
+          const { data: tx } = await supabase.from('transactions').insert({ user_id: userProfile.id, type: 'deposit', amount: parsed.amount, status: 'pending', reference: parsed.txId }).select().single();
+          if (tx) {
+            await sendMessage(chatId, `⏳ *Deposit Submitted for Review*\n\nTransaction ID: \`${parsed.txId}\`\nAmount: *${parsed.amount.toLocaleString()} ETB*\n\nAn admin will verify and approve your deposit shortly.`, { parse_mode: 'Markdown', ...getMainKeyboard(lang) });
+            if (adminChatId) {
+              await sendMessage(adminChatId, `⏳ *Pending Deposit (SMS Auto)*\n\n👤 ${userProfile.first_name || 'Unknown'}${userProfile.username ? ` (@${userProfile.username})` : ''}\n💰 *${parsed.amount} ETB*\n🆔 \`${parsed.txId}\`\n🏦 ${method.toUpperCase()}\n\n/approve_${tx.id.slice(0, 8)}`, { parse_mode: 'Markdown' });
+            }
+          }
+        } else {
+          const { data: tx } = await supabase.from('transactions').insert({ user_id: userProfile.id, type: 'deposit', amount: 0, status: 'pending', reference: text }).select().single();
+          if (tx) {
+            await sendMessage(chatId, `⏳ *Deposit Pending Review*\n\nWe couldn't auto-verify your SMS. An admin will review it manually.`, { parse_mode: 'Markdown', ...getMainKeyboard(lang) });
+            if (adminChatId) {
+              await sendMessage(adminChatId, `⏳ *Manual Deposit*\n\n👤 ${userProfile.first_name || 'Unknown'}${userProfile.username ? ` (@${userProfile.username})` : ''}\n📝 \`${text}\`\n\n/approve_${tx.id.slice(0, 8)}`, { parse_mode: 'Markdown' });
+            }
+          }
+        }
+        return NextResponse.json({ ok: true });
+      }
     }
 
     // Admin commands (dynamic from DB)
@@ -940,6 +1041,29 @@ export async function POST(request: NextRequest) {
       }
       if (text === commands.admin_help) {
         await sendMessage(chatId, EN.admin_help, { parse_mode: 'Markdown' });
+        return NextResponse.json({ ok: true });
+      }
+      if (text.startsWith('/broadcast ')) {
+        const message = text.replace('/broadcast ', '').trim();
+        if (!message) {
+          await sendMessage(chatId, getText('en', 'broadcast_usage'), { parse_mode: 'Markdown' });
+          return NextResponse.json({ ok: true });
+        }
+        const { data: profiles } = await supabase.from('profiles').select('telegram_id').not('telegram_id', 'is', null);
+        if (!profiles || profiles.length === 0) {
+          await sendMessage(chatId, 'No users to broadcast to.');
+          return NextResponse.json({ ok: true });
+        }
+        let sent = 0;
+        const header = '📢 *Announcement*\n\n';
+        for (const p of profiles) {
+          try {
+            await sendMessage(p.telegram_id, header + message, { parse_mode: 'Markdown' });
+            sent++;
+          } catch (e) { /* skip failed sends */ }
+        }
+        const doneText = getText('en', 'broadcast_done').replace('{count}', String(sent));
+        await sendMessage(chatId, doneText, { parse_mode: 'Markdown' });
         return NextResponse.json({ ok: true });
       }
       if (text.startsWith(commands.admin_approve)) {
@@ -1010,14 +1134,21 @@ export async function POST(request: NextRequest) {
 
       await sendMessage(chatId, msgText, { parse_mode: 'Markdown' });
     } else if (matchesCommand(userCommands.deposit, plainCommands.deposit)) {
+      const banks: any[] = commands.banks || [];
+      const inlineKeyboard: any[][] = [];
+      if (banks.length > 0) {
+        for (const bank of banks) {
+          inlineKeyboard.push([{ text: `${bank.icon || '🏦'} ${bank.name}`, callback_data: `deposit_bank_${bank.id}` }]);
+        }
+      } else {
+        inlineKeyboard.push(
+          [{ text: '🏦 ' + getText(lang, 'deposit_cbe'), callback_data: 'deposit_cbe' }],
+          [{ text: '📱 ' + getText(lang, 'deposit_telebirr'), callback_data: 'deposit_telebirr' }],
+        );
+      }
       await sendMessage(chatId, getMsg('deposit_choose', 'deposit_choose'), {
         parse_mode: 'Markdown',
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: '🏦 ' + getText(lang, 'deposit_cbe'), callback_data: 'deposit_cbe' }],
-            [{ text: '📱 ' + getText(lang, 'deposit_telebirr'), callback_data: 'deposit_telebirr' }],
-          ]
-        }
+        reply_markup: { inline_keyboard: inlineKeyboard }
       });
     } else if (matchesCommand(userCommands.withdraw, plainCommands.withdraw)) {
       let playedCount = 0;
@@ -1033,10 +1164,18 @@ export async function POST(request: NextRequest) {
       const reqGames = Number(commands.withdraw_required_games || 5);
       if (playedCount < reqGames) {
         const remaining = reqGames - playedCount;
-        const lockMsg = `🚨 *Withdrawal not available yet.*\n\nYou need to play at least *${reqGames} games* before you can withdraw.\nGames played so far: *${playedCount}*\nGames remaining: *${remaining}*\n\nKeep playing — you're getting closer! 💪`;
+        const lockMsg = getText(lang, 'withdraw_required')
+          .replace('{required}', String(reqGames))
+          .replace('{played}', String(playedCount))
+          .replace('{remaining}', String(remaining));
         await sendMessage(chatId, lockMsg, { parse_mode: 'Markdown' });
       } else {
-        await sendMessage(chatId, getMsg('withdraw_info', 'withdraw_info'), { parse_mode: 'Markdown' });
+        const reqGames = Number(commands.withdraw_required_games || 5);
+        const minAmount = Number(commands.withdraw_min_amount || 50);
+        const withdrawText = getText(lang, 'withdraw_info')
+          .replace('{required_games}', String(reqGames))
+          .replace('{min_amount}', String(minAmount));
+        await sendMessage(chatId, withdrawText, { parse_mode: 'Markdown' });
       }
     } else if (matchesCommand(userCommands.contact, plainCommands.contact)) {
       await sendMessage(chatId, getMsg('contact_info', 'contact_info'), { parse_mode: 'Markdown' });
@@ -1072,7 +1211,7 @@ export async function POST(request: NextRequest) {
       const refBonus = commands.referral_bonus || 10;
       const refMinDep = commands.referral_min_deposit || 50;
 
-      const inviteMsg = `Hello ${from.first_name || 'Abel'}!\n\nHere is your invite link to share with friends:\n${refLink}\n\nReferral rule: You earn a one-time ${refBonus} ETB bonus for each person you invite after they deposit at least ${refMinDep} ETB.`;
+      const inviteMsg = `🎉 *Invite Friends & Earn!*\n\nHere's your exclusive invite link:\n${refLink}\n\n*How it works:*\n• Share your link with friends\n• They join and share their phone number\n• You instantly get *${refBonus} ETB* in your Play Wallet\n\nNo minimum deposit required — just invite and play! 🚀`;
 
       await sendMessage(chatId, inviteMsg, {
         parse_mode: 'Markdown',

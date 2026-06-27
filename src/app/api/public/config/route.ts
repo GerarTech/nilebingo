@@ -27,6 +27,8 @@ export async function GET(request: NextRequest) {
     const referralEnabled = config.referralEnabled !== false;
     const referralBonus = typeof config.referralBonus === 'number' ? config.referralBonus : 1;
     const rulesText = config.rules_text || '';
+    const withdrawMinAmount = typeof config.withdraw_min_amount === 'number' ? config.withdraw_min_amount : 50;
+    const withdrawRequiredGames = typeof config.withdraw_required_games === 'number' ? config.withdraw_required_games : 5;
     const rooms = Array.isArray(config.rooms) ? config.rooms : [
       { id: 'bronze', name: 'Bronze Room', entry: 10, players: 10, maxPlayers: 100 },
       { id: 'silver', name: 'Silver Room', entry: 20, players: 12, maxPlayers: 100 },
@@ -36,7 +38,7 @@ export async function GET(request: NextRequest) {
       { id: 'vip', name: 'VIP Room', entry: 500, players: 2, maxPlayers: 100 }
     ];
 
-    return NextResponse.json({ commission, rooms, appName, appLogo, appLogoPng, botUsername, colorScheme, referralEnabled, referralBonus, rulesText }, {
+    return NextResponse.json({ commission, rooms, appName, appLogo, appLogoPng, botUsername, colorScheme, referralEnabled, referralBonus, rulesText, withdrawMinAmount, withdrawRequiredGames }, {
       headers: {
         'Cache-Control': 'no-store, max-age=0'
       }
@@ -52,6 +54,8 @@ export async function GET(request: NextRequest) {
       referralEnabled: true,
       referralBonus: 1,
       rulesText: '',
+      withdrawMinAmount: 50,
+      withdrawRequiredGames: 5,
       rooms: [
         { id: 'bronze', name: 'Bronze Room', entry: 10, players: 10, maxPlayers: 100 },
         { id: 'silver', name: 'Silver Room', entry: 20, players: 12, maxPlayers: 100 },

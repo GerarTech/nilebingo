@@ -110,6 +110,7 @@ export default function SettingsPage() {
 
   // Gateway specific state
   const [withdrawRequiredGames, setWithdrawRequiredGames] = useState<number>(5);
+  const [withdrawMinAmount, setWithdrawMinAmount] = useState<number>(50);
   const [cbeAccount, setCbeAccount] = useState<string>('1000256789123');
   const [cbeName, setCbeName] = useState<string>('Nile Bingo');
   const [cbeMax, setCbeMax] = useState<number>(5000);
@@ -120,6 +121,8 @@ export default function SettingsPage() {
   const [referralMinDeposit, setReferralMinDeposit] = useState<number>(50);
   const [signupBonus, setSignupBonus] = useState<number>(0);
   const [rulesText, setRulesText] = useState<string>('');
+  const [banks, setBanks] = useState<{id: string; name: string; icon: string; account: string; recipient: string; max: string}[]>([]);
+  const [newBank, setNewBank] = useState<{name: string; icon: string; account: string; recipient: string; max: string}>({name: '', icon: '🏦', account: '', recipient: '', max: '5000'});
 
   // Branding specific state
   const [botName, setBotName] = useState('Nile BINGO');
@@ -180,6 +183,7 @@ export default function SettingsPage() {
         
         // Gateways loading
         if (config.withdraw_required_games !== undefined) setWithdrawRequiredGames(Number(config.withdraw_required_games) || 5);
+        if (config.withdraw_min_amount !== undefined) setWithdrawMinAmount(Number(config.withdraw_min_amount) || 50);
         if (config.cbe_account !== undefined) setCbeAccount(String(config.cbe_account));
         if (config.cbe_name !== undefined) setCbeName(String(config.cbe_name));
         if (config.cbe_max !== undefined) setCbeMax(Number(config.cbe_max) || 5000);
@@ -190,6 +194,7 @@ export default function SettingsPage() {
         if (config.referral_min_deposit !== undefined) setReferralMinDeposit(Number(config.referral_min_deposit) || 50);
         if (config.signup_bonus !== undefined) setSignupBonus(Number(config.signup_bonus) || 0);
         if (config.rules_text !== undefined) setRulesText(String(config.rules_text) || '');
+        if (Array.isArray(config.banks)) setBanks(config.banks);
       }
       if (msgs && typeof msgs === 'object') {
         setMessages(prev => ({ ...prev, ...msgs }));
@@ -210,6 +215,7 @@ export default function SettingsPage() {
       colorScheme,
       referralEnabled: adminReferralEnabled,
       withdraw_required_games: withdrawRequiredGames,
+      withdraw_min_amount: withdrawMinAmount,
       cbe_account: cbeAccount,
       cbe_name: cbeName,
       cbe_max: cbeMax,
@@ -221,6 +227,7 @@ export default function SettingsPage() {
       signup_bonus: signupBonus,
       rules_text: rulesText,
       appointed_winners: appointedWinners,
+      banks,
     };
   };
 
@@ -432,8 +439,19 @@ export default function SettingsPage() {
                   placeholder="e.g. 5"
                 />
                 <p className="text-[8.5px] text-gray-500">Limits withdrawals so users must engage with the bingo rooms before checking out.</p>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] text-gray-400 block">Minimum Withdrawal Amount (ETB)</label>
+                  <input
+                    type="number"
+                    value={withdrawMinAmount}
+                    onChange={(e) => setWithdrawMinAmount(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                    className="w-full bg-navy border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
+                    placeholder="e.g. 50"
+                  />
+                  <p className="text-[8.5px] text-gray-500">Minimum ETB amount users can withdraw per request.</p>
+                </div>
               </div>
-            </div>
 
             {/* CBE Birr Settings */}
             <div className="bg-navy-light p-3 rounded-lg border border-white/5 space-y-3">
@@ -500,6 +518,61 @@ export default function SettingsPage() {
                   onChange={(e) => setTelebirrMax(Math.max(0, parseInt(e.target.value, 10) || 0))}
                   className="w-full bg-navy border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
                 />
+              </div>
+            </div>
+
+            {/* Dynamic Banks */}
+            <div className="bg-navy-light p-3 rounded-lg border border-white/5 space-y-3">
+              <label className="text-xs text-white font-bold uppercase tracking-wider block">🏛️ Payment Gateways (Dynamic Banks)</label>
+              <p className="text-[8.5px] text-gray-500">These banks appear as deposit options in the Telegram bot. Add one for each payment method.</p>
+              
+              {banks.map((bank, idx) => (
+                <div key={bank.id} className="bg-navy/50 p-2 rounded-lg border border-white/5 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-white font-medium">{bank.icon} {bank.name}</span>
+                    <button onClick={() => setBanks(prev => prev.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-300 cursor-pointer">
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[9px] text-gray-400 block">Account / Number</label>
+                      <input type="text" value={bank.account} onChange={(e) => { const copy = [...banks]; copy[idx] = {...copy[idx], account: e.target.value}; setBanks(copy); }} className="w-full bg-navy border border-white/10 rounded-lg px-2 py-1 text-[11px] text-white focus:outline-none focus:border-gold/50" />
+                    </div>
+                    <div>
+                      <label className="text-[9px] text-gray-400 block">Recipient Name</label>
+                      <input type="text" value={bank.recipient} onChange={(e) => { const copy = [...banks]; copy[idx] = {...copy[idx], recipient: e.target.value}; setBanks(copy); }} className="w-full bg-navy border border-white/10 rounded-lg px-2 py-1 text-[11px] text-white focus:outline-none focus:border-gold/50" />
+                    </div>
+                    <div>
+                      <label className="text-[9px] text-gray-400 block">Max Amount (ETB)</label>
+                      <input type="text" value={bank.max} onChange={(e) => { const copy = [...banks]; copy[idx] = {...copy[idx], max: e.target.value}; setBanks(copy); }} className="w-full bg-navy border border-white/10 rounded-lg px-2 py-1 text-[11px] text-white focus:outline-none focus:border-gold/50" />
+                    </div>
+                    <div>
+                      <label className="text-[9px] text-gray-400 block">Icon (emoji)</label>
+                      <input type="text" value={bank.icon} onChange={(e) => { const copy = [...banks]; copy[idx] = {...copy[idx], icon: e.target.value}; setBanks(copy); }} className="w-full bg-navy border border-white/10 rounded-lg px-2 py-1 text-[11px] text-white focus:outline-none focus:border-gold/50" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {/* Add new bank form */}
+              <div className="bg-navy/30 p-2 rounded-lg border border-dashed border-white/10 space-y-2">
+                <span className="text-[10px] text-gray-400 block">Add new payment gateway</span>
+                <div className="grid grid-cols-2 gap-2">
+                  <input type="text" placeholder="Name (e.g. CBE)" value={newBank.name} onChange={(e) => setNewBank(p => ({...p, name: e.target.value}))} className="w-full bg-navy border border-white/10 rounded-lg px-2 py-1 text-[11px] text-white focus:outline-none focus:border-gold/50" />
+                  <input type="text" placeholder="Icon (e.g. 🏦)" value={newBank.icon} onChange={(e) => setNewBank(p => ({...p, icon: e.target.value}))} className="w-full bg-navy border border-white/10 rounded-lg px-2 py-1 text-[11px] text-white focus:outline-none focus:border-gold/50" />
+                  <input type="text" placeholder="Account Number" value={newBank.account} onChange={(e) => setNewBank(p => ({...p, account: e.target.value}))} className="w-full bg-navy border border-white/10 rounded-lg px-2 py-1 text-[11px] text-white focus:outline-none focus:border-gold/50" />
+                  <input type="text" placeholder="Recipient Name" value={newBank.recipient} onChange={(e) => setNewBank(p => ({...p, recipient: e.target.value}))} className="w-full bg-navy border border-white/10 rounded-lg px-2 py-1 text-[11px] text-white focus:outline-none focus:border-gold/50" />
+                  <input type="text" placeholder="Max Amount" value={newBank.max} onChange={(e) => setNewBank(p => ({...p, max: e.target.value}))} className="w-full bg-navy border border-white/10 rounded-lg px-2 py-1 text-[11px] text-white focus:outline-none focus:border-gold/50" />
+                </div>
+                <button onClick={() => {
+                  if (!newBank.name || !newBank.account) return;
+                  const id = newBank.name.toLowerCase().replace(/[^a-z0-9]/g, '_') + '_' + Date.now();
+                  setBanks(prev => [...prev, { id, ...newBank }]);
+                  setNewBank({name: '', icon: '🏦', account: '', recipient: '', max: '5000'});
+                }} className="w-full bg-gold/20 text-gold border border-gold/30 rounded-lg py-1.5 text-[11px] font-medium hover:bg-gold/30 cursor-pointer transition-all">
+                  + Add Payment Gateway
+                </button>
               </div>
             </div>
 

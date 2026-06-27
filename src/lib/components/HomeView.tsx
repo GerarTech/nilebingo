@@ -78,6 +78,9 @@ export default function HomeView({
               }`}
               style={isSelected ? { background: `linear-gradient(to bottom, ${themeColor}22, ${themeColorDark}33)`, boxShadow: `0 8px 24px ${themeColor}22` } : undefined}
             >
+              {room.name && (
+                <span className="text-[9px] font-black uppercase tracking-widest text-gray-300 block mb-1">{room.name}</span>
+              )}
               <span className="absolute -top-1.5 -right-1.5 text-white text-[7.5px] font-black px-1.5 py-0.5 rounded-full shadow-md select-none uppercase tracking-tighter" style={{ backgroundColor: themeColor, boxShadow: `0 2px 8px ${themeColor}55` }}>
                 {room.countdown}S
               </span>

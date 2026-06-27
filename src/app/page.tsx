@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp, AppProvider } from '@/lib/hooks/useApp';
@@ -73,6 +73,7 @@ function HomePage() {
   const [showRules, setShowRules] = useState(false);
   const [cardPickerCountdown, setCardPickerCountdown] = useState(50);
   const [livePlayerCount, setLivePlayerCount] = useState(20);
+  const [prizePool, setPrizePool] = useState(0);
   const [gameId, setGameId] = useState('');
   const [previewCard, setPreviewCard] = useState<number[][]>([]);
   const [showWinModal, setShowWinModal] = useState(false);
@@ -121,6 +122,8 @@ function HomePage() {
   const [referralEnabled, setReferralEnabled] = useState<boolean>(true);
   const [referralBonus, setReferralBonus] = useState<number>(1);
   const [walletView, setWalletView] = useState<'main' | 'deposit' | 'withdraw' | 'transfer'>('main');
+  const [withdrawMinAmount, setWithdrawMinAmount] = useState<number>(50);
+  const [withdrawRequiredGames, setWithdrawRequiredGames] = useState<number>(5);
 
   // ============ DETERMINISTIC DRAW SEQUENCE ============
   const getDeterministicDrawSequence = useCallback((gId: string, targetCardNum?: number | null) => {
@@ -130,7 +133,7 @@ function HomePage() {
     const allBalls = Array.from({ length: 75 }, (_, i) => i + 1);
     const seq: number[] = [];
     if (targetCardNum && targetCardNum >= 1 && targetCardNum <= 100) {
-      const targetCard = getSeededCard(targetCardNum);
+      const targetCard = getSeededCard(targetCardNum, gId);
       const targetNumbers: number[] = [];
       targetCard.forEach(row => row.forEach(cell => { if (cell > 0) targetNumbers.push(cell); }));
       while (allBalls.length > 0) {
@@ -213,6 +216,8 @@ function HomePage() {
       if (data.referralEnabled !== undefined) setReferralEnabled(data.referralEnabled !== false);
       if (data.referralBonus !== undefined) setReferralBonus(Number(data.referralBonus) || 1);
       if (data.rulesText) setRulesText(data.rulesText);
+      if (typeof data.withdrawMinAmount === 'number') setWithdrawMinAmount(data.withdrawMinAmount);
+      if (typeof data.withdrawRequiredGames === 'number') setWithdrawRequiredGames(data.withdrawRequiredGames);
       if (Array.isArray(data.rooms)) {
         setRooms(data.rooms.map((room: any, i: number) => ({
           id: room.id || `room_${i}`, name: room.name || 'Room', entry: Number(room.entry) || 10,
@@ -293,7 +298,6 @@ function HomePage() {
         await supabase.from('game_players').upsert({ game_id: dbGameId, user_id: profile.id, card: cardsToStore[i], card_number: selectedCards[i] || 0, is_watching: isSpec, auto_mark: autoMark }, { onConflict: 'game_id,user_id' });
       }
       try { await supabase.rpc('update_game_prize_pool', { p_game_code: gId, p_stake_amt: stakeAmt }); } catch {}
-      if (gId && profile.id) await supabase.from('game_card_reservations').delete().eq('game_code', gId).eq('user_id', profile.id);
     } catch {}
   }, [profile, autoMark, selectedCards]);
 
@@ -302,10 +306,10 @@ function HomePage() {
     const isSelected = selectedCards.includes(num);
     const uid = profile?.id;
     if (isSelected) {
-      setSelectedCards(prev => { const next = prev.filter(c => c !== num); setPreviewCard(next.length > 0 ? getSeededCard(next[next.length - 1]) : []); return next; });
+      setSelectedCards(prev => { const next = prev.filter(c => c !== num); setPreviewCard(next.length > 0 ? getSeededCard(next[next.length - 1], gameId) : []); return next; });
       if (gameId && isValidUUID(uid)) await supabase.from('game_card_reservations').delete().eq('game_code', gameId).eq('user_id', uid).eq('card_number', num);
     } else {
-      setSelectedCards(prev => { if (prev.length >= 2) return prev; const next = [...prev, num]; setPreviewCard(getSeededCard(num)); return next; });
+      setSelectedCards(prev => { if (prev.length >= 2) return prev; const next = [...prev, num]; setPreviewCard(getSeededCard(num, gameId)); return next; });
       if (gameId && isValidUUID(uid)) await supabase.from('game_card_reservations').insert({ game_code: gameId, user_id: uid, card_number: num });
     }
   }, [gameId, profile?.id, selectedCards]);
@@ -320,10 +324,10 @@ function HomePage() {
 
     let cardsToPlay: number[][][] = [];
     if (isSpectateMode) {
-      const randomCard = generateCard(); cardsToPlay = [randomCard];
+      const randomCard = generateCard(undefined, activeGameId); cardsToPlay = [randomCard];
       setGameCard(randomCard); setPlayerCards([randomCard]); setSelectedStake(entryFee); setIsWatching(true);
     } else {
-      cardsToPlay = selectedCards.map(num => getSeededCard(num));
+      cardsToPlay = selectedCards.map(num => getSeededCard(num, activeGameId));
       setPlayerCards(cardsToPlay); setGameCard(cardsToPlay[0] || []); setSelectedStake(entryFee); setIsWatching(false);
     }
 
@@ -332,9 +336,12 @@ function HomePage() {
     await registerLiveGame(activeGameId, entryFee, isSpectateMode, cardsToPlay);
 
     try {
-      const { data: existingGame } = await supabase.from('games').select('id').eq('code', activeGameId).maybeSingle();
-      if (existingGame) { const { count } = await supabase.from('game_players').select('*', { count: 'exact', head: true }).eq('game_id', existingGame.id); setLivePlayerCount((count || 1)); }
-      else { const { data: reservations } = await supabase.from('game_card_reservations').select('user_id').eq('game_code', activeGameId); if (reservations) setLivePlayerCount(new Set(reservations.map(r => r.user_id)).size || 1); else setLivePlayerCount(selectedRoom.players); }
+      const { data: existingGame } = await supabase.from('games').select('id, prize_pool').eq('code', activeGameId).maybeSingle();
+      if (existingGame) {
+        const { count } = await supabase.from('game_players').select('*', { count: 'exact', head: true }).eq('game_id', existingGame.id);
+        setLivePlayerCount((count || 1));
+        if (existingGame.prize_pool) setPrizePool(Number(existingGame.prize_pool));
+      } else { const { data: reservations } = await supabase.from('game_card_reservations').select('user_id').eq('game_code', activeGameId); if (reservations) setLivePlayerCount(new Set(reservations.map(r => r.user_id)).size || 1); else setLivePlayerCount(selectedRoom.players); }
     } catch { setLivePlayerCount(selectedRoom.players); }
 
     const virtualCompetitors: VirtualPlayer[] = [];
@@ -343,7 +350,7 @@ function HomePage() {
     const vRand = () => { seed = (seed * 1664525 + 1013904223) & 0xffffffff; return (seed >>> 0) / 0xffffffff; };
     for (let i = 0; i < selectedRoom.players - (isSpectateMode ? 0 : 1); i++) {
       const cardSeed = Math.floor(vRand() * 100) + 1;
-      virtualCompetitors.push({ username: VIRTUAL_NAMES[i % VIRTUAL_NAMES.length] + ` (#${cardSeed})`, card: getSeededCard(cardSeed), markedCount: 0, neededToWin: 5, hasWon: false });
+      virtualCompetitors.push({ username: VIRTUAL_NAMES[i % VIRTUAL_NAMES.length] + ` (#${cardSeed})`, card: getSeededCard(cardSeed, activeGameId), markedCount: 0, neededToWin: 5, hasWon: false });
     }
     setOtherPlayers(virtualCompetitors);
     setShowCardPicker(false); setInGame(true);
@@ -413,7 +420,7 @@ function HomePage() {
 
       // Appointed winner: force win after N balls
       if (appointedCard && newDrawn.length >= appointedCard.afterBalls && !isWatching && playerCards.length > 0) {
-        const appointedGrid = getSeededCard(appointedCard.cardNumber);
+        const appointedGrid = getSeededCard(appointedCard.cardNumber, gameId);
         const playerHasAppointed = playerCards.some(c => JSON.stringify(c) === JSON.stringify(appointedGrid));
         if (playerHasAppointed) {
           let allMatches = [0];
@@ -460,6 +467,27 @@ function HomePage() {
 
   // ============ REF SYNC ============
   useEffect(() => { drawnRef.current = drawnNumbers; }, [drawnNumbers]);
+
+  // ============ LIVE PLAYER COUNT POLLING ============
+  const liveCountRef = useRef<number>(20);
+  useEffect(() => {
+    if (!inGame || !gameId) return;
+    liveCountRef.current = livePlayerCount;
+  }, [livePlayerCount]);
+  useEffect(() => {
+    if (!inGame || !gameId) return;
+    const poll = setInterval(async () => {
+      try {
+        const { data: g } = await supabase.from('games').select('id, prize_pool').eq('code', gameId).maybeSingle();
+        if (g) {
+          const { count } = await supabase.from('game_players').select('*', { count: 'exact', head: true }).eq('game_id', g.id);
+          if (count && count !== liveCountRef.current) { liveCountRef.current = count; setLivePlayerCount(count); }
+          if (g.prize_pool) setPrizePool(Number(g.prize_pool));
+        }
+      } catch {}
+    }, 1000);
+    return () => clearInterval(poll);
+  }, [inGame, gameId]);
 
   // ============ AUTO-MARK ============
   useEffect(() => {
@@ -632,7 +660,7 @@ function HomePage() {
   const renderContent = () => {
     if (activeTab === 'scores') return <ScoresTab profile={profile} wallet={wallet} dbLeaderboard={dbLeaderboard} t={t} />;
     if (activeTab === 'history') return <HistoryTab stakeHistory={stakeHistory} t={t} />;
-    if (activeTab === 'wallet') return <WalletTab wallet={wallet} botUsername={botUsername} referralEnabled={referralEnabled} referralBonus={referralBonus} referralCount={referralCount} inviteLink={inviteLink} copiedLink={copiedLink} t={t} onCopyRefLink={copyRefLink} onSimulateReferral={simulateReferralJoin} />;
+    if (activeTab === 'wallet') return <WalletTab wallet={wallet} botUsername={botUsername} referralEnabled={referralEnabled} referralBonus={referralBonus} referralCount={referralCount} inviteLink={inviteLink} copiedLink={copiedLink} withdrawMinAmount={withdrawMinAmount} withdrawRequiredGames={withdrawRequiredGames} t={t} onCopyRefLink={copyRefLink} onSimulateReferral={simulateReferralJoin} />;
     if (activeTab === 'profile') return <ProfileTab profile={profile} wallet={wallet} stakeHistory={stakeHistory} language={language} t={t} onSetLanguage={setLanguage} onUpdateAvatar={updateAvatar} />;
 
     // Game tab
