@@ -36,14 +36,23 @@ type RoomConfig = {
   status: 'playing' | 'starting_soon'; countdown: number;
 };
 
-function generateGameId(): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  return Array.from({ length: 8 }, () => chars.charAt(Math.floor(Math.random() * chars.length))).join('');
-}
-
 function getRoomPeriod(roomId: string): number {
   const periods: Record<string, number> = { bronze: 30, silver: 40, gold: 50, diamond: 60, premium: 75 };
   return periods[roomId] || 90;
+}
+
+function generateDeterministicGameId(roomId: string, cycle: number): string {
+  let seed = 0;
+  for (let i = 0; i < roomId.length; i++) seed = ((seed << 5) - seed) + roomId.charCodeAt(i);
+  seed = ((seed << 5) - seed) + cycle;
+  seed = seed & 0x7fffffff;
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let result = '';
+  for (let i = 0; i < 8; i++) {
+    seed = (seed * 1664525 + 1013904223) & 0x7fffffff;
+    result += chars[seed % chars.length];
+  }
+  return result;
 }
 
 function HomePage() {
@@ -83,6 +92,7 @@ function HomePage() {
   const [appLogoPng, setAppLogoPng] = useState<string | null>(null);
   const [botUsername, setBotUsername] = useState<string>('yenedating_bot');
   const [colorScheme, setColorScheme] = useState<string>('gold');
+  const [rulesText, setRulesText] = useState<string>('');
 
   const [rooms, setRooms] = useState<RoomConfig[]>([
     { id: 'bronze', name: 'Bronze Room', entry: 10, players: 10, maxPlayers: 100, winAmount: 90, status: 'starting_soon', countdown: 30 },
@@ -96,7 +106,7 @@ function HomePage() {
   const [dbLeaderboard, setDbLeaderboard] = useState<any[]>([]);
   const [otherPlayers, setOtherPlayers] = useState<VirtualPlayer[]>([]);
   const [opponentWinner, setOpponentWinner] = useState<string | null>(null);
-  const [appointedCard, setAppointedCard] = useState<number | null>(null);
+  const [appointedCard, setAppointedCard] = useState<{cardNumber: number, afterBalls: number} | null>(null);
 
   const [isRegistered, setIsRegistered] = useState<boolean>(false);
   const [isSpectatingReady, setIsSpectatingReady] = useState<boolean>(false);
@@ -150,9 +160,11 @@ function HomePage() {
         const { data } = await supabase.from('bot_config').select('commands').eq('id', 'main').single();
         const config = data?.commands || {};
         const appointedObj = config.appointed_winners || {};
-        const appointedNum = appointedObj[gameId];
-        if (appointedNum) setAppointedCard(Number(appointedNum));
-        else setAppointedCard(null);
+        const rule = appointedObj[gameId];
+        if (rule) {
+          if (typeof rule === 'number') setAppointedCard({ cardNumber: rule, afterBalls: 20 });
+          else if (typeof rule === 'object' && rule !== null) setAppointedCard({ cardNumber: Number(rule.card_number) || 1, afterBalls: Number(rule.after_balls) || 20 });
+        } else setAppointedCard(null);
       } catch { setAppointedCard(null); }
     };
     fetchAppointed();
@@ -189,7 +201,7 @@ function HomePage() {
   }, [isWatching, profile?.id, selectedRoom, livePlayerCount, commissionRate]);
 
   // ============ CONFIG FETCH ============
-  useEffect(() => {
+  const fetchConfig = useCallback(() => {
     fetch('/api/public/config', { cache: 'no-store' }).then(r => r.json()).then(data => {
       if (!data) return;
       if (typeof data.commission === 'number') setCommissionRate(data.commission);
@@ -200,6 +212,7 @@ function HomePage() {
       if (data.colorScheme) setColorScheme(data.colorScheme);
       if (data.referralEnabled !== undefined) setReferralEnabled(data.referralEnabled !== false);
       if (data.referralBonus !== undefined) setReferralBonus(Number(data.referralBonus) || 1);
+      if (data.rulesText) setRulesText(data.rulesText);
       if (Array.isArray(data.rooms)) {
         setRooms(data.rooms.map((room: any, i: number) => ({
           id: room.id || `room_${i}`, name: room.name || 'Room', entry: Number(room.entry) || 10,
@@ -210,6 +223,13 @@ function HomePage() {
       }
     }).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    fetchConfig();
+    const onVisibility = () => { if (document.visibilityState === 'visible') fetchConfig(); };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, [fetchConfig]);
 
   // ============ LEADERBOARD FETCH ============
   useEffect(() => {
@@ -294,8 +314,8 @@ function HomePage() {
   const startGameplay = useCallback(async (isSpectateMode: boolean) => {
     if (!selectedRoom) return;
     const period = getRoomPeriod(selectedRoom.id);
-    const cycle = Math.floor(Math.floor(Date.now() / 1000) / period) % 1000;
-    const activeGameId = `${selectedRoom.id.substring(0, 3).toUpperCase()}-${cycle}`;
+    const cycle = Math.floor(Date.now() / 1000 / period);
+    const activeGameId = generateDeterministicGameId(selectedRoom.id, cycle);
     const entryFee = selectedRoom.entry;
 
     let cardsToPlay: number[][][] = [];
@@ -318,15 +338,17 @@ function HomePage() {
     } catch { setLivePlayerCount(selectedRoom.players); }
 
     const virtualCompetitors: VirtualPlayer[] = [];
+    let seed = 0;
+    for (let i = 0; i < activeGameId.length; i++) seed = (seed * 31 + activeGameId.charCodeAt(i)) & 0xffffffff;
+    const vRand = () => { seed = (seed * 1664525 + 1013904223) & 0xffffffff; return (seed >>> 0) / 0xffffffff; };
     for (let i = 0; i < selectedRoom.players - (isSpectateMode ? 0 : 1); i++) {
-      const cardSeed = Math.floor(Math.random() * 100) + 1;
+      const cardSeed = Math.floor(vRand() * 100) + 1;
       virtualCompetitors.push({ username: VIRTUAL_NAMES[i % VIRTUAL_NAMES.length] + ` (#${cardSeed})`, card: getSeededCard(cardSeed), markedCount: 0, neededToWin: 5, hasWon: false });
     }
     setOtherPlayers(virtualCompetitors);
     setShowCardPicker(false); setInGame(true);
 
-    // Generate the deterministic draw sequence for this game
-    const sequence = getDeterministicDrawSequence(activeGameId, appointedCard);
+    const sequence = getDeterministicDrawSequence(activeGameId, appointedCard?.cardNumber);
     setDeterministicSequence(sequence);
 
     setIsRegistered(false); setIsSpectatingReady(false);
@@ -348,7 +370,8 @@ function HomePage() {
       }));
       if (selectedRoom && !inGame) {
         const period = getRoomPeriod(selectedRoom.id);
-        setGameId(`${selectedRoom.id.substring(0, 3).toUpperCase()}-${Math.floor(currentSec / period) % 1000}`);
+        const cycle = Math.floor(currentSec / period);
+        setGameId(generateDeterministicGameId(selectedRoom.id, cycle));
       }
     }, 1000);
     return () => clearInterval(tick);
@@ -388,6 +411,29 @@ function HomePage() {
         }
       }
 
+      // Appointed winner: force win after N balls
+      if (appointedCard && newDrawn.length >= appointedCard.afterBalls && !isWatching && playerCards.length > 0) {
+        const appointedGrid = getSeededCard(appointedCard.cardNumber);
+        const playerHasAppointed = playerCards.some(c => JSON.stringify(c) === JSON.stringify(appointedGrid));
+        if (playerHasAppointed) {
+          let allMatches = [0];
+          playerCards.forEach(card => { card.forEach(row => { row.forEach(n => { if (newDrawn.includes(n)) allMatches.push(n); }); }); });
+          setUserMarkedNumbers(allMatches);
+          triggerWin(appointedGrid, newDrawn);
+          return;
+        } else {
+          setOtherPlayers(prev => {
+            const existing = prev.find(p => p.card.some((row, ri) => row.every((cell, ci) => cell === appointedGrid[ri]?.[ci])));
+            if (existing) {
+              setOpponentWinner(existing.username);
+              if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+              addGameToHistory(gameId, selectedStake || 10, 'loss');
+            }
+            return prev;
+          });
+        }
+      }
+
       if (!isWatching) {
         setOtherPlayers(prev => {
           let someWinner = '';
@@ -410,7 +456,7 @@ function HomePage() {
       }
     }, 2000);
     return () => { if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; } };
-  }, [inGame, opponentWinner, language, isWatching, gameId, selectedStake, addGameToHistory, playerCards, autoMark, autoWin, deterministicSequence]);
+  }, [inGame, opponentWinner, language, isWatching, gameId, selectedStake, addGameToHistory, playerCards, autoMark, autoWin, deterministicSequence, appointedCard]);
 
   // ============ REF SYNC ============
   useEffect(() => { drawnRef.current = drawnNumbers; }, [drawnNumbers]);
@@ -438,14 +484,21 @@ function HomePage() {
   }, [autoWin, inGame, isWatching, playerCards, drawnNumbers]);
 
   // ============ TRIGGER WIN ============
-  const triggerWin = useCallback((card: number[][], drawn: number[]) => {
+  const triggerWin = useCallback(async (card: number[][], drawn: number[]) => {
     if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
     setWinningCard(card);
     setWinningCells(getWinningCells(card, drawn));
     setShowWinModal(true);
     addGameToHistory(gameId, selectedStake || 10, 'win');
     const stake = selectedStake || 10;
-    const playerCount = Math.max(1, livePlayerCount);
+    let playerCount = livePlayerCount;
+    try {
+      const { data: g } = await supabase.from('games').select('id').eq('code', gameId).maybeSingle();
+      if (g) {
+        const { count } = await supabase.from('game_players').select('*', { count: 'exact', head: true }).eq('game_id', g.id);
+        if (count && count > playerCount) playerCount = count;
+      }
+    } catch {}
     const jackpot = Math.round(stake * (1 + (playerCount - 1) * (1 - commissionRate / 100)));
     updateBalance(jackpot, 'main_balance');
   }, [gameId, selectedStake, livePlayerCount, addGameToHistory, updateBalance, commissionRate]);
@@ -456,7 +509,9 @@ function HomePage() {
   }, []);
 
   const handleJoinRoom = useCallback((room: RoomConfig) => {
-    setSelectedRoom(room); setSelectedStake(room.entry); setSelectedCards([]); setPreviewCard([]); setGameId(generateGameId());
+    const period = getRoomPeriod(room.id);
+    const cycle = Math.floor(Date.now() / 1000 / period);
+    setSelectedRoom(room); setSelectedStake(room.entry); setSelectedCards([]); setPreviewCard([]); setGameId(generateDeterministicGameId(room.id, cycle));
   }, []);
 
   // ============ PLAY / REGISTER / LEAVE ============
@@ -547,7 +602,7 @@ function HomePage() {
     if (typeof window !== 'undefined') { try { const saved = localStorage.getItem('nile_bingo_referrals'); if (saved) setReferralCount(parseInt(saved, 10)); } catch {} }
   }, []);
 
-  const inviteLink = `https://t.me/${botUsername}?start=ref_${profile?.id || 'player'}`;
+  const inviteLink = `https://t.me/${botUsername}?start=ref_${profile?.telegram_id || 'player'}`;
 
   const copyRefLink = useCallback(() => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) { navigator.clipboard.writeText(inviteLink); setCopiedLink(true); setTimeout(() => setCopiedLink(false), 2000); }
@@ -628,7 +683,9 @@ function HomePage() {
       <>
         <HomeView
           rooms={rooms} selectedStake={selectedStake} wallet={wallet}
-          appName={appName} appLogo={appLogo} appLogoPng={appLogoPng} commissionRate={commissionRate} t={t}
+          appName={appName} appLogo={appLogo} appLogoPng={appLogoPng} commissionRate={commissionRate}
+          themeColor={getThemeColor()} themeColorDark={getThemeColorDark()}
+          t={t}
           onSelectStake={selectStake}
           onPlay={() => {
             if (selectedStake !== null) {
@@ -639,7 +696,7 @@ function HomePage() {
           onShowRules={() => setShowRules(true)}
           onGoToWallet={navigateToWallet}
         />
-        <RulesModal show={showRules} onClose={() => setShowRules(false)} t={t} />
+        <RulesModal show={showRules} onClose={() => setShowRules(false)} t={t} rulesText={rulesText} />
       </>
     );
   };
@@ -658,7 +715,7 @@ function HomePage() {
     return map[colorScheme] || 'rgba(254,232,0,0.3)';
   };
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="text-center">{appLogoPng ? <img src={appLogoPng} alt="Logo" className="h-12 w-12 object-contain mx-auto mb-4" /> : <div className="text-4xl font-black text-gold mb-4 animate-pulse">{appLogo}</div>}<div className="text-4xl font-black text-gold mb-4 animate-pulse">{appName}</div><div className="text-gray-400 text-sm">{t('loading')}</div></div></div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="text-center">{appLogoPng ? <img src={appLogoPng} alt="Logo" className="h-12 w-12 object-contain mx-auto mb-4" /> : <div className="text-4xl font-black mb-4 animate-pulse" style={{ color: getThemeColor() }}>{appLogo}</div>}<div className="text-4xl font-black mb-4 animate-pulse" style={{ color: getThemeColor() }}>{appName}</div><div className="text-gray-400 text-sm">{t('loading')}</div></div></div>;
 
   return (
     <div className="min-h-screen pb-20">
@@ -673,7 +730,7 @@ function HomePage() {
         .border-gold { border-color: var(--theme-gold) !important; }
       ` }} />
       {renderContent()}
-      <TabBar activeTab={activeTab} onTabChange={handleTabChange} inGame={inGame} />
+      <TabBar activeTab={activeTab} onTabChange={handleTabChange} inGame={inGame} themeColor={getThemeColor()} />
 
       {showRefToast && (
         <div className="fixed bottom-24 left-4 right-4 z-50 bg-[#162a45]/95 backdrop-blur border-2 border-emerald-500/40 text-emerald-300 py-3 px-4 rounded-2xl font-bold flex items-center justify-between text-xs shadow-2xl animate-bounce">

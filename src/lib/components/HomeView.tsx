@@ -22,6 +22,8 @@ interface HomeViewProps {
   appLogo: string;
   appLogoPng: string | null;
   commissionRate: number;
+  themeColor: string;
+  themeColorDark: string;
   t: (key: string) => string;
   onSelectStake: (amount: number) => void;
   onPlay: () => void;
@@ -31,7 +33,7 @@ interface HomeViewProps {
 
 export default function HomeView({
   rooms, selectedStake, wallet, appName, appLogo, appLogoPng, commissionRate,
-  t, onSelectStake, onPlay, onShowRules, onGoToWallet,
+  themeColor, themeColorDark, t, onSelectStake, onPlay, onShowRules, onGoToWallet,
 }: HomeViewProps) {
   const walletBalance = (wallet?.main_balance || 0) + (wallet?.play_balance || 0);
   const bronzeRoom = rooms.find(r => r.id === 'bronze') || rooms[0];
@@ -45,11 +47,11 @@ export default function HomeView({
       <div className="flex items-center justify-between mb-5 border-[#233c66]/30 pb-3 border-b">
         <div className="font-sans">
           <span className="text-[10px] uppercase font-black tracking-widest text-gray-400 block">WELCOME TO</span>
-          <span className="text-2xl font-black text-[#FEE800] tracking-tight uppercase flex items-center gap-1.5 mt-0.5 animate-pulse">
+          <span className="text-2xl font-black tracking-tight uppercase flex items-center gap-1.5 mt-0.5 animate-pulse" style={{ color: themeColor }}>
             {appLogoPng ? <img src={appLogoPng} alt="Logo" className="h-7 w-7 object-contain inline-block" /> : appLogo} {appName}
           </span>
         </div>
-        <button onClick={onGoToWallet} className="flex items-center gap-1 bg-[#ff5a00] hover:bg-[#ff7a22] text-white font-extrabold text-[11px] px-3.5 py-2 rounded-xl shadow-md shadow-[#ff5a00]/15 transition-all cursor-pointer">
+        <button onClick={onGoToWallet} className="flex items-center gap-1 text-white font-extrabold text-[11px] px-3.5 py-2 rounded-xl shadow-md transition-all cursor-pointer" style={{ backgroundColor: themeColorDark, boxShadow: `0 4px 14px ${themeColor}44` }}>
           💰 {walletBalance.toLocaleString()} {t('birr')}
         </button>
       </div>
@@ -71,16 +73,17 @@ export default function HomeView({
               onClick={() => onSelectStake(room.entry)}
               className={`relative rounded-2xl py-5 px-3 border transition-all text-center flex flex-col items-center justify-center cursor-pointer select-none ${
                 isSelected
-                  ? 'bg-gradient-to-b from-[#14233c] to-[#0d1624] border-[#ff5a00] shadow-lg shadow-[#ff5a00]/15 scale-[1.04]'
-                  : 'bg-[#141f33]/70 border-[#233c66]/40 hover:border-amber-500/50'
+                  ? 'border-[#233c66] scale-[1.04]'
+                  : 'bg-[#141f33]/70 border-[#233c66]/40 hover:border-white/20'
               }`}
+              style={isSelected ? { background: `linear-gradient(to bottom, ${themeColor}22, ${themeColorDark}33)`, boxShadow: `0 8px 24px ${themeColor}22` } : undefined}
             >
-              <span className="absolute -top-1.5 -right-1.5 bg-[#ff5a00] text-white text-[7.5px] font-black px-1.5 py-0.5 rounded-full shadow-md shadow-[#ff5a00]/30 select-none uppercase tracking-tighter">
+              <span className="absolute -top-1.5 -right-1.5 text-white text-[7.5px] font-black px-1.5 py-0.5 rounded-full shadow-md select-none uppercase tracking-tighter" style={{ backgroundColor: themeColor, boxShadow: `0 2px 8px ${themeColor}55` }}>
                 {room.countdown}S
               </span>
               <span className="text-xl font-black text-white block">{room.entry}</span>
               <span className="text-[10px] text-gray-400 font-extrabold uppercase mt-1 tracking-wider block">{t('birr')}</span>
-              {isSelected && <span className="w-1.5 h-1.5 bg-[#ff5a00] rounded-full mt-2" />}
+              {isSelected && <span className="w-1.5 h-1.5 rounded-full mt-2" style={{ backgroundColor: themeColor }} />}
             </button>
           );
         })}
@@ -90,7 +93,8 @@ export default function HomeView({
       <div className="mb-6">
         {selectedStake ? (
           <button onClick={onPlay}
-            className="w-full bg-gradient-to-r from-amber-500 via-[#ff5a00] to-orange-600 hover:opacity-95 text-white font-black py-4 rounded-2xl text-[13px] tracking-widest flex items-center justify-center gap-2 shadow-xl shadow-[#ff5a00]/25 transition-transform hover:scale-[1.01] active:translate-y-0.5 cursor-pointer uppercase font-sans animate-pulse">
+            className="w-full text-white font-black py-4 rounded-2xl text-[13px] tracking-widest flex items-center justify-center gap-2 shadow-xl transition-transform hover:scale-[1.01] active:translate-y-0.5 cursor-pointer uppercase font-sans animate-pulse"
+            style={{ background: `linear-gradient(to right, ${themeColor}, ${themeColorDark})`, boxShadow: `0 10px 30px ${themeColor}44` }}>
             🚀 PLAY WITH {selectedStake} {t('birr')}
           </button>
         ) : (
@@ -106,7 +110,7 @@ export default function HomeView({
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom,rgba(35,60,102,0.04)_0%,transparent_80%)] pointer-events-none" />
         <div className="flex items-center justify-between border-b border-white/5 pb-2 mb-3">
           <span className="text-[9px] font-black uppercase tracking-wider text-gray-400 flex items-center gap-1.5">💳 WALLET BALANCE</span>
-          <span className="text-[10px] text-amber-400 font-bold">{t('birr')}</span>
+          <span className="text-[10px] font-bold" style={{ color: themeColor }}>{t('birr')}</span>
         </div>
         <div className="space-y-2">
           <div className="flex justify-between items-center text-xs">
@@ -118,8 +122,8 @@ export default function HomeView({
             <span className="font-extrabold text-white">{(wallet?.play_balance || 0).toLocaleString()} {t('birr')}</span>
           </div>
           <div className="border-t border-dashed border-white/5 pt-1.5 flex justify-between items-center text-[13px] font-black">
-            <span className="text-amber-500">Total</span>
-            <span className="text-[#FEE800]">{walletBalance.toLocaleString()} {t('birr')}</span>
+            <span style={{ color: themeColor }}>Total</span>
+            <span style={{ color: themeColor }}>{walletBalance.toLocaleString()} {t('birr')}</span>
           </div>
         </div>
       </div>

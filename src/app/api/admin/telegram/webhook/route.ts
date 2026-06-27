@@ -326,18 +326,21 @@ export async function POST(request: NextRequest) {
     if (text.startsWith('/appoint')) {
       let gameId = '';
       let cardNumber = 0;
+      let afterBalls = 20;
 
       if (text.startsWith('/appoint_')) {
         const parts = text.split('_');
         if (parts.length >= 3) {
           gameId = parts[1];
           cardNumber = Number(parts[2]);
+          afterBalls = parts.length >= 4 ? Number(parts[3]) || 20 : 20;
         }
       } else {
         const parts = text.split(' ');
         if (parts.length >= 3) {
           gameId = parts[1];
           cardNumber = Number(parts[2]);
+          afterBalls = parts.length >= 4 ? Number(parts[3]) || 20 : 20;
         }
       }
 
@@ -350,7 +353,7 @@ export async function POST(request: NextRequest) {
 
         const currentCommands = configData?.commands || {};
         const currentAppointed = currentCommands.appointed_winners || {};
-        currentAppointed[gameId] = cardNumber;
+        currentAppointed[gameId] = { card_number: cardNumber, after_balls: afterBalls };
         currentCommands.appointed_winners = currentAppointed;
 
         await supabase
@@ -358,9 +361,9 @@ export async function POST(request: NextRequest) {
           .update({ commands: currentCommands })
           .eq('id', 'main');
 
-        await sendMessage(chatId, `🎯 *Appointed Winner Recorded*\n\nGame ID: \`${gameId}\`\nAppointed Card: *Card #${cardNumber}*\n\nThis card will be prioritized to win during live play!`, { parse_mode: 'Markdown' });
+        await sendMessage(chatId, `🎯 *Appointed Winner Recorded*\n\nGame ID: \`${gameId}\`\nAppointed Card: *Card #${cardNumber}*\nWin after: *${afterBalls} balls*\n\nThis card will be prioritized to win during live play!`, { parse_mode: 'Markdown' });
       } else {
-        await sendMessage(chatId, `❌ *Invalid Command Format*\n\nUse: \`/appoint <gameId> <card_number>\` or click the link from the matches list (e.g., \`/appoint_ABCDEF12_25\`).`, { parse_mode: 'Markdown' });
+        await sendMessage(chatId, `❌ *Invalid Command Format*\n\nUse: \`/appoint <gameId> <card_number> [after_balls]\` or click the link from the matches list (e.g., \`/appoint_ABCDEF12_25\`).`, { parse_mode: 'Markdown' });
       }
       return NextResponse.json({ ok: true });
     }

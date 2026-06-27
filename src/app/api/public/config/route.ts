@@ -26,6 +26,7 @@ export async function GET(request: NextRequest) {
     const colorScheme = config.colorScheme || 'gold';
     const referralEnabled = config.referralEnabled !== false;
     const referralBonus = typeof config.referralBonus === 'number' ? config.referralBonus : 1;
+    const rulesText = config.rules_text || '';
     const rooms = Array.isArray(config.rooms) ? config.rooms : [
       { id: 'bronze', name: 'Bronze Room', entry: 10, players: 10, maxPlayers: 100 },
       { id: 'silver', name: 'Silver Room', entry: 20, players: 12, maxPlayers: 100 },
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest) {
       { id: 'vip', name: 'VIP Room', entry: 500, players: 2, maxPlayers: 100 }
     ];
 
-    return NextResponse.json({ commission, rooms, appName, appLogo, appLogoPng, botUsername, colorScheme, referralEnabled, referralBonus }, {
+    return NextResponse.json({ commission, rooms, appName, appLogo, appLogoPng, botUsername, colorScheme, referralEnabled, referralBonus, rulesText }, {
       headers: {
         'Cache-Control': 'no-store, max-age=0'
       }
@@ -50,6 +51,7 @@ export async function GET(request: NextRequest) {
       colorScheme: 'gold',
       referralEnabled: true,
       referralBonus: 1,
+      rulesText: '',
       rooms: [
         { id: 'bronze', name: 'Bronze Room', entry: 10, players: 10, maxPlayers: 100 },
         { id: 'silver', name: 'Silver Room', entry: 20, players: 12, maxPlayers: 100 },

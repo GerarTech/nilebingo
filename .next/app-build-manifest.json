@@ -12,7 +12,7 @@
       "static/chunks/fd9d1056-1eecee4be4cc9813.js",
       "static/chunks/117-13247f0b4bb231d9.js",
       "static/chunks/main-app-5c0a62debabad94c.js",
-      "static/css/4129928fb5f531f4.css",
+      "static/css/84af0e140b624609.css",
       "static/chunks/44530001-52999465abdb64c7.js",
       "static/chunks/659-012fbbb940118b8a.js",
       "static/chunks/654-6bbc40fac3c6f120.js",
@@ -26,7 +26,7 @@
       "static/chunks/44530001-52999465abdb64c7.js",
       "static/chunks/659-012fbbb940118b8a.js",
       "static/chunks/654-6bbc40fac3c6f120.js",
-      "static/chunks/app/page-1a98cc0d6925f83a.js"
+      "static/chunks/app/page-41e027b5f90ee92c.js"
     ],
     "/admin/broadcast/page": [
       "static/chunks/webpack-074987c53fb04d31.js",
@@ -43,6 +43,20 @@
       "static/chunks/351-4d67ab734ab200ab.js",
       "static/chunks/app/admin/layout-0764c2d4ccb6d72c.js"
     ],
+    "/admin/bulk-deposit/page": [
+      "static/chunks/webpack-074987c53fb04d31.js",
+      "static/chunks/fd9d1056-1eecee4be4cc9813.js",
+      "static/chunks/117-13247f0b4bb231d9.js",
+      "static/chunks/main-app-5c0a62debabad94c.js",
+      "static/chunks/app/admin/bulk-deposit/page-7938a8d6b48df5da.js"
+    ],
+    "/admin/contacts/page": [
+      "static/chunks/webpack-074987c53fb04d31.js",
+      "static/chunks/fd9d1056-1eecee4be4cc9813.js",
+      "static/chunks/117-13247f0b4bb231d9.js",
+      "static/chunks/main-app-5c0a62debabad94c.js",
+      "static/chunks/app/admin/contacts/page-fcdfd10d4044b82d.js"
+    ],
     "/admin/games/page": [
       "static/chunks/webpack-074987c53fb04d31.js",
       "static/chunks/fd9d1056-1eecee4be4cc9813.js",
@@ -57,19 +71,12 @@
       "static/chunks/main-app-5c0a62debabad94c.js",
       "static/chunks/app/admin/login/page-77281d08aba5f2e1.js"
     ],
-    "/admin/contacts/page": [
+    "/admin/dashboard/page": [
       "static/chunks/webpack-074987c53fb04d31.js",
       "static/chunks/fd9d1056-1eecee4be4cc9813.js",
       "static/chunks/117-13247f0b4bb231d9.js",
       "static/chunks/main-app-5c0a62debabad94c.js",
-      "static/chunks/app/admin/contacts/page-fcdfd10d4044b82d.js"
-    ],
-    "/admin/bulk-deposit/page": [
-      "static/chunks/webpack-074987c53fb04d31.js",
-      "static/chunks/fd9d1056-1eecee4be4cc9813.js",
-      "static/chunks/117-13247f0b4bb231d9.js",
-      "static/chunks/main-app-5c0a62debabad94c.js",
-      "static/chunks/app/admin/bulk-deposit/page-7938a8d6b48df5da.js"
+      "static/chunks/app/admin/dashboard/page-e5562c22f69831a4.js"
     ],
     "/admin/page": [
       "static/chunks/webpack-074987c53fb04d31.js",
@@ -78,19 +85,12 @@
       "static/chunks/main-app-5c0a62debabad94c.js",
       "static/chunks/app/admin/page-c5bc1c0bcb93de97.js"
     ],
-    "/admin/dashboard/page": [
-      "static/chunks/webpack-074987c53fb04d31.js",
-      "static/chunks/fd9d1056-1eecee4be4cc9813.js",
-      "static/chunks/117-13247f0b4bb231d9.js",
-      "static/chunks/main-app-5c0a62debabad94c.js",
-      "static/chunks/app/admin/dashboard/page-e5562c22f69831a4.js"
-    ],
     "/admin/settings/page": [
       "static/chunks/webpack-074987c53fb04d31.js",
       "static/chunks/fd9d1056-1eecee4be4cc9813.js",
       "static/chunks/117-13247f0b4bb231d9.js",
       "static/chunks/main-app-5c0a62debabad94c.js",
-      "static/chunks/app/admin/settings/page-3882d72386cd3cad.js"
+      "static/chunks/app/admin/settings/page-614a82b7d1d07a88.js"
     ],
     "/admin/stakes/page": [
       "static/chunks/webpack-074987c53fb04d31.js",

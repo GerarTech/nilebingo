@@ -119,6 +119,7 @@ export default function SettingsPage() {
   const [referralBonus, setReferralBonus] = useState<number>(10);
   const [referralMinDeposit, setReferralMinDeposit] = useState<number>(50);
   const [signupBonus, setSignupBonus] = useState<number>(0);
+  const [rulesText, setRulesText] = useState<string>('');
 
   // Branding specific state
   const [botName, setBotName] = useState('Nile BINGO');
@@ -127,7 +128,7 @@ export default function SettingsPage() {
   const [appLogoPng, setAppLogoPng] = useState<string | null>(null);
   const [colorScheme, setColorScheme] = useState('gold');
   const [adminReferralEnabled, setAdminReferralEnabled] = useState(true);
-  const [appointedWinners, setAppointedWinners] = useState<Record<string, number>>({});
+  const [appointedWinners, setAppointedWinners] = useState<Record<string, {card_number: number, after_balls: number}>>({});
 
   const [loading, setLoading] = useState(true);
 
@@ -145,7 +146,12 @@ export default function SettingsPage() {
         setCommands(prev => ({ ...prev, ...cmdValues }));
         
         if (config.appointed_winners) {
-          setAppointedWinners(config.appointed_winners);
+          const parsed: Record<string, {card_number: number, after_balls: number}> = {};
+          Object.entries(config.appointed_winners).forEach(([key, val]) => {
+            if (typeof val === 'number') parsed[key] = { card_number: val, after_balls: 20 };
+            else if (typeof val === 'object' && val !== null) parsed[key] = val as {card_number: number, after_balls: number};
+          });
+          setAppointedWinners(parsed);
         }
         if (typeof config.commission === 'number') {
           setCommission(config.commission);
@@ -183,6 +189,7 @@ export default function SettingsPage() {
         if (config.referral_bonus !== undefined) setReferralBonus(Number(config.referral_bonus) || 10);
         if (config.referral_min_deposit !== undefined) setReferralMinDeposit(Number(config.referral_min_deposit) || 50);
         if (config.signup_bonus !== undefined) setSignupBonus(Number(config.signup_bonus) || 0);
+        if (config.rules_text !== undefined) setRulesText(String(config.rules_text) || '');
       }
       if (msgs && typeof msgs === 'object') {
         setMessages(prev => ({ ...prev, ...msgs }));
@@ -212,6 +219,7 @@ export default function SettingsPage() {
       referral_bonus: referralBonus,
       referral_min_deposit: referralMinDeposit,
       signup_bonus: signupBonus,
+      rules_text: rulesText,
       appointed_winners: appointedWinners,
     };
   };
@@ -653,6 +661,18 @@ export default function SettingsPage() {
               <Save size={14} />
               {saved ? 'Saved!' : 'Save Game Configuration'}
             </button>
+
+            <div className="p-3 bg-navy-light rounded-xl border border-white/5 space-y-2">
+              <label className="text-[10px] text-gray-400 uppercase block">Game Rules (How to Play)</label>
+              <p className="text-[8.5px] text-gray-500">Displayed in the web app Rules modal. Leave empty to use default translated rules.</p>
+              <textarea
+                rows={8}
+                value={rulesText}
+                onChange={e => setRulesText(e.target.value)}
+                placeholder="Enter custom game rules text (supports basic HTML tags like &lt;br&gt;, &lt;b&gt;, etc.)"
+                className="w-full bg-navy border border-white/10 rounded-lg px-3 py-2 text-xs text-white font-mono leading-relaxed focus:outline-none focus:border-gold/50 resize-y"
+              />
+            </div>
           </div>
         )}
 
@@ -772,9 +792,9 @@ export default function SettingsPage() {
 
             <div className="bg-navy-light p-3 rounded-lg border border-white/5 space-y-3">
               <h4 className="text-[10px] font-bold text-gold uppercase">Appoint Winner for Upcoming/Active Game</h4>
-              <div className="grid grid-cols-2 gap-2 text-[10px]">
+              <div className="grid grid-cols-3 gap-2 text-[10px]">
                 <div>
-                  <label className="text-gray-400 block mb-0.5">Game Session ID / Room ID (e.g. bronze)</label>
+                  <label className="text-gray-400 block mb-0.5">Game Session ID / Room ID</label>
                   <input
                     type="text"
                     id="appoint_game_id"
@@ -793,22 +813,37 @@ export default function SettingsPage() {
                     className="w-full bg-navy border border-white/10 rounded-md px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
                   />
                 </div>
+                <div>
+                  <label className="text-gray-400 block mb-0.5">Win After Balls</label>
+                  <input
+                    type="number"
+                    id="appoint_after_balls"
+                    min="5"
+                    max="75"
+                    placeholder="e.g. 12"
+                    defaultValue="20"
+                    className="w-full bg-navy border border-white/10 rounded-md px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
+                  />
+                </div>
               </div>
               <button
                 type="button"
                 onClick={() => {
                   const gEl = document.getElementById('appoint_game_id') as HTMLInputElement;
                   const cEl = document.getElementById('appoint_card_num') as HTMLInputElement;
+                  const bEl = document.getElementById('appoint_after_balls') as HTMLInputElement;
                   const gId = gEl?.value?.trim();
                   const cNum = parseInt(cEl?.value, 10);
+                  const aBalls = parseInt(bEl?.value, 10) || 20;
                   if (gId && cNum >= 1 && cNum <= 100) {
                     setAppointedWinners(prev => {
-                      const updated = { ...prev, [gId]: cNum };
+                      const updated = { ...prev, [gId]: { card_number: cNum, after_balls: aBalls } };
                       saveConfig({ ...getMergedConfig(), appointed_winners: updated });
                       return updated;
                     });
                     if (gEl) gEl.value = '';
                     if (cEl) cEl.value = '';
+                    if (bEl) bEl.value = '20';
                   } else {
                     alert("Please provide a valid Game Session ID and Card number between 1 and 100.");
                   }
@@ -822,14 +857,17 @@ export default function SettingsPage() {
             <div className="space-y-2">
               <label className="text-xs text-gray-300 font-bold uppercase tracking-wider block">Active Appointed Rules ({Object.keys(appointedWinners).length})</label>
               <div className="space-y-1.5 max-h-[40vh] overflow-y-auto">
-                {Object.entries(appointedWinners).map(([gId, cNum]) => (
+                {Object.entries(appointedWinners).map(([gId, rule]) => (
                   <div key={gId} className="flex items-center justify-between p-2.5 bg-navy-light border border-white/5 rounded-lg text-xs">
                     <div>
                       <span className="text-[10px] text-gray-400 font-bold">GAME ID / ROOM:</span> <span className="font-mono text-white ml-1 font-bold">{gId}</span>
                     </div>
                     <div className="flex items-center gap-3">
                       <div>
-                        <span className="text-[10px] text-amber-500 font-bold">CARD:</span> <span className="bg-amber-400/10 border border-amber-500/20 text-gold px-2 py-0.5 rounded font-black font-mono ml-1">#{cNum}</span>
+                        <span className="text-[10px] text-amber-500 font-bold">CARD:</span> <span className="bg-amber-400/10 border border-amber-500/20 text-gold px-2 py-0.5 rounded font-black font-mono ml-1">#{rule.card_number}</span>
+                      </div>
+                      <div className="text-[9px] text-gray-400">
+                        after {rule.after_balls} balls
                       </div>
                       <button
                         type="button"

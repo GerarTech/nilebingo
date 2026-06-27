@@ -747,6 +747,29 @@ export async function POST(request: NextRequest) {
               reference: `SIGNUP_BONUS_${Date.now()}`,
             });
           }
+
+          // Referral bonus: credit referrer immediately on new user signup
+          if (referredByUUID) {
+            const refBonus = Number(commands.referral_bonus || 10);
+            if (refBonus > 0) {
+              await supabase.from('profiles').update({ referral_claimed: true }).eq('id', newProfile.id);
+              const { data: referrerWallet } = await supabase.from('wallets').select('play_balance').eq('user_id', referredByUUID).single();
+              if (referrerWallet) {
+                await supabase.from('wallets').update({ play_balance: Number(referrerWallet.play_balance) + refBonus }).eq('user_id', referredByUUID);
+                await supabase.from('transactions').insert({
+                  user_id: referredByUUID,
+                  type: 'deposit',
+                  amount: refBonus,
+                  status: 'completed',
+                  reference: `REFERRAL_BONUS_${newProfile.id}_${Date.now()}`,
+                });
+                const { data: refProfile } = await supabase.from('profiles').select('telegram_id, first_name').eq('id', referredByUUID).single();
+                if (refProfile?.telegram_id) {
+                  await sendMessage(refProfile.telegram_id, `🎉 *Referral Bonus Received!*\n\nYour friend *${firstName || 'Player'}* joined Nile BINGO! You earned *${refBonus} ETB* as a referral bonus added to your Play Wallet.\n\nKeep sharing your invite link to earn more! 💰`, { parse_mode: 'Markdown' });
+                }
+              }
+            }
+          }
         }
       } else {
         // Always update existing user's name/username from latest Telegram data

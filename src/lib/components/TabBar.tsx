@@ -7,18 +7,19 @@ import { useApp } from '@/lib/hooks/useApp';
 interface TabBarProps {
   activeTab: TabType;
   onTabChange: (tab: TabType) => void;
-  inGame?: boolean;
+  inGame: boolean;
+  themeColor?: string;
 }
 
-export default function TabBar({ activeTab, onTabChange, inGame }: TabBarProps) {
+export default function TabBar({ activeTab, onTabChange, inGame, themeColor = '#FEE800' }: TabBarProps) {
   const { t } = useApp();
 
-  const tabs: { id: TabType; labelKey: string; icon: any }[] = [
-    { id: 'game', labelKey: 'tab_game', icon: Gamepad2 },
-    { id: 'scores', labelKey: 'tab_scores', icon: Medal },
-    { id: 'history', labelKey: 'tab_history', icon: History },
-    { id: 'wallet', labelKey: 'tab_wallet', icon: Wallet },
-    { id: 'profile', labelKey: 'tab_profile', icon: User },
+  const tabs: { id: TabType; label: string; icon: any }[] = [
+    { id: 'game', label: t('tab_game'), icon: Gamepad2 },
+    { id: 'scores', label: t('tab_scores'), icon: Medal },
+    { id: 'history', label: t('tab_history'), icon: History },
+    { id: 'wallet', label: t('tab_wallet'), icon: Wallet },
+    { id: 'profile', label: t('tab_profile'), icon: User },
   ];
 
   return (
@@ -33,20 +34,13 @@ export default function TabBar({ activeTab, onTabChange, inGame }: TabBarProps) 
               <button
                 key={tab.id}
                 onClick={() => onTabChange(tab.id)}
-                className={`
-                  flex flex-col items-center gap-0.5 py-2 px-3 rounded-xl
-                  transition-all duration-200 min-w-[60px]
-                  ${isActive
-                    ? 'text-gold'
-                    : 'text-gray-500 hover:text-gray-300'
-                  }
-                  ${tab.id === 'game' && inGame ? 'animate-pulse' : ''}
-                `}
+                className="flex flex-col items-center gap-0.5 py-2 px-3 rounded-xl transition-all duration-200 min-w-[60px] relative"
+                style={{ color: isActive ? themeColor : undefined }}
               >
-                <Icon size={22} />
-                <span className="text-[10px] font-medium">{t(tab.labelKey)}</span>
+                <Icon size={22} style={{ color: isActive ? themeColor : undefined }} />
+                <span className="text-[10px] font-medium" style={{ color: isActive ? themeColor : undefined }}>{tab.label}</span>
                 {isActive && (
-                  <div className="absolute bottom-1 w-6 h-0.5 bg-gold rounded-full" />
+                  <div className="absolute bottom-1 w-6 h-0.5 rounded-full" style={{ backgroundColor: themeColor }} />
                 )}
               </button>
             );
