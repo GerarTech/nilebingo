@@ -130,9 +130,13 @@ async function handleAdminPending(chatId: number) {
     return;
   }
 
-  const list = txs.map((tx: any) => 
-    `• ${tx.type.toUpperCase()} | ${Number(tx.amount).toLocaleString()} ETB | ${tx.profiles?.first_name || 'Unknown'}\n  ID: \`${tx.id.slice(0, 8)}...\` | /approve_${tx.id.slice(0, 8)}`
-  ).join('\n');
+  const list = txs.map((tx: any) => {
+    const prof = tx.profiles || {};
+    const name = prof.first_name || prof.username || 'Unknown';
+    const phone = prof.phone ? `📞 ${prof.phone}` : '';
+    const userLink = prof.username ? `@${prof.username}` : `#${String(prof.telegram_id).slice(-4)}`;
+    return `• *${tx.type.toUpperCase()}* | ${Number(tx.amount).toLocaleString()} ETB\n  👤 ${name} (${userLink}) ${phone}\n  🆔 \`${tx.id.slice(0, 8)}...\` | /approve_${tx.id.slice(0, 8)} | /reject_${tx.id.slice(0, 8)}`;
+  }).join('\n\n');
 
   await sendMessage(chatId, `*⏳ Pending Transactions*\n\n${list}`, { parse_mode: 'Markdown' });
 }
@@ -183,22 +187,43 @@ async function handleAdminGames(chatId: number) {
 }
 
 async function handleAdminApprove(chatId: number, txId: string) {
-  const { data: tx } = await supabase.from('transactions').select('*').eq('id', txId).single();
+  const { data: tx } = await supabase
+    .from('transactions')
+    .select('*, profiles!inner(first_name, username, phone, telegram_id)')
+    .eq('id', txId)
+    .single();
+
   if (!tx || tx.status !== 'pending') {
     await sendMessage(chatId, 'Transaction not found or already processed.');
     return;
   }
 
-  await supabase.from('transactions').update({ status: 'completed' }).eq('id', txId);
+  const prof = tx.profiles || {};
+  const amount = Number(tx.amount).toLocaleString();
+  const msg = [
+    `*🔄 Confirm Approval*`,
+    ``,
+    `*Type:* ${tx.type.toUpperCase()}`,
+    `*Amount:* ${amount} ETB`,
+    `*User:* ${prof.first_name || prof.username || 'Unknown'}`,
+    prof.phone ? `*Phone:* ${prof.phone}` : null,
+    prof.username ? `*Username:* @${prof.username}` : null,
+    `*Telegram ID:* ${prof.telegram_id || 'N/A'}`,
+    ``,
+    `Are you sure you want to approve this transaction?`
+  ].filter(Boolean).join('\n');
 
-  if (tx.type === 'deposit') {
-    const { data: wallet } = await supabase.from('wallets').select('main_balance').eq('user_id', tx.user_id).single();
-    if (wallet) {
-      await supabase.from('wallets').update({ main_balance: Number(wallet.main_balance) + Number(tx.amount) }).eq('user_id', tx.user_id);
+  await sendMessage(chatId, msg, {
+    parse_mode: 'Markdown',
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: '✅ Approve', callback_data: `confirm_approve_${txId}` },
+          { text: '❌ Cancel', callback_data: `confirm_reject_${txId}` },
+        ]
+      ]
     }
-  }
-
-  await sendMessage(chatId, `✅ Transaction ${txId.slice(0, 8)} approved.`);
+  });
 }
 
 async function handleAdminReject(chatId: number, txId: string) {
@@ -357,6 +382,76 @@ export async function POST(request: NextRequest) {
         }
       }
       return NextResponse.json({ ok: true });
+    }
+
+    // Handle inline keyboard confirmation callbacks
+    if (callbackQuery?.data) {
+      const data = callbackQuery.data;
+      const messageId = callbackQuery.message?.message_id;
+
+      if (data.startsWith('confirm_approve_')) {
+        const txId = data.replace('confirm_approve_', '');
+        const { data: tx } = await supabase.from('transactions').select('*').eq('id', txId).single();
+        if (!tx || tx.status !== 'pending') {
+          await sendMessage(chatId, 'Transaction already processed.');
+          return NextResponse.json({ ok: true });
+        }
+
+        await supabase.from('transactions').update({ status: 'completed' }).eq('id', txId);
+
+        if (tx.type === 'deposit') {
+          const { data: wallet } = await supabase.from('wallets').select('main_balance').eq('user_id', tx.user_id).single();
+          if (wallet) {
+            await supabase.from('wallets').update({ main_balance: Number(wallet.main_balance) + Number(tx.amount) }).eq('user_id', tx.user_id);
+          }
+        }
+
+        // Notify the user
+        try {
+          const { data: prof } = await supabase.from('profiles').select('telegram_id').eq('id', tx.user_id).single();
+          if (prof?.telegram_id) {
+            await sendMessage(prof.telegram_id, `✅ *Deposit Approved!*\n\nYour deposit of *${Number(tx.amount).toLocaleString()} ETB* has been approved and credited to your wallet.`, { parse_mode: 'Markdown' });
+          }
+        } catch (e) { /* ignore */ }
+
+        // Edit original message to show done
+        try {
+          await fetch(`${TG_API}/editMessageText`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: chatId,
+              message_id: messageId,
+              text: `✅ *Transaction Approved*\n\n${tx.type.toUpperCase()} ${Number(tx.amount).toLocaleString()} ETB has been approved.`,
+              parse_mode: 'Markdown',
+            }),
+          });
+        } catch (e) { /* ignore */ }
+
+        await sendMessage(chatId, `✅ Transaction ${txId.slice(0, 8)} approved and credited.`);
+        return NextResponse.json({ ok: true });
+      }
+
+      if (data.startsWith('confirm_reject_')) {
+        const txId = data.replace('confirm_reject_', '');
+        await supabase.from('transactions').update({ status: 'failed' }).eq('id', txId);
+        
+        try {
+          await fetch(`${TG_API}/editMessageText`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: chatId,
+              message_id: messageId,
+              text: `❌ *Transaction Rejected*\n\nTransaction ${txId.slice(0, 8)} has been rejected.`,
+              parse_mode: 'Markdown',
+            }),
+          });
+        } catch (e) { /* ignore */ }
+
+        await sendMessage(chatId, `❌ Transaction ${txId.slice(0, 8)} rejected.`);
+        return NextResponse.json({ ok: true });
+      }
     }
 
     return NextResponse.json({ ok: true });

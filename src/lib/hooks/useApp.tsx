@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useRef, type ReactNode } from 'react';
 import { supabase } from '../supabase';
 import type { Profile, Wallet, TabType } from '../types';
 import { useT, type Language } from '../i18n';
@@ -51,6 +51,7 @@ interface AppContextType extends AppState {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
+  const profileRef = useRef<Profile | null>(null);
   const [state, setState] = useState<AppState>({
     profile: null,
     wallet: null,
@@ -60,6 +61,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     initialized: false,
     currentGameId: null,
   });
+
+  profileRef.current = state.profile;
 
   const t = useT(state.language);
 
@@ -240,12 +243,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       };
     });
 
-    if (state.profile) {
+    const profile = profileRef.current;
+    if (profile) {
       try {
         const { data: latestWallet } = await supabase
           .from('wallets')
           .select('main_balance, play_balance')
-          .eq('user_id', state.profile.id)
+          .eq('user_id', profile.id)
           .single();
         
         const dbVal = latestWallet ? (Number((latestWallet as any)[type]) || 0) : 0;
@@ -254,12 +258,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         await supabase
           .from('wallets')
           .update({ [type]: newVal })
-          .eq('user_id', state.profile.id);
+          .eq('user_id', profile.id);
       } catch (e) {
         console.warn('Could not persist wallet balance update to Supabase:', e);
       }
     }
-  }, [state.profile]);
+  }, []);
 
   const updateAvatar = useCallback(async (avatar: string) => {
     if (!state.profile) return;

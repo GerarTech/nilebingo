@@ -6,7 +6,9 @@
     "dev": "next dev -p 3000 -H 0.0.0.0",
     "build": "next build",
     "start": "next start -p 3000 -H 0.0.0.0",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit && eslint . --ext .ts,.tsx --max-warnings 50",
+    "lint:ts": "tsc --noEmit",
+    "lint:eslint": "eslint . --ext .ts,.tsx --max-warnings 50"
   },
   "dependencies": {
     "next": "^14.2.0",

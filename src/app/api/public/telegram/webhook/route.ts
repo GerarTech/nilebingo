@@ -385,7 +385,7 @@ async function handleAdminUsers(chatId: number) {
 async function handleAdminPending(chatId: number) {
   const { data: txs } = await supabase
     .from('transactions')
-    .select('*, profiles!inner(first_name, username)')
+    .select('*, profiles!inner(first_name, username, phone, telegram_id)')
     .eq('status', 'pending')
     .order('created_at', { ascending: false })
     .limit(20);
@@ -395,23 +395,19 @@ async function handleAdminPending(chatId: number) {
     return;
   }
 
-  const list = txs.map((tx: any) => 
-    `• ${tx.type.toUpperCase()} | ${Number(tx.amount).toLocaleString()} ETB | ${tx.profiles?.first_name || 'Unknown'}\n  ID: \`${tx.id.slice(0, 8)}...\` | /approve_${tx.id.slice(0, 8)}`
-  ).join('\n');
+  const list = txs.map((tx: any) => {
+    const prof = tx.profiles || {};
+    const name = prof.first_name || prof.username || 'Unknown';
+    const phone = prof.phone ? `📞 ${prof.phone}` : '';
+    const userLink = prof.username ? `@${prof.username}` : `#${String(prof.telegram_id).slice(-4)}`;
+    return `• *${tx.type.toUpperCase()}* | ${Number(tx.amount).toLocaleString()} ETB\n  👤 ${name} (${userLink}) ${phone}\n  🆔 \`${tx.id.slice(0, 8)}...\` | /approve_${tx.id.slice(0, 8)} | /reject_${tx.id.slice(0, 8)}`;
+  }).join('\n\n');
 
   await sendMessage(chatId, EN.admin_pending.replace('{transactions}', list), { parse_mode: 'Markdown' });
 }
 
-async function handleAdminApprove(chatId: number, txId: string, customAmount: number | null = null) {
-  const { data: tx } = await supabase.from('transactions').select('*').eq('id', txId).single();
-  if (!tx || tx.status !== 'pending') {
-    await sendMessage(chatId, 'Transaction not found or already processed.');
-    return;
-  }
-
-  const finalAmount = customAmount !== null ? customAmount : Number(tx.amount);
-
-  await supabase.from('transactions').update({ status: 'completed', amount: finalAmount }).eq('id', txId);
+async function executeApprove(chatId: number, tx: any, finalAmount: number) {
+  await supabase.from('transactions').update({ status: 'completed', amount: finalAmount }).eq('id', tx.id);
 
   if (tx.type === 'deposit') {
     const { data: wallet } = await supabase.from('wallets').select('main_balance').eq('user_id', tx.user_id).single();
@@ -419,12 +415,10 @@ async function handleAdminApprove(chatId: number, txId: string, customAmount: nu
       await supabase.from('wallets').update({ main_balance: Number(wallet.main_balance) + finalAmount }).eq('user_id', tx.user_id);
     }
 
-    // Inform user & handle referral reward
     const { data: prof } = await supabase.from('profiles').select('telegram_id, language, referred_by, referral_claimed, first_name').eq('id', tx.user_id).single();
     if (prof?.telegram_id) {
       await sendMessage(prof.telegram_id, `✅ *Deposit Approved!*\n\nYour deposit of *${finalAmount.toLocaleString()} ETB* has been approved and credited to your Main Wallet. Enjoy! 🎮`, { parse_mode: 'Markdown' });
 
-      // Referral claimed award
       if (prof.referred_by && !prof.referral_claimed) {
         const commands = await getBotCommands();
         const refBonus = Number(commands.referral_bonus || 10);
@@ -440,15 +434,12 @@ async function handleAdminApprove(chatId: number, txId: string, customAmount: nu
         const totalDepsAmt = allDeps ? allDeps.reduce((acc, curr) => acc + Number(curr.amount), 0) : 0;
 
         if (totalDepsAmt >= refMinDep) {
-          // Claim
           await supabase.from('profiles').update({ referral_claimed: true }).eq('id', tx.user_id);
 
-          // Credit referrer
           const { data: referrerWallet } = await supabase.from('wallets').select('play_balance').eq('user_id', prof.referred_by).single();
           if (referrerWallet) {
             await supabase.from('wallets').update({ play_balance: Number(referrerWallet.play_balance) + refBonus }).eq('user_id', prof.referred_by);
 
-            // Notify referrer
             const { data: refProfile } = await supabase.from('profiles').select('telegram_id').eq('id', prof.referred_by).single();
             if (refProfile?.telegram_id) {
               await sendMessage(refProfile.telegram_id, `🎉 *Referral Bonus Received!*\n\nYour friend *${prof.first_name || 'Player'}* completed their first deposit. You received *${refBonus} ETB* in your Play Wallet! 💰`, { parse_mode: 'Markdown' });
@@ -460,6 +451,46 @@ async function handleAdminApprove(chatId: number, txId: string, customAmount: nu
   }
 
   await sendMessage(chatId, `✅ Transaction approved. Amount: ${finalAmount} ETB.`);
+}
+
+async function handleAdminApprove(chatId: number, txId: string, customAmount: number | null = null) {
+  const { data: tx } = await supabase
+    .from('transactions')
+    .select('*, profiles!inner(first_name, username, phone, telegram_id)')
+    .eq('id', txId)
+    .single();
+
+  if (!tx || tx.status !== 'pending') {
+    await sendMessage(chatId, 'Transaction not found or already processed.');
+    return;
+  }
+
+  const prof = tx.profiles || {};
+  const amount = (customAmount !== null ? customAmount : Number(tx.amount)).toLocaleString();
+  const msg = [
+    `*🔄 Confirm Approval*`,
+    ``,
+    `*Type:* ${tx.type.toUpperCase()}`,
+    `*Amount:* ${amount} ETB`,
+    `*User:* ${prof.first_name || prof.username || 'Unknown'}`,
+    prof.phone ? `*Phone:* ${prof.phone}` : null,
+    prof.username ? `*Username:* @${prof.username}` : null,
+    `*Telegram ID:* ${prof.telegram_id || 'N/A'}`,
+    ``,
+    `Are you sure you want to approve?`
+  ].filter(Boolean).join('\n');
+
+  await sendMessage(chatId, msg, {
+    parse_mode: 'Markdown',
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: '✅ Approve', callback_data: `pub_approve_${tx.id}` },
+          { text: '❌ Cancel', callback_data: `pub_cancel_${tx.id}` },
+        ]
+      ]
+    }
+  });
 }
 
 async function handleAdminReject(chatId: number, txId: string) {
@@ -551,7 +582,49 @@ export async function POST(request: NextRequest) {
       } else if (data === 'lang_am') {
         await answerCallbackQuery(callbackQuery.id, 'Language set to Amharic');
         await sendMessage(chatId, 'Use the buttons below:', getMainKeyboard('am'));
+      } else if (data.startsWith('pub_approve_')) {
+        const txId = data.replace('pub_approve_', '');
+        await answerCallbackQuery(callbackQuery.id, 'Processing...');
+
+        const { data: tx } = await supabase.from('transactions').select('*').eq('id', txId).single();
+        if (!tx || tx.status !== 'pending') {
+          await sendMessage(chatId, 'Transaction already processed.');
+          return NextResponse.json({ ok: true });
+        }
+
+        await executeApprove(chatId, tx, Number(tx.amount));
+
+        // Edit original confirmation message
+        try {
+          await fetch(`${TG_API}/editMessageText`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: chatId,
+              message_id: callbackQuery.message?.message_id,
+              text: `✅ *Approved*\n\n${tx.type.toUpperCase()} ${Number(tx.amount).toLocaleString()} ETB has been approved.`,
+              parse_mode: 'Markdown',
+            }),
+          });
+        } catch (e) { /* ignore */ }
+      } else if (data.startsWith('pub_cancel_')) {
+        const txId = data.replace('pub_cancel_', '');
+        await answerCallbackQuery(callbackQuery.id, 'Cancelled');
+
+        try {
+          await fetch(`${TG_API}/editMessageText`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: chatId,
+              message_id: callbackQuery.message?.message_id,
+              text: `❌ *Cancelled*\n\nApproval for ${txId.slice(0, 8)} was cancelled.`,
+              parse_mode: 'Markdown',
+            }),
+          });
+        } catch (e) { /* ignore */ }
       }
+
       return NextResponse.json({ ok: true });
     }
 
@@ -610,23 +683,29 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Sync menu button automatically
+      // Sync bot profile (description, name, photo) from DB config
       try {
-        await tgCall('setChatMenuButton', {
-          menu_button: {
-            type: 'web_app',
-            text: 'Menu',
-            web_app: { url: miniAppUrl }
-          }
-        });
+        const { data: cfg } = await supabase.from('bot_config').select('commands').eq('id', 'main').single();
+        const cmds = cfg?.commands || {};
+        const bio = cmds.bot_description || getText(lang, 'welcome');
+        const botName = cmds.botName || 'Nile BINGO';
+
+        await Promise.allSettled([
+          tgCall('setMyDescription', { description: bio }),
+          tgCall('setMyShortDescription', { short_description: bio.substring(0, 120) }),
+          tgCall('setMyName', { name: botName }),
+          tgCall('setChatMenuButton', {
+            menu_button: { type: 'web_app', text: 'Menu', web_app: { url: miniAppUrl } }
+          }),
+        ]);
       } catch (e) {
-        console.error('Error setting bot menu button on start:', e);
+        console.error('Error setting bot profile:', e);
       }
 
-      // Create/ensure profile
+      // Create or update profile
       const { data: existing } = await supabase
         .from('profiles')
-        .select('phone')
+        .select('*')
         .eq('telegram_id', telegramId)
         .maybeSingle();
 
@@ -642,7 +721,6 @@ export async function POST(request: NextRequest) {
           telegram_state: 'idle'
         });
         
-        // Create wallet
         const { data: newProfile } = await supabase
           .from('profiles')
           .select('id')
@@ -655,9 +733,19 @@ export async function POST(request: NextRequest) {
             play_balance: 0,
           });
         }
+      } else {
+        // Always update existing user's name/username from latest Telegram data
+        const updates: any = {};
+        if (firstName && existing.first_name !== firstName) updates.first_name = firstName;
+        if (username && existing.username !== username) updates.username = username;
+        if (Object.keys(updates).length > 0) {
+          await supabase.from('profiles').update(updates).eq('id', existing.id);
+        }
       }
 
-      if (!existing || !existing.phone) {
+      // Always show share contact on first /start (if no phone on record)
+      const hasPhone = existing?.phone || false;
+      if (!hasPhone) {
         await sendMessage(chatId, getText(lang, 'share_contact'), {
           reply_markup: {
             keyboard: [
@@ -752,58 +840,24 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ ok: true });
         }
 
-        // Insert complete transaction
+        // Insert as pending — admin must approve before credit
         const { data: tx } = await supabase
           .from('transactions')
           .insert({
             user_id: userProfile.id,
             type: 'deposit',
             amount: parsed.amount,
-            status: 'completed',
+            status: 'pending',
             reference: parsed.txId
           })
           .select()
           .single();
 
         if (tx) {
-          const { data: wallet } = await supabase.from('wallets').select('main_balance').eq('user_id', userProfile.id).single();
-          if (wallet) {
-            await supabase.from('wallets').update({ main_balance: Number(wallet.main_balance) + parsed.amount }).eq('user_id', userProfile.id);
-          }
-
-          await sendMessage(chatId, `✅ *Deposit Auto-Verified!*\n\nSuccessfully parsed your confirmation SMS:\n- Transaction ID: \`${parsed.txId}\`\n- Amount: *${parsed.amount.toLocaleString()} ETB*\n\nYour wallet balance has been credited immediately! Enjoy playing! 🎮`, { parse_mode: 'Markdown', ...getMainKeyboard(lang) });
-
-          // Referral claimed check
-          if (userProfile.referred_by && !userProfile.referral_claimed) {
-            const refBonus = Number(commands.referral_bonus || 10);
-            const refMinDep = Number(commands.referral_min_deposit || 50);
-
-            const { data: allDeps } = await supabase
-              .from('transactions')
-              .select('amount')
-              .eq('user_id', userProfile.id)
-              .eq('type', 'deposit')
-              .eq('status', 'completed');
-            
-            const totalDepsAmt = allDeps ? allDeps.reduce((acc, curr) => acc + Number(curr.amount), 0) : 0;
-
-            if (totalDepsAmt >= refMinDep) {
-              await supabase.from('profiles').update({ referral_claimed: true }).eq('id', userProfile.id);
-
-              const { data: referrerWallet } = await supabase.from('wallets').select('play_balance').eq('user_id', userProfile.referred_by).maybeSingle();
-              if (referrerWallet) {
-                await supabase.from('wallets').update({ play_balance: Number(referrerWallet.play_balance) + refBonus }).eq('user_id', userProfile.referred_by);
-
-                const { data: referrerProfile } = await supabase.from('profiles').select('telegram_id').eq('id', userProfile.referred_by).maybeSingle();
-                if (referrerProfile?.telegram_id) {
-                  await sendMessage(referrerProfile.telegram_id, `🎉 *Referral Bonus Received!*\n\nYour friend *${userProfile.first_name || 'Player'}* completed their first deposit. You received *${refBonus} ETB* in your Play Wallet! 💰`, { parse_mode: 'Markdown' });
-                }
-              }
-            }
-          }
+          await sendMessage(chatId, `⏳ *Deposit Submitted for Review*\n\nWe received your SMS confirmation:\n- Transaction ID: \`${parsed.txId}\`\n- Amount: *${parsed.amount.toLocaleString()} ETB*\n\nAn admin will verify and approve your deposit shortly. You'll get a notification once credited!`, { parse_mode: 'Markdown', ...getMainKeyboard(lang) });
 
           if (adminChatId) {
-            await sendMessage(adminChatId, `🤖 *Auto-Verified Deposit Alert*\n\n👤 User: ${userProfile.first_name || 'Unknown'}${userProfile.username ? ` (@${userProfile.username})` : ''}\n💰 Amount: *${parsed.amount} ETB*\n🆔 ID: \`${parsed.txId}\`\n🏦 Method: *${method.toUpperCase()}*`, { parse_mode: 'Markdown' });
+            await sendMessage(adminChatId, `⏳ *Pending Deposit - SMS Auto-Detected*\n\n👤 User: ${userProfile.first_name || 'Unknown'}${userProfile.username ? ` (@${userProfile.username})` : ''}\n💰 Amount: *${parsed.amount} ETB*\n🆔 ID: \`${parsed.txId}\`\n🏦 Method: *${method.toUpperCase()}*\n\nApprove: /approve_${tx.id.slice(0, 8)}\nReject: /reject_${tx.id.slice(0, 8)}`, { parse_mode: 'Markdown' });
           }
         }
       } else {

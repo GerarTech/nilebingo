@@ -77,11 +77,15 @@ export default function TransactionsPage() {
               </tr>
             </thead>
             <tbody>
-              {transactions.map((tx: any) => (
+                  {transactions.map((tx: any) => (
                 <tr key={tx.id} className="border-b border-white/5 hover:bg-white/5">
                   <td className="p-3 text-white">
-                    {tx.profiles?.first_name || tx.profiles?.username || 'Unknown'}
-                    <div className="text-[9px] text-gray-500">{tx.profiles?.telegram_id || ''}</div>
+                    <div className="font-semibold">{tx.profiles?.first_name || tx.profiles?.username || 'Unknown'}</div>
+                    <div className="text-[9px] text-gray-500">
+                      {tx.profiles?.phone ? `📞 ${tx.profiles.phone}` : ''}
+                      {tx.profiles?.username ? ` @${tx.profiles.username}` : ''}
+                    </div>
+                    <div className="text-[9px] text-gray-600">ID: {tx.profiles?.telegram_id || ''}</div>
                   </td>
                   <td className="p-3">
                     <span className={`px-2 py-0.5 rounded-full text-[9px] font-medium ${
@@ -103,10 +107,10 @@ export default function TransactionsPage() {
                   <td className="p-3 text-center">
                     {tx.status === 'pending' && (
                       <div className="flex items-center justify-center gap-1">
-                        <button onClick={() => handleApprove(tx.id)} className="p-1.5 bg-green-500/20 text-green-400 rounded-lg hover:bg-green-500/30">
+                        <button onClick={() => handleApprove(tx.id)} className="p-1.5 bg-green-500/20 text-green-400 rounded-lg hover:bg-green-500/30" title="Approve">
                           <Check size={14} />
                         </button>
-                        <button onClick={() => handleReject(tx.id)} className="p-1.5 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30">
+                        <button onClick={() => handleReject(tx.id)} className="p-1.5 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30" title="Reject">
                           <X size={14} />
                         </button>
                       </div>

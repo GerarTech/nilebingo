@@ -36,6 +36,13 @@ interface BotMessages {
   bot_description: string;
 }
 
+interface BotBranding {
+  bot_name: string;
+  appName: string;
+  appLogo: string;
+  colorScheme: string;
+}
+
 interface GameRoom {
   id: string;
   name: string;
@@ -110,6 +117,7 @@ export default function SettingsPage() {
   const [referralMinDeposit, setReferralMinDeposit] = useState<number>(50);
 
   // Branding specific state
+  const [botName, setBotName] = useState('Nile BINGO');
   const [appName, setAppName] = useState('Nile BINGO');
   const [appLogo, setAppLogo] = useState('🎰');
   const [colorScheme, setColorScheme] = useState('gold');
@@ -140,6 +148,9 @@ export default function SettingsPage() {
         }
         if (Array.isArray(config.rooms)) {
           setRoomsList(config.rooms);
+        }
+        if (config.botName) {
+          setBotName(config.botName);
         }
         if (config.appName) {
           setAppName(config.appName);
@@ -178,6 +189,7 @@ export default function SettingsPage() {
   const getMergedConfig = () => {
     return {
       ...commands,
+      botName,
       commission,
       rooms: roomsList,
       appName,
@@ -643,7 +655,18 @@ export default function SettingsPage() {
             <p className="text-[9px] text-gray-500">Customize the client web app name, launcher logo icon, and visual color scheme.</p>
 
             <div>
-              <label className="text-[10px] text-gray-400 uppercase block mb-1">Application Name</label>
+              <label className="text-[10px] text-gray-400 uppercase block mb-1">Telegram Bot Name (shown before Start)</label>
+              <input
+                type="text"
+                value={botName}
+                onChange={(e) => setBotName(e.target.value)}
+                className="w-full bg-navy-light border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-gold/50"
+                placeholder="e.g., Nile BINGO"
+              />
+            </div>
+
+            <div>
+              <label className="text-[10px] text-gray-400 uppercase block mb-1">Application Name (Web App Header)</label>
               <input
                 type="text"
                 value={appName}
