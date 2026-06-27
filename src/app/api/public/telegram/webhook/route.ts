@@ -11,16 +11,16 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 // Cache for bot commands and messages
-let cachedCommands: Record<string, string> = {};
+let cachedCommands: Record<string, any> = {};
 let cachedMessages: Record<string, string> = {};
 let commandsCacheTime = 0;
 let messagesCacheTime = 0;
 const COMMANDS_CACHE_TTL = 30000; // 30 seconds
 const MESSAGES_CACHE_TTL = 30000; // 30 seconds
 
-async function getBotCommands(): Promise<Record<string, string>> {
+async function getBotCommands(): Promise<Record<string, any>> {
   const now = Date.now();
-  if (cachedCommands && (now - commandsCacheTime) < COMMANDS_CACHE_TTL) {
+  if (cachedCommands && (now - commandsCacheTime) < COMMANDS_CACHE_TTL && Object.keys(cachedCommands).length > 0) {
     return cachedCommands;
   }
   
@@ -38,6 +38,15 @@ async function getBotCommands(): Promise<Record<string, string>> {
       admin_help: '/admin_help',
       admin_approve: '/approve_',
       admin_reject: '/reject_',
+      telebirr_number: '0918281072',
+      telebirr_name: 'Melkie',
+      telebirr_max: '1000',
+      cbe_account: '1000256789123',
+      cbe_name: 'Nile Bingo',
+      cbe_max: '5000',
+      withdraw_required_games: '5',
+      referral_bonus: '10',
+      referral_min_deposit: '50'
     };
     commandsCacheTime = now;
     return cachedCommands;
@@ -49,13 +58,22 @@ async function getBotCommands(): Promise<Record<string, string>> {
       admin_help: '/admin_help',
       admin_approve: '/approve_',
       admin_reject: '/reject_',
+      telebirr_number: '0918281072',
+      telebirr_name: 'Melkie',
+      telebirr_max: '1000',
+      cbe_account: '1000256789123',
+      cbe_name: 'Nile Bingo',
+      cbe_max: '5000',
+      withdraw_required_games: '5',
+      referral_bonus: '10',
+      referral_min_deposit: '50'
     };
   }
 }
 
 async function getBotMessages(): Promise<Record<string, string>> {
   const now = Date.now();
-  if (cachedMessages && (now - messagesCacheTime) < MESSAGES_CACHE_TTL) {
+  if (cachedMessages && (now - messagesCacheTime) < MESSAGES_CACHE_TTL && Object.keys(cachedMessages).length > 0) {
     return cachedMessages;
   }
   
@@ -180,15 +198,135 @@ function getText(lang: 'en' | 'am', key: string): string {
 function getMainKeyboard(lang: 'en' | 'am') {
   const bt = (k: string) => getText(lang, k);
   return {
-    keyboard: [
-      [{ text: bt('play') }],
-      [{ text: bt('check_balance') }, { text: bt('deposit') }],
-      [{ text: bt('withdraw') }, { text: bt('contact') }],
-      [{ text: bt('instructions') }, { text: bt('transactions') }],
-      [{ text: bt('winning_patterns') }, { text: bt('language') }],
-    ],
-    resize_keyboard: true,
+    reply_markup: {
+      keyboard: [
+        [{ text: bt('play') }],
+        [{ text: bt('check_balance') }, { text: bt('deposit') }],
+        [{ text: bt('withdraw') }, { text: bt('contact') }],
+        [{ text: bt('instructions') }, { text: bt('transactions') }],
+        [{ text: '👥 Invite Friends' }, { text: bt('language') }],
+      ],
+      resize_keyboard: true,
+    }
   };
+}
+
+// CBE & Telebirr SMS Parser for auto-verification
+interface ParsedSMS {
+  amount: number;
+  txId: string;
+}
+
+function parseDepositSMS(text: string, method: 'cbe' | 'telebirr'): ParsedSMS | null {
+  try {
+    const cleanedText = text.trim();
+    if (!cleanedText) return null;
+
+    let amount = 0;
+    let txId = '';
+
+    if (method === 'telebirr') {
+      // Telebirr receipts typically contain patterns like:
+      // "credited with ETB 100.00"
+      // "Transaction of ETB 100.00"
+      // "ብር 100.00 ተቀብለዋል"
+      // "የግብይት ቁጥር TX12345678" or "Transaction ID: TX12345678"
+      
+      const amtRegexes = [
+        /(?:ETB|ብር)\s*([\d,]+\.?\d*)/i,
+        /([\d,]+\.?\d*)\s*(?:ETB|ብር)/i,
+        /amount:\s*([\d,]+\.?\d*)/i,
+        /sent\s*([\d,]+\.?\d*)/i
+      ];
+
+      for (const regex of amtRegexes) {
+        const match = cleanedText.match(regex);
+        if (match && match[1]) {
+          amount = parseFloat(match[1].replace(/,/g, ''));
+          break;
+        }
+      }
+
+      const txRegexes = [
+        /(?:Transaction\s*ID|Transaction\s*No|TXN\s*ID|Ref|የግብይት\s*መለያ|የግብይት\s*ቁጥር)[:\s]+([A-Z0-9]{8,16})/i,
+        /\b(TX\d{8,14}[A-Z0-9]*)\b/i,
+        /\b(T\d{8,14}[A-Z0-9]*)\b/i
+      ];
+
+      for (const regex of txRegexes) {
+        const match = cleanedText.match(regex);
+        if (match && match[1]) {
+          txId = match[1].toUpperCase();
+          break;
+        }
+      }
+    } else {
+      // CBE Birr / Bank Transfer receipts
+      const amtRegexes = [
+        /(?:ETB|ብር)\s*([\d,]+\.?\d*)/i,
+        /([\d,]+\.?\d*)\s*(?:ETB|ብር)/i,
+        /amount:\s*([\d,]+\.?\d*)/i,
+        /transfer\s*of\s*([\d,]+\.?\d*)/i
+      ];
+
+      for (const regex of amtRegexes) {
+        const match = cleanedText.match(regex);
+        if (match && match[1]) {
+          amount = parseFloat(match[1].replace(/,/g, ''));
+          break;
+        }
+      }
+
+      const txRegexes = [
+        /(?:Transaction\s*Ref|Ref|FT|Reference)[:\s]*([A-Z0-9]{8,16})/i,
+        /\b(FT\d{8,14}[A-Z0-9]*)\b/i,
+        /\b(CBE\d{8,14}[A-Z0-9]*)\b/i
+      ];
+
+      for (const regex of txRegexes) {
+        const match = cleanedText.match(regex);
+        if (match && match[1]) {
+          txId = match[1].toUpperCase();
+          break;
+        }
+      }
+    }
+
+    if (txId && amount > 0) {
+      return { amount, txId };
+    }
+
+    // Generic fallback
+    const genericTxMatch = cleanedText.match(/\b((?:TX|FT)\d{6,14}[A-Z0-9]*)\b/i);
+    const genericAmtMatch = cleanedText.match(/\b(\d+(?:\.\d{1,2})?)\s*(?:ETB|Birr|ብር)\b/i) || cleanedText.match(/(?:ETB|Birr|ብር)\s*(\d+(?:\.\d{1,2})?)\b/i);
+    
+    if (genericTxMatch && genericTxMatch[1] && genericAmtMatch && genericAmtMatch[1]) {
+      return {
+        amount: parseFloat(genericAmtMatch[1]),
+        txId: genericTxMatch[1].toUpperCase()
+      };
+    }
+
+    return null;
+  } catch (err) {
+    console.error('parseDepositSMS error:', err);
+    return null;
+  }
+}
+
+function isCommandText(text: string, userCommands: any, plainCommands: any): boolean {
+  const t = text.trim();
+  if (t.startsWith('/')) return true;
+  if (t.toLowerCase() === 'cancel') return true;
+  if (t === '👥 Invite Friends') return true;
+  
+  for (const val of Object.values(userCommands)) {
+    if (typeof val === 'string' && t.startsWith(val.split(' ')[0])) return true;
+  }
+  for (const val of Object.values(plainCommands)) {
+    if (typeof val === 'string' && t.toLowerCase() === val.toLowerCase()) return true;
+  }
+  return false;
 }
 
 // Admin command handlers
@@ -264,23 +402,64 @@ async function handleAdminPending(chatId: number) {
   await sendMessage(chatId, EN.admin_pending.replace('{transactions}', list), { parse_mode: 'Markdown' });
 }
 
-async function handleAdminApprove(chatId: number, txId: string) {
+async function handleAdminApprove(chatId: number, txId: string, customAmount: number | null = null) {
   const { data: tx } = await supabase.from('transactions').select('*').eq('id', txId).single();
   if (!tx || tx.status !== 'pending') {
     await sendMessage(chatId, 'Transaction not found or already processed.');
     return;
   }
 
-  await supabase.from('transactions').update({ status: 'completed' }).eq('id', txId);
+  const finalAmount = customAmount !== null ? customAmount : Number(tx.amount);
+
+  await supabase.from('transactions').update({ status: 'completed', amount: finalAmount }).eq('id', txId);
 
   if (tx.type === 'deposit') {
     const { data: wallet } = await supabase.from('wallets').select('main_balance').eq('user_id', tx.user_id).single();
     if (wallet) {
-      await supabase.from('wallets').update({ main_balance: Number(wallet.main_balance) + Number(tx.amount) }).eq('user_id', tx.user_id);
+      await supabase.from('wallets').update({ main_balance: Number(wallet.main_balance) + finalAmount }).eq('user_id', tx.user_id);
+    }
+
+    // Inform user & handle referral reward
+    const { data: prof } = await supabase.from('profiles').select('telegram_id, language, referred_by, referral_claimed, first_name').eq('id', tx.user_id).single();
+    if (prof?.telegram_id) {
+      await sendMessage(prof.telegram_id, `✅ *Deposit Approved!*\n\nYour deposit of *${finalAmount.toLocaleString()} ETB* has been approved and credited to your Main Wallet. Enjoy! 🎮`, { parse_mode: 'Markdown' });
+
+      // Referral claimed award
+      if (prof.referred_by && !prof.referral_claimed) {
+        const commands = await getBotCommands();
+        const refBonus = Number(commands.referral_bonus || 10);
+        const refMinDep = Number(commands.referral_min_deposit || 50);
+
+        const { data: allDeps } = await supabase
+          .from('transactions')
+          .select('amount')
+          .eq('user_id', tx.user_id)
+          .eq('type', 'deposit')
+          .eq('status', 'completed');
+        
+        const totalDepsAmt = allDeps ? allDeps.reduce((acc, curr) => acc + Number(curr.amount), 0) : 0;
+
+        if (totalDepsAmt >= refMinDep) {
+          // Claim
+          await supabase.from('profiles').update({ referral_claimed: true }).eq('id', tx.user_id);
+
+          // Credit referrer
+          const { data: referrerWallet } = await supabase.from('wallets').select('play_balance').eq('user_id', prof.referred_by).single();
+          if (referrerWallet) {
+            await supabase.from('wallets').update({ play_balance: Number(referrerWallet.play_balance) + refBonus }).eq('user_id', prof.referred_by);
+
+            // Notify referrer
+            const { data: refProfile } = await supabase.from('profiles').select('telegram_id').eq('id', prof.referred_by).single();
+            if (refProfile?.telegram_id) {
+              await sendMessage(refProfile.telegram_id, `🎉 *Referral Bonus Received!*\n\nYour friend *${prof.first_name || 'Player'}* completed their first deposit. You received *${refBonus} ETB* in your Play Wallet! 💰`, { parse_mode: 'Markdown' });
+            }
+          }
+        }
+      }
     }
   }
 
-  await sendMessage(chatId, EN.admin_approved.replace('{id}', txId.slice(0, 8)));
+  await sendMessage(chatId, `✅ Transaction approved. Amount: ${finalAmount} ETB.`);
 }
 
 async function handleAdminReject(chatId: number, txId: string) {
@@ -296,22 +475,76 @@ export async function POST(request: NextRequest) {
     const callbackQuery = body.callback_query;
     const chatId = message?.chat?.id || callbackQuery?.message?.chat?.id;
     const from = body.message?.from || body.callback_query?.from;
-    const text = body.message?.text || '';
+    const text = (body.message?.text || '').trim();
     const lang = getUserLang(from);
 
     if (!chatId) {
       return NextResponse.json({ ok: true });
     }
 
+    const commands = await getBotCommands();
+    const messages = await getBotMessages();
+    
+    const getMsg = (key: string, fallbackKey: string) => {
+      return messages[key] || getText(lang, fallbackKey);
+    };
+    
+    const defaultCommands = {
+      play: '🎮 Play BINGO',
+      check_balance: '💰 Check Balance',
+      deposit: '💳 Deposit',
+      withdraw: '💸 Withdraw',
+      contact: '📞 Contact Us',
+      instructions: '📜 Game Instruction',
+      transactions: '📒 Transactions',
+      winning_patterns: '🎯 Winning patterns',
+      language: '🌐 Language',
+    };
+    
+    const plainCommands = {
+      play: 'play',
+      check_balance: 'check_balance',
+      deposit: 'deposit',
+      withdraw: 'withdraw',
+      contact: 'contact',
+      instructions: 'instructions',
+      transactions: 'transactions',
+      winning_patterns: 'winning_patterns',
+      language: 'language',
+    };
+    
+    const userCommands = { ...defaultCommands, ...commands };
+    const matchesCommand = (cmdText: string, plainText: string) => {
+      return text === cmdText || text === plainText || text.startsWith(cmdText.split(' ')[0]);
+    };
+
     // Handle callback queries
     if (callbackQuery) {
       const data = callbackQuery.data;
       if (data === 'deposit_cbe') {
         await answerCallbackQuery(callbackQuery.id);
-        await sendMessage(chatId, getText(lang, 'deposit_cbe_info'), { parse_mode: 'Markdown' });
+        const { data: prof } = await supabase.from('profiles').select('id').eq('telegram_id', String(from.id)).maybeSingle();
+        if (prof) {
+          await supabase.from('profiles').update({ telegram_state: 'waiting_deposit_cbe' }).eq('id', prof.id);
+        }
+        
+        const cbeAcc = commands.cbe_account || '1000256789123';
+        const cbeName = commands.cbe_name || 'Nile Bingo';
+        const cbeMax = commands.cbe_max || '5000';
+        const msgText = `💰 *Manual Deposit Instructions - CBE*\n\nAccount: \`${cbeAcc}\`\nRecipient name: *${cbeName}*\n\n1. Send up to ${cbeMax} ETB using CBE Birr\n2. Copy the full SMS confirmation from the wallet\n3. Send that confirmation message here\n\nNow send your transaction ID or payment confirmation text.\nType *Cancel* any time to stop.`;
+        await sendMessage(chatId, msgText, { parse_mode: 'Markdown' });
       } else if (data === 'deposit_telebirr') {
         await answerCallbackQuery(callbackQuery.id);
-        await sendMessage(chatId, getText(lang, 'deposit_telebirr_info'), { parse_mode: 'Markdown' });
+        const { data: prof } = await supabase.from('profiles').select('id').eq('telegram_id', String(from.id)).maybeSingle();
+        if (prof) {
+          await supabase.from('profiles').update({ telegram_state: 'waiting_deposit_telebirr' }).eq('id', prof.id);
+        }
+
+        const telebirrNum = commands.telebirr_number || '0918281072';
+        const telebirrName = commands.telebirr_name || 'Melkie';
+        const telebirrMax = commands.telebirr_max || '1000';
+        const msgText = `💰 *Manual Deposit Instructions - Telebirr*\n\nNumber: \`${telebirrNum}\`\nRecipient name: *${telebirrName}*\n\n1. Send up to ${telebirrMax} ETB using Telebirr\n2. Copy the full SMS confirmation from the wallet\n3. Send that confirmation message here\n\nNow send your transaction ID or payment confirmation text.\nType *Cancel* any time to stop.`;
+        await sendMessage(chatId, msgText, { parse_mode: 'Markdown' });
       } else if (data === 'lang_en') {
         await answerCallbackQuery(callbackQuery.id, 'Language set to English');
         await sendMessage(chatId, 'Use the buttons below:', getMainKeyboard('en'));
@@ -336,7 +569,6 @@ export async function POST(request: NextRequest) {
 
       await sendMessage(chatId, getText(lang, 'contact_received'));
 
-      // Notify admin
       if (adminChatId) {
         const name = firstName || 'Unknown';
         const user = username ? `@${username}` : 'N/A';
@@ -356,10 +588,40 @@ export async function POST(request: NextRequest) {
     }
 
     // Handle /start command
-    if (text === '/start') {
+    if (text === '/start' || text.startsWith('/start')) {
       const telegramId = String(from.id);
       const firstName = from.first_name;
       const username = from.username;
+
+      // Extract deep linked referrer if present
+      let referredByUUID: string | null = null;
+      if (text.includes('ref_')) {
+        const refParts = text.split('ref_');
+        const referrerTelegramId = refParts[1]?.trim();
+        if (referrerTelegramId) {
+          const { data: refProf } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('telegram_id', referrerTelegramId)
+            .maybeSingle();
+          if (refProf) {
+            referredByUUID = refProf.id;
+          }
+        }
+      }
+
+      // Sync menu button automatically
+      try {
+        await tgCall('setChatMenuButton', {
+          menu_button: {
+            type: 'web_app',
+            text: 'Menu',
+            web_app: { url: miniAppUrl }
+          }
+        });
+      } catch (e) {
+        console.error('Error setting bot menu button on start:', e);
+      }
 
       // Create/ensure profile
       const { data: existing } = await supabase
@@ -376,7 +638,10 @@ export async function POST(request: NextRequest) {
           language: 'en',
           sound_on: true,
           verified: false,
+          referred_by: referredByUUID,
+          telegram_state: 'idle'
         });
+        
         // Create wallet
         const { data: newProfile } = await supabase
           .from('profiles')
@@ -392,7 +657,6 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // If they do not have a phone, prompt them to share contact
       if (!existing || !existing.phone) {
         await sendMessage(chatId, getText(lang, 'share_contact'), {
           reply_markup: {
@@ -406,46 +670,170 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ ok: true });
       }
 
-      // Send welcome message with play button
       await sendMessage(chatId, getText(lang, 'welcome'), {
         reply_markup: {
           inline_keyboard: [[{ text: getText(lang, 'play'), web_app: { url: miniAppUrl } }]]
         }
       });
       
-      // Always send the main keyboard
       await sendMessage(chatId, 'Menu:', getMainKeyboard(lang));
-      
       return NextResponse.json({ ok: true });
     }
 
-    // Intercept normal messages if phone is missing and they are not the admin
+    // Lookup user profile once to check states & phone missing
     const telegramIdCheck = String(from?.id || '');
     const isAdmin = adminChatId && String(chatId) === adminChatId;
+    let userProfile: any = null;
+
     if (telegramIdCheck && !isAdmin) {
       const { data: prof } = await supabase
         .from('profiles')
-        .select('phone')
+        .select('*')
         .eq('telegram_id', telegramIdCheck)
         .maybeSingle();
+      userProfile = prof;
+    }
 
-      if (!prof || !prof.phone) {
-        await sendMessage(chatId, getText(lang, 'share_contact'), {
-          reply_markup: {
-            keyboard: [
-              [{ text: getText(lang, 'share_contact_btn'), request_contact: true }]
-            ],
-            resize_keyboard: true,
-            one_time_keyboard: true,
-          }
-        });
-        return NextResponse.json({ ok: true });
+    // Intercept normal messages if phone is missing and they are not the admin
+    if (telegramIdCheck && !isAdmin && (!userProfile || !userProfile.phone)) {
+      await sendMessage(chatId, getText(lang, 'share_contact'), {
+        reply_markup: {
+          keyboard: [
+            [{ text: getText(lang, 'share_contact_btn'), request_contact: true }]
+          ],
+          resize_keyboard: true,
+          one_time_keyboard: true,
+        }
+      });
+      return NextResponse.json({ ok: true });
+    }
+
+    // State Interceptor: If user has active waiting state and type a new command
+    let stateCancelledMessageSent = false;
+    if (userProfile && userProfile.telegram_state && userProfile.telegram_state !== 'idle') {
+      if (isCommandText(text, userCommands, plainCommands)) {
+        await supabase
+          .from('profiles')
+          .update({ telegram_state: 'idle', telegram_state_data: {} })
+          .eq('id', userProfile.id);
+        
+        if (text.toLowerCase() !== 'cancel') {
+          await sendMessage(chatId, 'Previous flow cancelled. Starting new command.');
+          stateCancelledMessageSent = true;
+        } else {
+          await sendMessage(chatId, 'Flow cancelled.', getMainKeyboard(lang));
+          return NextResponse.json({ ok: true });
+        }
       }
+    }
+
+    // State Handler: If they send non-command text while waiting for CBE/Telebirr SMS
+    if (userProfile && userProfile.telegram_state && userProfile.telegram_state !== 'idle' && !stateCancelledMessageSent) {
+      const state = userProfile.telegram_state;
+      const method = state === 'waiting_deposit_cbe' ? 'cbe' : 'telebirr';
+      const parsed = parseDepositSMS(text, method);
+
+      // Reset state to idle
+      await supabase
+        .from('profiles')
+        .update({ telegram_state: 'idle', telegram_state_data: {} })
+        .eq('id', userProfile.id);
+
+      if (parsed) {
+        // Double spent protection
+        const { data: existingTx } = await supabase
+          .from('transactions')
+          .select('id')
+          .eq('reference', parsed.txId)
+          .maybeSingle();
+
+        if (existingTx) {
+          await sendMessage(chatId, `❌ *Duplicate Transaction*\n\nThis transaction reference ID (\`${parsed.txId}\`) has already been submitted or processed. If you believe this is an error, please contact support.`, { parse_mode: 'Markdown', ...getMainKeyboard(lang) });
+          return NextResponse.json({ ok: true });
+        }
+
+        // Insert complete transaction
+        const { data: tx } = await supabase
+          .from('transactions')
+          .insert({
+            user_id: userProfile.id,
+            type: 'deposit',
+            amount: parsed.amount,
+            status: 'completed',
+            reference: parsed.txId
+          })
+          .select()
+          .single();
+
+        if (tx) {
+          const { data: wallet } = await supabase.from('wallets').select('main_balance').eq('user_id', userProfile.id).single();
+          if (wallet) {
+            await supabase.from('wallets').update({ main_balance: Number(wallet.main_balance) + parsed.amount }).eq('user_id', userProfile.id);
+          }
+
+          await sendMessage(chatId, `✅ *Deposit Auto-Verified!*\n\nSuccessfully parsed your confirmation SMS:\n- Transaction ID: \`${parsed.txId}\`\n- Amount: *${parsed.amount.toLocaleString()} ETB*\n\nYour wallet balance has been credited immediately! Enjoy playing! 🎮`, { parse_mode: 'Markdown', ...getMainKeyboard(lang) });
+
+          // Referral claimed check
+          if (userProfile.referred_by && !userProfile.referral_claimed) {
+            const refBonus = Number(commands.referral_bonus || 10);
+            const refMinDep = Number(commands.referral_min_deposit || 50);
+
+            const { data: allDeps } = await supabase
+              .from('transactions')
+              .select('amount')
+              .eq('user_id', userProfile.id)
+              .eq('type', 'deposit')
+              .eq('status', 'completed');
+            
+            const totalDepsAmt = allDeps ? allDeps.reduce((acc, curr) => acc + Number(curr.amount), 0) : 0;
+
+            if (totalDepsAmt >= refMinDep) {
+              await supabase.from('profiles').update({ referral_claimed: true }).eq('id', userProfile.id);
+
+              const { data: referrerWallet } = await supabase.from('wallets').select('play_balance').eq('user_id', userProfile.referred_by).maybeSingle();
+              if (referrerWallet) {
+                await supabase.from('wallets').update({ play_balance: Number(referrerWallet.play_balance) + refBonus }).eq('user_id', userProfile.referred_by);
+
+                const { data: referrerProfile } = await supabase.from('profiles').select('telegram_id').eq('id', userProfile.referred_by).maybeSingle();
+                if (referrerProfile?.telegram_id) {
+                  await sendMessage(referrerProfile.telegram_id, `🎉 *Referral Bonus Received!*\n\nYour friend *${userProfile.first_name || 'Player'}* completed their first deposit. You received *${refBonus} ETB* in your Play Wallet! 💰`, { parse_mode: 'Markdown' });
+                }
+              }
+            }
+          }
+
+          if (adminChatId) {
+            await sendMessage(adminChatId, `🤖 *Auto-Verified Deposit Alert*\n\n👤 User: ${userProfile.first_name || 'Unknown'}${userProfile.username ? ` (@${userProfile.username})` : ''}\n💰 Amount: *${parsed.amount} ETB*\n🆔 ID: \`${parsed.txId}\`\n🏦 Method: *${method.toUpperCase()}*`, { parse_mode: 'Markdown' });
+          }
+        }
+      } else {
+        // Fallback to manual verification
+        const referenceText = text;
+        const { data: tx } = await supabase
+          .from('transactions')
+          .insert({
+            user_id: userProfile.id,
+            type: 'deposit',
+            amount: 0,
+            status: 'pending',
+            reference: referenceText
+          })
+          .select()
+          .single();
+
+        if (tx) {
+          await sendMessage(chatId, `⏳ *Deposit Pending Review*\n\nWe couldn't automatically verify your SMS pattern, but our team has received it.\n\nAn admin will review and approve your deposit manually shortly! Thank you for your patience.`, getMainKeyboard(lang));
+
+          if (adminChatId) {
+            await sendMessage(adminChatId, `⏳ *Manual Deposit Submission*\n\n👤 User: ${userProfile.first_name || 'Unknown'}${userProfile.username ? ` (@${userProfile.username})` : ''}\n📞 Phone: ${userProfile.phone || 'N/A'}\n📝 Submitted Text:\n\`\`\`\n${referenceText}\n\`\`\`\n\nApprove: /approve_${tx.id.slice(0, 8)}\nReject: /reject_${tx.id.slice(0, 8)}`, { parse_mode: 'Markdown' });
+          }
+        }
+      }
+      return NextResponse.json({ ok: true });
     }
 
     // Admin commands (dynamic from DB)
     if (adminChatId && String(chatId) === adminChatId) {
-      const commands = await getBotCommands();
       if (text === commands.admin_stats) {
         await handleAdminStats(chatId);
         return NextResponse.json({ ok: true });
@@ -463,7 +851,10 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ ok: true });
       }
       if (text.startsWith(commands.admin_approve)) {
-        const shortId = text.replace(commands.admin_approve, '');
+        const rest = text.replace(commands.admin_approve, '').split('_');
+        const shortId = rest[0];
+        const customAmount = rest[1] ? parseFloat(rest[1]) : null;
+
         const { data: txs } = await supabase
           .from('transactions')
           .select('id')
@@ -471,7 +862,7 @@ export async function POST(request: NextRequest) {
         if (txs) {
           const match = txs.find((tx: any) => tx.id.startsWith(shortId));
           if (match) {
-            await handleAdminApprove(chatId, match.id);
+            await handleAdminApprove(chatId, match.id, customAmount);
           } else {
             await sendMessage(chatId, 'Transaction not found.');
           }
@@ -496,49 +887,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Handle menu buttons by emoji prefix (dynamic from commands config)
-    const commands = await getBotCommands();
-    const messages = await getBotMessages();
-    
-    // Helper to get message from DB or fallback to hardcoded
-    const getMsg = (key: string, fallbackKey: string) => {
-      return messages[key] || getText(lang, fallbackKey);
-    };
-    
-    // Default user commands (used if not in database)
-    const defaultCommands = {
-      play: '🎮 Play BINGO',
-      check_balance: '💰 Check Balance',
-      deposit: '💳 Deposit',
-      withdraw: '💸 Withdraw',
-      contact: '📞 Contact Us',
-      instructions: '📜 Game Instruction',
-      transactions: '📒 Transactions',
-      winning_patterns: '🎯 Winning patterns',
-      language: '🌐 Language',
-    };
-    
-    // Plain text commands (without emojis) for manual typing
-    const plainCommands = {
-      play: 'play',
-      check_balance: 'check_balance',
-      deposit: 'deposit',
-      withdraw: 'withdraw',
-      contact: 'contact',
-      instructions: 'instructions',
-      transactions: 'transactions',
-      winning_patterns: 'winning_patterns',
-      language: 'language',
-    };
-    
-    // Merge DB commands with defaults
-    const userCommands = { ...defaultCommands, ...commands };
-    
-    // Helper to check if text matches a command (with or without emoji)
-    const matchesCommand = (cmdText: string, plainText: string) => {
-      return text === cmdText || text === plainText || text.startsWith(cmdText.split(' ')[0]);
-    };
-    
+    // Process normal commands
     if (matchesCommand(userCommands.play, plainCommands.play)) {
       await sendMessage(chatId, getMsg('welcome', 'welcome'), {
         reply_markup: {
@@ -546,22 +895,14 @@ export async function POST(request: NextRequest) {
         }
       });
     } else if (matchesCommand(userCommands.check_balance, plainCommands.check_balance)) {
-      // Get the profile and wallet for the user:
-      const telegramId = String(from.id);
-      const { data: prof } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('telegram_id', telegramId)
-        .maybeSingle();
-      
       let mainBal = 0;
       let playBal = 0;
       
-      if (prof) {
+      if (userProfile) {
         const { data: wall } = await supabase
           .from('wallets')
           .select('main_balance, play_balance')
-          .eq('user_id', prof.id)
+          .eq('user_id', userProfile.id)
           .maybeSingle();
         if (wall) {
           mainBal = Number(wall.main_balance) || 0;
@@ -587,16 +928,69 @@ export async function POST(request: NextRequest) {
         }
       });
     } else if (matchesCommand(userCommands.withdraw, plainCommands.withdraw)) {
-      await sendMessage(chatId, getMsg('withdraw_info', 'withdraw_info'), { parse_mode: 'Markdown' });
+      let playedCount = 0;
+      if (userProfile) {
+        const { count } = await supabase
+          .from('game_players')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', userProfile.id)
+          .eq('is_watching', false);
+        playedCount = count || 0;
+      }
+
+      const reqGames = Number(commands.withdraw_required_games || 5);
+      if (playedCount < reqGames) {
+        const remaining = reqGames - playedCount;
+        const lockMsg = `🚨 *Withdrawal not available yet.*\n\nYou need to play at least *${reqGames} games* before you can withdraw.\nGames played so far: *${playedCount}*\nGames remaining: *${remaining}*\n\nKeep playing — you're getting closer! 💪`;
+        await sendMessage(chatId, lockMsg, { parse_mode: 'Markdown' });
+      } else {
+        await sendMessage(chatId, getMsg('withdraw_info', 'withdraw_info'), { parse_mode: 'Markdown' });
+      }
     } else if (matchesCommand(userCommands.contact, plainCommands.contact)) {
       await sendMessage(chatId, getMsg('contact_info', 'contact_info'), { parse_mode: 'Markdown' });
     } else if (matchesCommand(userCommands.instructions, plainCommands.instructions)) {
       await sendMessage(chatId, getMsg('how_to_play', 'how_to_play'), { parse_mode: 'Markdown' });
     } else if (matchesCommand(userCommands.transactions, plainCommands.transactions)) {
-      await sendMessage(chatId, getMsg('transactions_prompt', 'transactions_prompt'), {
+      if (userProfile) {
+        const { data: txs } = await supabase
+          .from('transactions')
+          .select('*')
+          .eq('user_id', userProfile.id)
+          .order('created_at', { ascending: false })
+          .limit(5);
+
+        if (!txs || txs.length === 0) {
+          await sendMessage(chatId, 'No transactions found.');
+        } else {
+          for (const t of txs) {
+            const typeLabel = t.type === 'deposit' ? 'PURCHASE' : t.type === 'withdraw' ? 'WITHDRAWAL' : t.type === 'win' ? 'GAME WIN' : t.type === 'bet' ? 'GAME PLAY' : t.type.toUpperCase();
+            const statusLabel = t.status.charAt(0).toUpperCase() + t.status.slice(1);
+            const dateStr = new Date(t.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) + ', ' + new Date(t.created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+            
+            const blockText = `\`\`\`\nType: ${typeLabel}\nAmount: ETB ${Number(t.amount).toFixed(2)}\nStatus: ${statusLabel}\nDate: ${dateStr}\n\`\`\``;
+            await sendMessage(chatId, blockText, { parse_mode: 'Markdown' });
+          }
+        }
+      } else {
+        await sendMessage(chatId, 'No transactions found.');
+      }
+    } else if (text === '/invite' || text.toLowerCase() === 'invite' || text === '👥 Invite Friends' || text.includes('invite')) {
+      const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'fuabingobot';
+      const refLink = `https://t.me/${botUsername}?start=ref_${from.id}`;
+      const refBonus = commands.referral_bonus || 10;
+      const refMinDep = commands.referral_min_deposit || 50;
+
+      const inviteMsg = `Hello ${from.first_name || 'Abel'}!\n\nHere is your invite link to share with friends:\n${refLink}\n\nReferral rule: You earn a one-time ${refBonus} ETB bonus for each person you invite after they deposit at least ${refMinDep} ETB.`;
+
+      await sendMessage(chatId, inviteMsg, {
         parse_mode: 'Markdown',
         reply_markup: {
-          inline_keyboard: [[{ text: '📂 Open Mini App', web_app: { url: miniAppUrl } }]]
+          inline_keyboard: [[
+            {
+              text: '🔗 Share Invite Link',
+              url: `https://t.me/share/url?url=${encodeURIComponent(refLink)}&text=${encodeURIComponent(`Play Nile BINGO with me! Use my link to join and get free play bonus!`)}`
+            }
+          ]]
         }
       });
     } else if (matchesCommand(userCommands.winning_patterns, plainCommands.winning_patterns)) {

@@ -297,6 +297,99 @@ function HomePage() {
   };
   const [otherPlayers, setOtherPlayers] = useState<VirtualPlayer[]>([]);
   const [opponentWinner, setOpponentWinner] = useState<string | null>(null);
+  const [appointedCard, setAppointedCard] = useState<number | null>(null);
+
+  // Lobby registration and confirmation states
+  const [isRegistered, setIsRegistered] = useState<boolean>(false);
+  const [isSpectatingReady, setIsSpectatingReady] = useState<boolean>(false);
+  const [showLeaveModal, setShowLeaveModal] = useState<boolean>(false);
+  const [pendingTab, setPendingTab] = useState<TabType | null>(null);
+  const [deterministicSequence, setDeterministicSequence] = useState<number[]>([]);
+
+  // Room periods dictionary helper
+  const getRoomPeriod = (roomId: string) => {
+    if (roomId === 'bronze') return 30;
+    if (roomId === 'silver') return 40;
+    if (roomId === 'gold') return 50;
+    if (roomId === 'diamond') return 60;
+    if (roomId === 'premium') return 75;
+    return 90; // VIP
+  };
+
+  // Deterministic 75-ball draw sequence builder
+  const getDeterministicDrawSequence = (gId: string, targetCardNum?: number | null) => {
+    let seed = 0;
+    for (let i = 0; i < gId.length; i++) {
+      seed = (seed * 31 + gId.charCodeAt(i)) & 0xffffffff;
+    }
+    const rand = () => {
+      seed = (seed * 1664525 + 1013904223) & 0xffffffff;
+      return (seed >>> 0) / 0xffffffff;
+    };
+    const allBalls = Array.from({ length: 75 }, (_, i) => i + 1);
+    const seq: number[] = [];
+    if (targetCardNum && targetCardNum >= 1 && targetCardNum <= 100) {
+      const targetCard = getSeededCard(targetCardNum);
+      const targetNumbers: number[] = [];
+      targetCard.forEach(row => {
+        row.forEach(cell => {
+          if (cell > 0) targetNumbers.push(cell);
+        });
+      });
+      while (allBalls.length > 0) {
+        const remainingTargets = targetNumbers.filter(n => allBalls.includes(n));
+        if (remainingTargets.length > 0 && rand() < 0.85) {
+          const tIdx = Math.floor(rand() * remainingTargets.length);
+          const num = remainingTargets[tIdx];
+          const allIdx = allBalls.indexOf(num);
+          allBalls.splice(allIdx, 1);
+          seq.push(num);
+        } else {
+          const normalIdx = Math.floor(rand() * allBalls.length);
+          seq.push(allBalls.splice(normalIdx, 1)[0]);
+        }
+      }
+    } else {
+      while (allBalls.length > 0) {
+        const idx = Math.floor(rand() * allBalls.length);
+        seq.push(allBalls.splice(idx, 1)[0]);
+      }
+    }
+    return seq;
+  };
+
+  // Poll for manual winner appointment from admin bot (improved to support waiting gameId and active gameId)
+  useEffect(() => {
+    if (!gameId) {
+      setAppointedCard(null);
+      return;
+    }
+
+    const fetchAppointed = async () => {
+      try {
+        const { data } = await supabase
+          .from('bot_config')
+          .select('commands')
+          .eq('id', 'main')
+          .single();
+        const config = data?.commands || {};
+        const appointedObj = config.appointed_winners || {};
+        const appointedNum = appointedObj[gameId];
+        if (appointedNum) {
+          setAppointedCard(Number(appointedNum));
+          console.log(`[BINGO ENGINE] Card #${appointedNum} is appointed to win manually for gameId ${gameId}!`);
+        } else {
+          setAppointedCard(null);
+        }
+      } catch (err) {
+        console.error('Error fetching appointed winner:', err);
+      }
+    };
+
+    fetchAppointed();
+    const interval = setInterval(fetchAppointed, 4000);
+    return () => clearInterval(interval);
+  }, [gameId]);
 
   // Persistent stake history and layout tabs
   const [stakeHistory, setStakeHistory] = useState<{gameId: string, stake: number, result: 'win' | 'loss', prize?: number, timestamp: string}[]>([]);
@@ -365,7 +458,7 @@ function HomePage() {
   const addGameToHistory = useCallback((gId: string, stakeAmt: number, outcome: 'win' | 'loss') => {
     if (isWatching || !gId) return;
     const actualPrize = outcome === 'win'
-      ? Math.round((stakeAmt * livePlayerCount) * (1 - commissionRate / 100))
+      ? Math.round(stakeAmt * (1 + (livePlayerCount - 1) * (1 - commissionRate / 100)))
       : -stakeAmt;
 
     setStakeHistory(prev => {
@@ -392,7 +485,7 @@ function HomePage() {
 
     // Record game in Supabase database and notify admin bot
     if (profile?.id) {
-      const pot = Math.round((stakeAmt * livePlayerCount) * (1 - commissionRate / 100));
+      const pot = Math.round(stakeAmt * (1 + (livePlayerCount - 1) * (1 - commissionRate / 100)));
       fetch('/api/public/games/record', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -431,6 +524,177 @@ function HomePage() {
     }
   }, [initialize]);
 
+  // Helper for uniform payout calculation (no commission on the player's own returned stake)
+  const calculatePayout = useCallback((stakeAmt: number, playerCount: number, rate: number) => {
+    return Math.round(stakeAmt * (1 + (playerCount - 1) * (1 - rate / 100)));
+  }, []);
+
+  // Helper to register active game state and players in database
+  const registerLiveGame = useCallback(async (gId: string, stakeAmt: number, isSpec: boolean, cardsToPlay: number[][][]) => {
+    if (!profile) return;
+    try {
+      // 1. Locate or create the stake
+      let stakeId: string | null = null;
+      const { data: stakeData } = await supabase
+        .from('stakes')
+        .select('id')
+        .eq('amount', stakeAmt)
+        .limit(1);
+      if (stakeData && stakeData.length > 0) {
+        stakeId = stakeData[0].id;
+      } else {
+        const { data: newStake } = await supabase
+          .from('stakes')
+          .insert({ amount: stakeAmt, status: 'open' })
+          .select('id')
+          .single();
+        if (newStake) stakeId = newStake.id;
+      }
+
+      // 2. Check if game with code = gId already exists
+      let dbGameId: string;
+      const { data: existingGame } = await supabase
+        .from('games')
+        .select('id, status')
+        .eq('code', gId)
+        .maybeSingle();
+
+      if (existingGame) {
+        dbGameId = existingGame.id;
+        if (existingGame.status !== 'active') {
+          await supabase.from('games').update({ status: 'active' }).eq('id', dbGameId);
+        }
+      } else {
+        // Create new active game row
+        const { data: newGame, error: err } = await supabase
+          .from('games')
+          .insert({
+            stake_id: stakeId,
+            code: gId,
+            status: 'active',
+            prize_pool: stakeAmt * (selectedRoom ? selectedRoom.players : 10),
+            called_count: 0,
+            drawn_numbers: []
+          })
+          .select('id')
+          .single();
+        if (err || !newGame) {
+          console.error('Failed to insert game:', err);
+          return;
+        }
+        dbGameId = newGame.id;
+      }
+
+      // 3. Register user in game_players table
+      const playerCard = cardsToPlay[0] || generateCard();
+      const { error: gpErr } = await supabase
+        .from('game_players')
+        .upsert({
+          game_id: dbGameId,
+          user_id: profile.id,
+          card: playerCard,
+          is_watching: isSpec,
+          auto_mark: autoMark
+        }, { onConflict: 'game_id,user_id' });
+
+      if (gpErr) {
+        console.error('Error upserting game_player:', gpErr);
+      }
+    } catch (e) {
+      console.error('Error registering live game:', e);
+    }
+  }, [profile, autoMark, selectedRoom]);
+
+  // Toggle card selection in picker (supports up to 2 cards!)
+  const toggleCard = useCallback((num: number) => {
+    setSelectedCards(prev => {
+      const isSelected = prev.includes(num);
+      if (isSelected) {
+        const next = prev.filter(c => c !== num);
+        if (next.length > 0) {
+          setPreviewCard(getSeededCard(next[next.length - 1]));
+        } else {
+          setPreviewCard([]);
+        }
+        return next;
+      } else {
+        if (prev.length >= 2) {
+          // Keep maximum of 2 cards. Replace the oldest one:
+          const next = [prev[1], num];
+          setPreviewCard(getSeededCard(num));
+          return next;
+        } else {
+          const next = [...prev, num];
+          setPreviewCard(getSeededCard(num));
+          return next;
+        }
+      }
+    });
+  }, []);
+
+  // Central gameplay initializer for synchronized room starts (players and spectators)
+  const startGameplay = useCallback((isSpectateMode: boolean) => {
+    if (!selectedRoom) return;
+
+    const period = getRoomPeriod(selectedRoom.id);
+    const currentSec = Math.floor(Date.now() / 1000);
+    const cycle = Math.floor(currentSec / period) % 1000;
+    const activeGameId = `${selectedRoom.id.substring(0, 3).toUpperCase()}-${cycle}`;
+    const entryFee = selectedRoom.entry;
+
+    let cardsToPlay: number[][][] = [];
+    if (isSpectateMode) {
+      const randomCard = generateCard();
+      cardsToPlay = [randomCard];
+      setGameCard(randomCard);
+      setPlayerCards([randomCard]);
+      setSelectedStake(entryFee);
+      setIsWatching(true);
+    } else {
+      cardsToPlay = selectedCards.map(num => getSeededCard(num));
+      setPlayerCards(cardsToPlay);
+      setGameCard(cardsToPlay[0] || []);
+      setSelectedStake(entryFee);
+      setIsWatching(false);
+    }
+
+    setUserMarkedNumbers([0]);
+    setGameId(activeGameId);
+    setDrawnNumbers([]);
+    drawnRef.current = [];
+    setRecentCalled([]);
+    setOpponentWinner(null);
+
+    // Competitors list
+    const virtualNames = ['Abebe', 'Aster', 'Kebede', 'Almaz', 'Chala', 'Tigist', 'Sintayehu', 'Solomon', 'Marta', 'Biniam'];
+    const activePlayerCount = selectedRoom.players;
+    const virtualCompetitors: VirtualPlayer[] = [];
+    const countOffset = isSpectateMode ? 0 : 1;
+    for (let i = 0; i < activePlayerCount - countOffset; i++) {
+      const cardSeed = Math.floor(Math.random() * 100) + 1;
+      virtualCompetitors.push({
+        username: virtualNames[i % virtualNames.length] + ' (Card #' + cardSeed + ')',
+        card: getSeededCard(cardSeed),
+        markedCount: 0,
+        neededToWin: 5,
+        hasWon: false,
+      });
+    }
+    setOtherPlayers(virtualCompetitors);
+
+    setLivePlayerCount(activePlayerCount);
+    setShowCardPicker(false);
+    setInGame(true);
+
+    // Register active session in database
+    registerLiveGame(activeGameId, entryFee, isSpectateMode, cardsToPlay);
+
+    // Clear ready indicators
+    setIsRegistered(false);
+    setIsSpectatingReady(false);
+    triggerHaptic('success');
+  }, [selectedRoom, selectedCards, registerLiveGame]);
+
   // Stake countdowns tick
   const [stakeStates, setStakeStates] = useState<Record<number, {status: 'waiting'|'playing'|'finished', countdown: number}>>({
     10: { status: 'waiting', countdown: 30 },
@@ -438,42 +702,46 @@ function HomePage() {
     50: { status: 'waiting', countdown: 40 },
   });
 
+  // Ticks room countdowns based on UTC clocks, updating the room lobby gameId dynamically
   useEffect(() => {
     const tick = setInterval(() => {
-      setStakeStates(prev => {
-        const next = { ...prev };
-        for (const k of Object.keys(next)) {
-          const key = Number(k);
-          const s = next[key];
-          // Always tick the countdown and cycle state correctly
-          if (s.countdown > 0) {
-            s.countdown--;
-          } else {
-            s.status = s.status === 'playing' ? 'waiting' : 'playing';
-            s.countdown = 40;
-          }
-        }
-        return next;
-      });
+      const currentSec = Math.floor(Date.now() / 1000);
 
       setRooms(prevRooms => prevRooms.map(r => {
-        const nextCount = r.countdown <= 1 ? 40 : r.countdown - 1;
+        const period = getRoomPeriod(r.id);
+        const elapsed = currentSec % period;
+        const remaining = period - elapsed;
+
+        // If countdown has transitioned to 0 (which means remaining is exactly period)
+        if (remaining === period) {
+          if (selectedRoom && selectedRoom.id === r.id && !inGame) {
+            if (isRegistered) {
+              startGameplay(false);
+            } else if (isSpectatingReady) {
+              startGameplay(true);
+            }
+          }
+        }
+
         return {
           ...r,
           status: 'starting_soon' as const,
-          countdown: nextCount,
+          countdown: remaining,
           winAmount: Math.round((r.entry * r.players) * (1 - commissionRate / 100))
         };
       }));
 
-      // Keep live players completely stable based on selected room
-      setLivePlayerCount(prev => {
-        if (selectedRoom) return selectedRoom.players;
-        return prev;
-      });
+      // Update room lobby Game ID dynamically
+      if (selectedRoom && !inGame) {
+        const period = getRoomPeriod(selectedRoom.id);
+        const cycle = Math.floor(currentSec / period) % 1000;
+        const deterministicId = `${selectedRoom.id.substring(0, 3).toUpperCase()}-${cycle}`;
+        setGameId(deterministicId);
+      }
     }, 1000);
+
     return () => clearInterval(tick);
-  }, [inGame, selectedRoom, commissionRate]);
+  }, [inGame, selectedRoom, isRegistered, isSpectatingReady, startGameplay, commissionRate]);
 
   // Card picker countdown
   useEffect(() => {
@@ -495,32 +763,38 @@ function HomePage() {
     setWinningCells(getWinningCells(card, drawn));
     setShowWinModal(true);
     addGameToHistory(gameId, selectedStake || 10, 'win');
-    const rawJackpot = (selectedStake || 10) * livePlayerCount;
-    const houseCommission = Math.round(rawJackpot * (commissionRate / 100));
-    const jackpot = rawJackpot - houseCommission;
-    updateBalance(jackpot, 'play_balance');
-  }, [gameId, selectedStake, livePlayerCount, addGameToHistory, updateBalance, commissionRate]);
+    
+    // Raked commission is only calculated on other players' stakes (winnings), leaving player's returned stake raked 0%
+    const stake = selectedStake || 10;
+    const jackpot = calculatePayout(stake, livePlayerCount, commissionRate);
+    
+    // Game winnings go directly to the withdrawable main_balance
+    updateBalance(jackpot, 'main_balance');
+  }, [gameId, selectedStake, livePlayerCount, addGameToHistory, updateBalance, commissionRate, calculatePayout]);
 
   // Auto-draw numbers when in game (every 1.4 seconds)
   useEffect(() => {
-    if (!inGame || opponentWinner) {
+    if (!inGame || opponentWinner || deterministicSequence.length === 0) {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
       return;
     }
+
     intervalRef.current = setInterval(() => {
       const currentDrawn = drawnRef.current;
-      if (currentDrawn.length >= 75) {
+      const nextIndex = currentDrawn.length;
+
+      if (nextIndex >= 75) {
         if (intervalRef.current) clearInterval(intervalRef.current);
         addGameToHistory(gameId, selectedStake || 10, 'loss');
         return;
       }
-      const all = Array.from({ length: 75 }, (_, i) => i + 1);
-      const rem = all.filter(n => !currentDrawn.includes(n));
-      if (rem.length === 0) return;
-      const num = rem[Math.floor(Math.random() * rem.length)];
+
+      const num = deterministicSequence[nextIndex];
+      if (num === undefined) return;
+
       const newDrawn = [...currentDrawn, num];
       drawnRef.current = newDrawn;
       setDrawnNumbers(newDrawn);
@@ -539,9 +813,9 @@ function HomePage() {
             const allMatches = [0];
             playerCards.forEach(card => {
               card.forEach(row => {
-                row.forEach(num => {
-                  if (newDrawn.includes(num)) {
-                    allMatches.push(num);
+                row.forEach(n => {
+                  if (newDrawn.includes(n)) {
+                    allMatches.push(n);
                   }
                 });
               });
@@ -558,17 +832,14 @@ function HomePage() {
         setOtherPlayers(prev => {
           let someWinner = '';
           const updated = prev.map(p => {
-            // Check marked cells for this player using the exact drawn numbers list
             const markedMatrix = p.card.map(row => row.map(cell => cell === 0 || newDrawn.includes(cell)));
             
-            // Find max marked in any row (horizontal row of 5 columns)
             let maxRowMarked = 0;
             markedMatrix.forEach(row => {
               const rowCount = row.filter(cell => cell).length;
               if (rowCount > maxRowMarked) maxRowMarked = rowCount;
             });
 
-            // Find max marked in any column (vertical column of 5 rows)
             let maxColMarked = 0;
             for (let col = 0; col < 5; col++) {
               let colCount = 0;
@@ -578,7 +849,6 @@ function HomePage() {
               if (colCount > maxColMarked) maxColMarked = colCount;
             }
 
-            // Since winning is completing any row (5 matches) or any col (5 matches):
             const neededForCol = Math.max(0, 5 - maxColMarked);
             const neededForRow = Math.max(0, 5 - maxRowMarked);
             const neededToWin = Math.min(neededForRow, neededForCol);
@@ -590,7 +860,7 @@ function HomePage() {
 
             return {
               ...p,
-              markedCount: Math.max(maxRowMarked, maxColMarked), // Correct max match count 100% and aligned with neededToWin
+              markedCount: Math.max(maxRowMarked, maxColMarked),
               neededToWin: neededToWin,
               hasWon: hasBingo,
             };
@@ -602,7 +872,6 @@ function HomePage() {
               clearInterval(intervalRef.current);
               intervalRef.current = null;
             }
-            // Announce winner if vocal synthesis is available
             if (typeof window !== 'undefined') {
               try {
                 const talkText = language === 'en'
@@ -626,13 +895,14 @@ function HomePage() {
         });
       }
     }, 2000);
+
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
     };
-  }, [inGame, opponentWinner, voiceEnabled, language, gameCard, isWatching, triggerWin, gameId, selectedStake, addGameToHistory, playerCards, autoMark, autoWin]);
+  }, [inGame, opponentWinner, voiceEnabled, language, gameCard, isWatching, triggerWin, gameId, selectedStake, addGameToHistory, playerCards, autoMark, autoWin, deterministicSequence]);
 
   // Keep ref in sync
   useEffect(() => {
@@ -696,62 +966,25 @@ function HomePage() {
     setGameId(generateGameId());
   }, [rooms]);
 
-  // Watch live game
+  // Register spectator waiting for game start
   const watchGame = useCallback(() => {
-    setShowCardPicker(false);
-    setInGame(true);
-    setIsWatching(true);
-    setGameId(gameId || generateGameId());
-    const randomCard = generateCard();
-    setGameCard(randomCard);
-    setPlayerCards([randomCard]);
-    setUserMarkedNumbers([0]);
-    setDrawnNumbers([]);
-    drawnRef.current = [];
-    setRecentCalled([]);
-    setSelectedStake(null);
-  }, [gameId]);
-
-  // Toggle card selection in picker (supports up to 2 cards!)
-  const toggleCard = useCallback((num: number) => {
-    setSelectedCards(prev => {
-      const isSelected = prev.includes(num);
-      if (isSelected) {
-        const next = prev.filter(c => c !== num);
-        if (next.length > 0) {
-          setPreviewCard(getSeededCard(next[next.length - 1]));
-        } else {
-          setPreviewCard([]);
-        }
-        return next;
-      } else {
-        if (prev.length >= 2) {
-          // Keep maximum of 2 cards. Replace the oldest one:
-          const next = [prev[1], num];
-          setPreviewCard(getSeededCard(num));
-          return next;
-        } else {
-          const next = [...prev, num];
-          setPreviewCard(getSeededCard(num));
-          return next;
-        }
-      }
-    });
+    setIsSpectatingReady(true);
+    triggerHaptic('light');
   }, []);
 
-  // Play with selected card
+  // Register player waiting for game start (deducts stake to join the countdown lobby)
   const playWithCard = useCallback(() => {
     if (selectedCards.length === 0) return;
     const cardCount = selectedCards.length;
-    const singleStake = selectedStake || 10;
-    const stakeAmount = singleStake * cardCount;
+    const fee = selectedRoom ? selectedRoom.entry : 10;
+    const stakeAmount = fee * cardCount;
     const totalBal = (wallet?.main_balance || 0) + (wallet?.play_balance || 0);
     if (totalBal < stakeAmount) {
       alert(t('insufficient_balance'));
       return;
     }
 
-    // Deduct stake from wallet balance
+    // Deduct stake from wallet balance to lock registration
     const playBal = wallet?.play_balance || 0;
     if (playBal >= stakeAmount) {
       updateBalance(-stakeAmount, 'play_balance');
@@ -761,28 +994,23 @@ function HomePage() {
       updateBalance(-remainder, 'main_balance');
     }
 
-    // Initialize unique, competitive live game session
-    const uniqueGameId = gameId || generateGameId();
-    const activePlayerCards = selectedCards.map(num => getSeededCard(num));
-    setPlayerCards(activePlayerCards);
-    setGameCard(activePlayerCards[0] || []);
-    setUserMarkedNumbers([0]); // free space initially
-    setGameId(uniqueGameId);
-    setDrawnNumbers([]);
-    drawnRef.current = [];
-    setRecentCalled([]);
-    setOpponentWinner(null);
+    setIsRegistered(true);
+    triggerHaptic('success');
+  }, [selectedCards, selectedRoom, wallet, updateBalance, t]);
 
-    setOtherPlayers([]);
-
-    setShowCardPicker(false);
-    // Keep selectedRoom set during active play to track room details & competitors!
-    setInGame(true);
-    setIsWatching(false);
-    if (selectedRoom) {
-      setLivePlayerCount(selectedRoom.players);
+  // Unregister lobby (cancels registration and fully refunds user's committed stake)
+  const unregisterLobby = useCallback(() => {
+    if (isRegistered) {
+      const cardCount = selectedCards.length;
+      const fee = selectedRoom ? selectedRoom.entry : 10;
+      const stakeAmount = fee * cardCount;
+      // Refund back to play_balance
+      updateBalance(stakeAmount, 'play_balance');
+      setIsRegistered(false);
     }
-  }, [selectedCards, selectedStake, wallet, updateBalance, t, selectedRoom, gameId]);
+    setIsSpectatingReady(false);
+    triggerHaptic('light');
+  }, [isRegistered, selectedCards, selectedRoom, updateBalance]);
 
   const leaveGame = useCallback(() => {
     if (intervalRef.current) {
@@ -811,6 +1039,70 @@ function HomePage() {
     setOpponentWinner(null);
     setSelectedRoom(null);
   }, [inGame, isWatching, gameId, showWinModal, opponentWinner, selectedStake, addGameToHistory]);
+
+  const handleLeaveAttempt = useCallback(() => {
+    if (isWatching) {
+      leaveGame();
+    } else {
+      setPendingTab(null);
+      setShowLeaveModal(true);
+      triggerHaptic('warning');
+    }
+  }, [isWatching, leaveGame]);
+
+  // ============= LEAVE CONFIRMATION MODAL =============
+  const renderLeaveModal = () => {
+    if (!showLeaveModal) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 font-sans text-white animate-fade-in" onClick={() => setShowLeaveModal(false)}>
+        <div className="bg-[#0f1a30] border-2 border-red-500/30 w-full max-w-sm rounded-3xl p-6 text-center shadow-2xl relative overflow-hidden" onClick={e => e.stopPropagation()}>
+          <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-red-500 via-orange-500 to-red-500" />
+          
+          <div className="w-14 h-14 bg-red-500/10 border border-red-500/20 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
+            <span className="text-2xl text-red-500">⚠️</span>
+          </div>
+
+          <h3 className="text-lg font-black text-white uppercase tracking-tight">
+            Abandon Game?
+          </h3>
+          <p className="text-xs text-amber-500 font-extrabold mt-1">
+            ( ከጨዋታው መውጣት ይፈልጋሉ? )
+          </p>
+          
+          <p className="text-xs text-gray-400 mt-3.5 leading-relaxed font-sans text-center">
+            Leaving now counts as an <span className="text-red-400 font-bold">immediate forfeit (loss)</span>. Your active card bet stake of <span className="text-amber-400 font-bold">{(selectedStake || 10).toLocaleString()} ETB</span> will be lost.
+          </p>
+
+          <div className="grid grid-cols-2 gap-3 mt-6">
+            <button
+              onClick={() => {
+                setShowLeaveModal(false);
+                triggerHaptic('light');
+              }}
+              className="bg-[#14223d] border border-white/5 hover:bg-white/5 text-gray-300 font-extrabold py-3 rounded-xl text-xs transition-all uppercase tracking-wider cursor-pointer"
+            >
+              Resume Play
+            </button>
+            <button
+              onClick={() => {
+                setShowLeaveModal(false);
+                leaveGame();
+                if (pendingTab) {
+                  setActiveTab(pendingTab);
+                  setPendingTab(null);
+                }
+                triggerHaptic('medium');
+              }}
+              className="bg-gradient-to-r from-red-600 to-rose-700 text-white font-black py-3 rounded-xl text-xs transition-all uppercase tracking-wider cursor-pointer shadow-lg shadow-red-600/15"
+            >
+              Forfeit & Exit
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   // Manage countdown for result screen (automatically transitions back to lobby or next round after 5 seconds)
   useEffect(() => {
@@ -1254,31 +1546,37 @@ function HomePage() {
             </div>
 
             <div className="flex gap-2 relative">
-              {isBingoReady && (
+              {isBingoReady && !isWatching && (
                 <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-red-600 border border-red-400 text-white font-extrabold text-[9px] px-2.5 py-1 rounded-full animate-bounce shadow-lg shadow-red-500/50 uppercase tracking-widest pointer-events-none flex items-center gap-1.5 z-20">
                   <span className="w-1.5 h-1.5 bg-white rounded-full animate-ping shrink-0" />
                   🔥 BINGO READY!
                 </div>
               )}
+              {!isWatching && (
+                <button 
+                  onClick={handleBingo} 
+                  disabled={opponentWinner !== null} 
+                  className={`flex-1 font-black py-4 rounded-xl text-sm transition-all tracking-wider uppercase relative overflow-hidden select-none cursor-pointer ${
+                    isBingoReady 
+                      ? 'bg-gradient-to-r from-red-600 via-amber-500 to-red-600 text-white shadow-xl shadow-red-500/40 scale-[1.01] border border-red-400 animate-pulse' 
+                      : 'bg-[#ffd000] text-navy hover:opacity-95 shadow-md shadow-gold/15 transition-transform hover:scale-[1.01] active:translate-y-0.5'
+                  }`}
+                >
+                  🚀 {isBingoReady ? '🔥 CLAIM BINGO! 🔥' : 'CLAIM BINGO!'}
+                </button>
+              )}
               <button 
-                onClick={handleBingo} 
-                disabled={opponentWinner !== null} 
-                className={`flex-1 font-black py-4 rounded-xl text-sm transition-all tracking-wider uppercase relative overflow-hidden select-none cursor-pointer ${
-                  isBingoReady 
-                    ? 'bg-gradient-to-r from-red-600 via-amber-500 to-red-600 text-white shadow-xl shadow-red-500/40 scale-[1.01] border border-red-400 animate-pulse' 
-                    : 'bg-[#ffd000] text-navy hover:opacity-95 shadow-md shadow-gold/15 transition-transform hover:scale-[1.01] active:translate-y-0.5'
-                }`}
+                onClick={handleLeaveAttempt} 
+                className={`${isWatching ? 'w-full py-4' : 'px-6 py-4'} bg-red-500/10 border border-red-500/20 text-red-300 font-extrabold rounded-xl text-xs hover:bg-red-500/20 transition-all uppercase`}
               >
-                🚀 {isBingoReady ? '🔥 CLAIM BINGO! 🔥' : 'CLAIM BINGO!'}
-              </button>
-              <button onClick={leaveGame} className="bg-red-500/10 border border-red-500/20 text-red-300 font-extrabold px-6 py-4 rounded-xl text-xs hover:bg-red-500/20 transition-all">
-                {t('leave')}
+                {isWatching ? 'Exit Spectate' : t('leave')}
               </button>
             </div>
           </div>
 
           {renderWinModal()}
           {renderLossModal()}
+          {renderLeaveModal()}
         </div>
       );
     }
@@ -1288,7 +1586,7 @@ function HomePage() {
       const roomTick = rooms.find(r => r.id === selectedRoom.id) || selectedRoom;
       const cards = Array.from({ length: 100 }, (_, i) => i + 1);
       const fee = roomTick.entry;
-      const totalBalance = (wallet?.main_balance || 0) + (wallet?.play_balance || 0);
+      const totalBalance = Number(wallet?.main_balance || 0) + Number(wallet?.play_balance || 0);
       const isBalanceEligible = selectedCards.length > 0 && totalBalance >= fee * selectedCards.length;
 
       return (
@@ -1312,147 +1610,204 @@ function HomePage() {
             </div>
           </div>
 
-          {/* Quick Stats Panel modeled precisely on image */}
-          <div className="flex items-stretch gap-1.5 mb-4">
-            <div className="bg-[#141f33] border border-[#233c66]/30 p-2.5 rounded-xl flex-1 text-center shadow-lg">
-              <div className="text-[7.5px] text-gray-400 font-extrabold uppercase tracking-wider">WALLET (ቀሪ ሒሳብ)</div>
-              <div className="text-sm font-black text-white mt-1">{totalBalance.toLocaleString()} ብር</div>
-            </div>
-            <div className="bg-[#141f33] border border-[#233c66]/30 p-2.5 rounded-xl flex-1 text-center shadow-lg">
-              <div className="text-[7.5px] text-gray-400 font-extrabold uppercase tracking-wider">STAKE (መደብ)</div>
-              <div className="text-sm font-black text-amber-400 mt-1">{(fee * selectedCards.length).toLocaleString()} ብር</div>
-            </div>
-            <div className="bg-[#141f33] border border-[#233c66]/30 p-2.5 rounded-xl flex-1 text-center shadow-lg">
-              <div className="text-[7.5px] text-gray-400 font-extrabold uppercase tracking-wider">PRIZE (ደራሽ)</div>
-              <div className="text-sm font-black text-gold mt-1">{(selectedCards.length > 0 ? (roomTick.winAmount * selectedCards.length) : 0).toLocaleString()} ብር</div>
-            </div>
-            
-            {/* Massive countdown timer floating card block */}
-            {roomTick.status === 'starting_soon' && (
-              <div className="bg-gradient-to-br from-[#ff5a00] to-amber-600 rounded-xl px-2.5 flex flex-col items-center justify-center font-black text-center shadow-lg shadow-[#ff5a00]/20 w-14 border border-white/10 select-none h-12 self-center shrink-0">
-                <span className="text-[7px] text-white/80 uppercase font-bold tracking-tight">WAIT</span>
-                <span className="text-base text-white font-black leading-none mt-0.5">{roomTick.countdown}S</span>
+          {isRegistered ? (
+            /* ACTIVE GAMEPLAY LOBBY WAITING SCREEN */
+            <div className="space-y-4 animate-fade-in">
+              {/* Grand Countdown Area */}
+              <div className="relative bg-gradient-to-b from-[#1c0d02] to-[#0c0500] border border-[#ff5a00]/30 p-5 rounded-3xl shadow-xl shadow-black/40 overflow-hidden text-center">
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,90,0,0.04)_0%,transparent_80%)] pointer-events-none" />
+                <span className="text-[9px] text-[#ff7a22] font-black uppercase tracking-widest block mb-2 animate-pulse">⏰ WAITING FOR GAME START</span>
+                
+                <div className="flex items-baseline justify-center gap-1.5 mt-2">
+                  <span className="text-4xl font-extrabold tracking-tight text-white">{roomTick.countdown}</span>
+                  <span className="text-sm font-bold text-[#ff7a22] uppercase">seconds remaining</span>
+                </div>
+                
+                <p className="text-[10px] text-gray-400 mt-2">The session will automatically start drawing balls and enter gameplay as soon as the countdown hits zero.</p>
               </div>
-            )}
-          </div>
 
-          {/* My Cards selector guide label */}
-          <div className="flex items-center justify-between mb-2.5 px-0.5 text-xs">
-            <div className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-              <span className="font-bold text-gray-300 text-[11px] uppercase tracking-wider">MY CARDS (የእርስዎ ካርዶች)</span>
-            </div>
-            <div className="text-xs font-black text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-md">
-              Selected: {selectedCards.length}/2
-            </div>
-          </div>
-
-          {/* Cards 10-cols Grid - Squircles made more compact & beautiful as requested */}
-          <div className="rounded-2xl bg-[#0a1120] border border-[#1e2f4d]/60 p-2.5 text-center relative overflow-hidden mb-4 shadow-xl shadow-black/30">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(35,60,102,0.06)_0%,transparent_75%)] pointer-events-none" />
-            <div className="grid grid-cols-10 gap-[5px] sm:gap-1.5 max-h-[35vh] overflow-y-auto pb-1 relative z-10 scrollbar-none">
-              {cards.map((num) => {
-                const isSelected = selectedCards.includes(num);
-                // No pre-taken cards when no one is active in the room
-                const isTaken = false;
-
-                return (
-                  <button 
-                    key={num} 
-                    onClick={() => { if (!isTaken) toggleCard(num); }} 
-                    disabled={isTaken}
-                    className={`aspect-square w-full rounded-lg sm:rounded-xl flex items-center justify-center text-[10px] sm:text-[11.5px] font-black transition-all border select-none ${
-                      isSelected 
-                        ? 'bg-gradient-to-b from-[#ff5a00] to-[#e04f00] border-[#ff7a22]/30 border-b-[3.5px] border-b-[#9e3800] text-white shadow-lg shadow-[#ff5a00]/25 font-black scale-[1.04] z-10' 
-                        : isTaken 
-                          ? 'bg-[#0e1624]/40 text-[#253248] border-[#182335]/30 border-dashed cursor-not-allowed opacity-35 text-[8.5px] sm:text-[9.5px]' 
-                          : 'bg-[#131f36] border-[#1e2f4d] border-b-[3px] border-b-[#1e2f4d] text-white hover:bg-[#1a2b4b] active:translate-y-[1px] active:border-b-[1.5px] cursor-pointer'
-                    }`}
-                  >
-                    {num}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Two-card selection preview container inside the same page */}
-          {selectedCards.length > 0 && (
-            <div className="mb-4 bg-[#142036]/60 border border-[#233c66]/40 rounded-2xl p-3 animate-fade-in shadow-xl">
-              <div className="text-[10px] text-amber-400 font-extrabold uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
-                <span>👁</span> Card Grid Layout Preview
+              {/* Live Opponents in Lobby (Engagement Module) */}
+              <div className="bg-[#141f33]/60 border border-[#233c66]/30 p-4 rounded-2xl relative overflow-hidden">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-[9px] text-emerald-400 font-extrabold uppercase tracking-wider flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                    CONNECTING PLAYERS (ተወዳዳሪዎች)
+                  </span>
+                  <span className="text-[8px] text-gray-400 font-bold uppercase">{roomTick.players} registered</span>
+                </div>
+                <div className="flex flex-wrap gap-2 justify-center">
+                  {['Abebe', 'Aster', 'Kebede', 'Almaz', 'Chala', 'Tigist', 'Sintayehu', 'Solomon'].slice(0, roomTick.players).map((name, i) => (
+                    <span key={i} className="bg-[#0c1322] border border-[#233c66]/20 text-gray-300 text-[9px] font-extrabold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-sm animate-pulse">
+                      <span className="w-1 h-1 bg-emerald-400 rounded-full" />
+                      {name}
+                    </span>
+                  ))}
+                  {roomTick.players === 0 && <span className="text-[10px] text-gray-500 italic">Waiting for players to join...</span>}
+                </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                {selectedCards.map((cardNum, cIndex) => {
-                  const cardData = getSeededCard(cardNum);
-                  return (
-                    <div key={cardNum} className="bg-gradient-to-b from-[#142036]/80 to-[#0e1726]/65 rounded-xl p-2.5 border border-[#233c66]/30 shadow-md">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-[9px] font-black tracking-wider text-[#8da0c4]">CARD #{cardNum}</span>
-                        <span className="text-[7.5px] font-black text-amber-400 bg-amber-400/10 px-1 rounded uppercase">Selected</span>
+
+              {/* Your Active Playing Cards Display */}
+              <div className="bg-[#142036]/40 border border-[#233c66]/30 rounded-2xl p-4 shadow-xl">
+                <div className="text-[10px] text-amber-400 font-black uppercase tracking-widest mb-3 text-center">
+                  🎴 YOUR BINGO CARD SELECTION
+                </div>
+                <div className="grid grid-cols-2 gap-3 max-w-sm mx-auto">
+                  {selectedCards.map((cardNum) => {
+                    const cardData = getSeededCard(cardNum);
+                    return (
+                      <div key={cardNum} className="bg-gradient-to-b from-[#142036] to-[#0e1726] rounded-xl p-3 border border-[#233c66]/55 shadow-md">
+                        <div className="text-[10px] font-black tracking-wider text-amber-400 text-center mb-2">CARD #{cardNum}</div>
+                        <BingoGrid card={cardData} drawnNumbers={[]} compact={true} />
                       </div>
-                      <BingoGrid card={cardData} drawnNumbers={[]} compact={true} />
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Footer Option to Leave/Cancel Lobby */}
+              <div className="pt-2">
+                <button 
+                  onClick={unregisterLobby}
+                  className="w-full bg-red-500/10 border border-red-500/20 text-red-400 font-black py-4 rounded-xl text-xs hover:bg-red-500/20 active:scale-[0.99] transition-all uppercase tracking-wider cursor-pointer shadow-md text-center"
+                >
+                  ❌ Cancel & Refund {(fee * selectedCards.length).toLocaleString()} ብር
+                </button>
               </div>
             </div>
-          )}
-
-          {/* Balance/Wallet and Confirmation action footer block */}
-          <div className="space-y-2.5">
-            {selectedCards.length > 0 && !isBalanceEligible && (
-              <div className="bg-red-500/10 border border-red-500/20 text-red-300 text-[11px] py-2 px-3 rounded-xl font-medium flex items-center justify-between font-sans shadow-md animate-fade-in">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 bg-red-400 rounded-full animate-ping" />
-                  Insufficient Balance. Need {(fee * selectedCards.length).toLocaleString()} ብር
-                </span>
-                <button 
-                  onClick={() => {
-                    setSelectedCards([]);
-                    setPreviewCard([]);
-                    setSelectedRoom(null);
-                    setWalletView('deposit');
-                    setActiveTab('wallet');
-                  }}
-                  className="bg-amber-500 text-white text-[9.5px] font-extrabold px-3 py-1 rounded bg-[#ff5a00] hover:opacity-90 shadow-sm"
-                >
-                  Deposit
-                </button>
+          ) : (
+            /* NORMAL CARD SELECTION GRID */
+            <>
+              {/* Quick Stats Panel modeled precisely on image */}
+              <div className="flex items-stretch gap-1.5 mb-4">
+                <div className="bg-[#141f33] border border-[#233c66]/30 p-2.5 rounded-xl flex-1 text-center shadow-lg">
+                  <div className="text-[7.5px] text-gray-400 font-extrabold uppercase tracking-wider">WALLET (ቀሪ ሒሳብ)</div>
+                  <div className="text-sm font-black text-white mt-1">{totalBalance.toLocaleString()} ብር</div>
+                </div>
+                <div className="bg-[#141f33] border border-[#233c66]/30 p-2.5 rounded-xl flex-1 text-center shadow-lg">
+                  <div className="text-[7.5px] text-gray-400 font-extrabold uppercase tracking-wider">STAKE (መደብ)</div>
+                  <div className="text-sm font-black text-amber-400 mt-1">{(fee * selectedCards.length).toLocaleString()} ብር</div>
+                </div>
+                <div className="bg-[#141f33] border border-[#233c66]/30 p-2.5 rounded-xl flex-1 text-center shadow-lg">
+                  <div className="text-[7.5px] text-gray-400 font-extrabold uppercase tracking-wider">PRIZE (ደራሽ)</div>
+                  <div className="text-sm font-black text-gold mt-1">{(selectedCards.length > 0 ? (roomTick.winAmount * selectedCards.length) : 0).toLocaleString()} ብር</div>
+                </div>
+                
+                {/* Massive countdown timer floating card block */}
+                {roomTick.status === 'starting_soon' && (
+                  <div className="bg-gradient-to-br from-[#ff5a00] to-amber-600 rounded-xl px-2.5 flex flex-col items-center justify-center font-black text-center shadow-lg shadow-[#ff5a00]/20 w-14 border border-white/10 select-none h-12 self-center shrink-0">
+                    <span className="text-[7px] text-white/80 uppercase font-bold tracking-tight">WAIT</span>
+                    <span className="text-base text-white font-black leading-none mt-0.5">{roomTick.countdown}S</span>
+                  </div>
+                )}
               </div>
-            )}
 
-            {/* Main call-to-action bar */}
-            <div className="flex gap-2.5">
-              <button 
-                onClick={() => {
-                  setSelectedCards([]);
-                  setPreviewCard([]);
-                  setSelectedRoom(null);
-                  watchGame();
-                }}
-                className="bg-[#141f33] border border-[#233c66]/40 hover:bg-white/5 text-gray-300 font-extrabold px-4 py-3.5 rounded-xl text-xs transition-colors uppercase select-none cursor-pointer tracking-wider flex items-center gap-1 justify-center shrink-0"
-              >
-                <Eye size={12} fill="currentColor" /> Live Spectate
-              </button>
+              {/* My Cards selector guide label */}
+              <div className="flex items-center justify-between mb-2.5 px-0.5 text-xs">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                  <span className="font-bold text-gray-300 text-[11px] uppercase tracking-wider">MY CARDS (የእርስዎ ካርዶች)</span>
+                </div>
+                <div className="text-xs font-black text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-md">
+                  Selected: {selectedCards.length}/2
+                </div>
+              </div>
 
-              {selectedCards.length > 0 && isBalanceEligible ? (
-                <button 
-                  onClick={playWithCard}
-                  className="flex-1 bg-gradient-to-r from-[#ffd000] to-amber-500 text-navy font-black py-3.5 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-gold/20 hover:scale-[1.01] active:scale-[0.99] transition-all uppercase tracking-widest animate-pulse cursor-pointer"
-                >
-                  <Play size={10} fill="currentColor" /> Play {selectedCards.length} Cards ({(fee * selectedCards.length).toLocaleString()} ብር)
-                </button>
-              ) : (
-                <button 
-                  disabled
-                  className="flex-1 bg-gray-500/10 border border-white/5 text-gray-500 font-extrabold py-3.5 rounded-xl text-xs transition-all uppercase tracking-widest cursor-not-allowed text-center"
-                >
-                  {selectedCards.length === 0 ? `SELECT A CARD TO START (${fee.toLocaleString()} ብር)` : `SELECT A CARD TO START`}
-                </button>
+              {/* Cards 10-cols Grid - Squircles made more compact & beautiful as requested */}
+              <div className="rounded-2xl bg-[#0a1120] border border-[#1e2f4d]/60 p-2.5 text-center relative overflow-hidden mb-4 shadow-xl shadow-black/30">
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(35,60,102,0.06)_0%,transparent_75%)] pointer-events-none" />
+                <div className="grid grid-cols-10 gap-[5px] sm:gap-1.5 max-h-[35vh] overflow-y-auto pb-1 relative z-10 scrollbar-none">
+                  {cards.map((num) => {
+                    const isSelected = selectedCards.includes(num);
+                    // No pre-taken cards when no one is active in the room
+                    const isTaken = false;
+
+                    return (
+                      <button 
+                        key={num} 
+                        onClick={() => { if (!isTaken) toggleCard(num); }} 
+                        disabled={isTaken}
+                        className={`aspect-square w-full rounded-lg sm:rounded-xl flex items-center justify-center text-[10px] sm:text-[11.5px] font-black transition-all border select-none ${
+                          isSelected 
+                            ? 'bg-gradient-to-b from-[#ff5a00] to-[#e04f00] border-[#ff7a22]/30 border-b-[3.5px] border-b-[#9e3800] text-white shadow-lg shadow-[#ff5a00]/25 font-black scale-[1.04] z-10' 
+                            : isTaken 
+                              ? 'bg-[#0e1624]/40 text-[#253248] border-[#182335]/30 border-dashed cursor-not-allowed opacity-35 text-[8.5px] sm:text-[9.5px]' 
+                              : 'bg-[#131f36] border-[#1e2f4d] border-b-[3px] border-b-[#1e2f4d] text-white hover:bg-[#1a2b4b] active:translate-y-[1px] active:border-b-[1.5px] cursor-pointer'
+                        }`}
+                      >
+                        {num}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Two-card selection preview container inside the same page */}
+              {selectedCards.length > 0 && (
+                <div className="mb-4 bg-[#142036]/60 border border-[#233c66]/40 rounded-2xl p-3 animate-fade-in shadow-xl">
+                  <div className="text-[10px] text-amber-400 font-extrabold uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+                    <span>👁</span> Card Grid Layout Preview
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    {selectedCards.map((cardNum, cIndex) => {
+                      const cardData = getSeededCard(cardNum);
+                      return (
+                        <div key={cardNum} className="bg-gradient-to-b from-[#142036]/80 to-[#0e1726]/65 rounded-xl p-2.5 border border-[#233c66]/30 shadow-md">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-[9px] font-black tracking-wider text-[#8da0c4]">CARD #{cardNum}</span>
+                            <span className="text-[7.5px] font-black text-amber-400 bg-amber-400/10 px-1 rounded uppercase">Selected</span>
+                          </div>
+                          <BingoGrid card={cardData} drawnNumbers={[]} compact={true} />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               )}
-            </div>
-          </div>
+
+              {/* Balance/Wallet and Confirmation action footer block */}
+              <div className="space-y-2.5">
+                {selectedCards.length > 0 && !isBalanceEligible && (
+                  <div className="bg-red-500/10 border border-red-500/20 text-red-300 text-[11px] py-2 px-3 rounded-xl font-medium flex items-center justify-between font-sans shadow-md animate-fade-in">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 bg-red-400 rounded-full animate-ping" />
+                      Insufficient Balance. Need {(fee * selectedCards.length).toLocaleString()} ብር
+                    </span>
+                    <button 
+                      onClick={() => {
+                        setSelectedCards([]);
+                        setPreviewCard([]);
+                        setSelectedRoom(null);
+                        setWalletView('deposit');
+                        setActiveTab('wallet');
+                      }}
+                      className="bg-amber-500 text-white text-[9.5px] font-extrabold px-3 py-1 rounded bg-[#ff5a00] hover:opacity-90 shadow-sm"
+                    >
+                      Deposit
+                    </button>
+                  </div>
+                )}
+
+                {/* Main call-to-action bar */}
+                <div className="flex gap-2.5">
+                  {selectedCards.length > 0 && isBalanceEligible ? (
+                    <button 
+                      onClick={playWithCard}
+                      className="flex-1 bg-gradient-to-r from-[#ffd000] to-amber-500 text-navy font-black py-3.5 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-gold/20 hover:scale-[1.01] active:scale-[0.99] transition-all uppercase tracking-widest animate-pulse cursor-pointer"
+                    >
+                      <Play size={10} fill="currentColor" /> Play {selectedCards.length} Cards ({(fee * selectedCards.length).toLocaleString()} ብር)
+                    </button>
+                  ) : (
+                    <button 
+                      disabled
+                      className="flex-1 bg-gray-500/10 border border-white/5 text-gray-500 font-extrabold py-3.5 rounded-xl text-xs transition-all uppercase tracking-widest cursor-not-allowed text-center"
+                    >
+                      {selectedCards.length === 0 ? `SELECT A CARD TO START (${fee.toLocaleString()} ብር)` : `SELECT A CARD TO START`}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
         </div>
       );
     }
@@ -2033,6 +2388,17 @@ function HomePage() {
     );
   };
 
+  const handleTabChange = useCallback((tab: TabType) => {
+    if (inGame && !isWatching) {
+      setPendingTab(tab);
+      setShowLeaveModal(true);
+      triggerHaptic('warning');
+    } else {
+      setActiveTab(tab);
+      triggerHaptic('light');
+    }
+  }, [inGame, isWatching]);
+
   const renderContent = () => {
     switch (activeTab) {
       case 'game': return renderGameTab();
@@ -2052,6 +2418,17 @@ function HomePage() {
       case 'amethyst': return '#a855f7';
       case 'gold':
       default: return '#ffd000';
+    }
+  };
+
+  const getThemeColorDark = () => {
+    switch (colorScheme) {
+      case 'emerald': return '#059669';
+      case 'ruby': return '#991b1b';
+      case 'sapphire': return '#1d4ed8';
+      case 'amethyst': return '#6b21a8';
+      case 'gold':
+      default: return '#d4891a';
     }
   };
 
@@ -2075,16 +2452,27 @@ function HomePage() {
       <style dangerouslySetInnerHTML={{ __html: `
         :root {
           --theme-gold: ${getThemeColor()};
+          --theme-gold-dark: ${getThemeColorDark()};
           --theme-gold-glow: ${getThemeGlow()};
         }
-        .text-gold, .text-yellow-400, .text-[#ffd000], .text-amber-400, .text-amber-500 { color: var(--theme-gold) !important; }
+        .text-gold, .text-yellow-400, .text-[#ffd000], .text-amber-400, .text-amber-500, .text-amber-300 { color: var(--theme-gold) !important; }
         .bg-gold, .bg-[#ffd000], .bg-amber-400, .bg-amber-500 { background-color: var(--theme-gold) !important; }
-        .border-gold, .border-amber-500\\/50, .border-amber-500\\/20, .border-amber-300 { border-color: var(--theme-gold) !important; }
+        .border-gold, .border-amber-500\\/50, .border-amber-500\\/20, .border-amber-300, .border-[#ffd000], .border-amber-500 { border-color: var(--theme-gold) !important; }
         .gold-glow { box-shadow: 0 0 20px var(--theme-gold-glow) !important; }
         .ring-gold\\/50 { --tw-ring-color: var(--theme-gold) !important; }
+        
+        /* Direct Gradient Branding Overrides */
+        .bg-gradient-gold,
+        .bg-gradient-to-r,
+        .bg-gradient-to-br {
+          background-image: linear-gradient(135deg, var(--theme-gold) 0%, var(--theme-gold-dark) 100%) !important;
+        }
+        button.bg-gradient-to-b {
+          background-image: linear-gradient(135deg, var(--theme-gold) 0%, var(--theme-gold-dark) 100%) !important;
+        }
       ` }} />
       {renderContent()}
-      <TabBar activeTab={activeTab} onTabChange={setActiveTab} inGame={inGame} />
+      <TabBar activeTab={activeTab} onTabChange={handleTabChange} inGame={inGame} />
 
       {/* Floating high-quality referral activation visual toast */}
       {showRefToast && (

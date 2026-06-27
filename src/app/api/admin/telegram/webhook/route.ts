@@ -138,26 +138,48 @@ async function handleAdminPending(chatId: number) {
 }
 
 async function handleAdminGames(chatId: number) {
-  const { data: games } = await supabase
+  // 1. Fetch live games
+  const { data: liveGames } = await supabase
+    .from('games')
+    .select('*, game_players(*, profiles(first_name, username))')
+    .eq('status', 'active')
+    .order('created_at', { ascending: false });
+
+  // 2. Fetch recent completed games
+  const { data: completedGames } = await supabase
     .from('games')
     .select('*, winner:profiles(first_name, username)')
+    .eq('status', 'finished')
     .order('created_at', { ascending: false })
     .limit(10);
 
-  if (!games || games.length === 0) {
-    await sendMessage(chatId, 'No games played yet.');
-    return;
+  let msg = `*🎮 Nile BINGO Matches Board*\n\n`;
+
+  if (liveGames && liveGames.length > 0) {
+    msg += `*🟢 LIVE ACTIVE GAMES (Spectate & Appoint)*\n`;
+    for (const lg of liveGames) {
+      const prize = Number(lg.prize_pool || 0).toLocaleString();
+      const playersList = lg.game_players?.map((gp: any) => gp.profiles?.first_name || 'Player').join(', ') || 'None';
+      msg += `• Game ID: \`${lg.code}\`\n  Prize Pool: *${prize} ETB*\n  Players: ${playersList}\n  Appoint Winner: \`/appoint_${lg.code}_25\`\n\n`;
+    }
+  } else {
+    msg += `*🟢 LIVE ACTIVE GAMES*\n_No live games currently playing._\n\n`;
   }
 
-  const list = games.map((g: any, i: number) => {
-    const winnerName = g.winner?.first_name || 'Virtual Player (or No Winner)';
-    const winnerUser = g.winner?.username ? ` (@${g.winner.username})` : '';
-    const prize = Number(g.prize_pool || 0).toLocaleString();
-    const roomName = g.code || 'Room';
-    return `${i + 1}. Room: *${roomName}*\n   Prize Pool: *${prize} ETB*\n   Winner: *${winnerName}${winnerUser}*`;
-  }).join('\n\n');
+  if (completedGames && completedGames.length > 0) {
+    msg += `*🏆 RECENT COMPLETED MATCHES*\n`;
+    const list = completedGames.map((g: any, i: number) => {
+      const winnerName = g.winner?.first_name || 'Virtual Player';
+      const winnerUser = g.winner?.username ? ` (@${g.winner.username})` : '';
+      const prize = Number(g.prize_pool || 0).toLocaleString();
+      return `${i + 1}. Game ID: \`${g.code}\`\n   Prize Pool: *${prize} ETB*\n   Winner: *${winnerName}${winnerUser}*`;
+    }).join('\n\n');
+    msg += list;
+  } else {
+    msg += `*🏆 RECENT COMPLETED MATCHES*\n_No recently completed matches._`;
+  }
 
-  await sendMessage(chatId, `*🎮 Recent Matches & Winners*\n\n${list}`, { parse_mode: 'Markdown' });
+  await sendMessage(chatId, msg, { parse_mode: 'Markdown' });
 }
 
 async function handleAdminApprove(chatId: number, txId: string) {
@@ -262,6 +284,48 @@ export async function POST(request: NextRequest) {
       await sendMessage(chatId, `*🔐 Admin Commands*\n\n${commands.admin_stats} - View dashboard stats\n${commands.admin_users} - List recent users\n${commands.admin_pending} - View pending transactions\n${commands.admin_games || '/admin_games'} - View recent matches & winners\n${commands.admin_approve}<tx_id> - Approve a transaction\n${commands.admin_reject}<tx_id> - Reject a transaction\n${commands.admin_help} - Show this help`, { parse_mode: 'Markdown' });
       return NextResponse.json({ ok: true });
     }
+    if (text.startsWith('/appoint')) {
+      let gameId = '';
+      let cardNumber = 0;
+
+      if (text.startsWith('/appoint_')) {
+        const parts = text.split('_');
+        if (parts.length >= 3) {
+          gameId = parts[1];
+          cardNumber = Number(parts[2]);
+        }
+      } else {
+        const parts = text.split(' ');
+        if (parts.length >= 3) {
+          gameId = parts[1];
+          cardNumber = Number(parts[2]);
+        }
+      }
+
+      if (gameId && cardNumber > 0) {
+        const { data: configData } = await supabase
+          .from('bot_config')
+          .select('commands')
+          .eq('id', 'main')
+          .single();
+
+        const currentCommands = configData?.commands || {};
+        const currentAppointed = currentCommands.appointed_winners || {};
+        currentAppointed[gameId] = cardNumber;
+        currentCommands.appointed_winners = currentAppointed;
+
+        await supabase
+          .from('bot_config')
+          .update({ commands: currentCommands })
+          .eq('id', 'main');
+
+        await sendMessage(chatId, `🎯 *Appointed Winner Recorded*\n\nGame ID: \`${gameId}\`\nAppointed Card: *Card #${cardNumber}*\n\nThis card will be prioritized to win during live play!`, { parse_mode: 'Markdown' });
+      } else {
+        await sendMessage(chatId, `❌ *Invalid Command Format*\n\nUse: \`/appoint <gameId> <card_number>\` or click the link from the matches list (e.g., \`/appoint_ABCDEF12_25\`).`, { parse_mode: 'Markdown' });
+      }
+      return NextResponse.json({ ok: true });
+    }
+
     if (text.startsWith(commands.admin_approve)) {
       const shortId = text.replace(commands.admin_approve, '');
       const { data: txs } = await supabase

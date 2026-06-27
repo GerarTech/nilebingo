@@ -328,6 +328,24 @@ export async function updateBotMessages(messages: Record<string, any>) {
     .upsert({ id: 'main', messages, updated_at: new Date().toISOString() });
 
   if (error) return { error: error.message };
+
+  // Sync description with the Telegram Bot API
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  if (botToken && messages && typeof messages.bot_description === 'string') {
+    try {
+      await fetch(`https://api.telegram.org/bot${botToken}/setMyDescription`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: messages.bot_description }),
+        signal: AbortSignal.timeout(5000),
+      }).then(r => r.json()).then(data => {
+        console.log('Telegram setMyDescription response:', data);
+      });
+    } catch (err) {
+      console.error('Failed to sync bot description with Telegram:', err);
+    }
+  }
+
   return { success: true };
 }
 

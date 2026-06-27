@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Save, RefreshCw, MessageSquare, Sliders, Trash2, Plus } from 'lucide-react';
+import { Save, RefreshCw, MessageSquare, Sliders, CreditCard, Trophy, Trash2 } from 'lucide-react';
 
 interface BotCommands {
   admin_stats: string;
@@ -33,6 +33,7 @@ interface BotMessages {
   contact_info: string;
   winning_patterns_info: string;
   how_to_play: string;
+  bot_description: string;
 }
 
 interface GameRoom {
@@ -47,7 +48,7 @@ export default function SettingsPage() {
   const [adminChatId, setAdminChatId] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
   const [saved, setSaved] = useState(false);
-  const [activeTab, setActiveTab] = useState<'commands' | 'messages' | 'game_config' | 'branding'>('commands');
+  const [activeTab, setActiveTab] = useState<'commands' | 'messages' | 'game_config' | 'branding' | 'gateways' | 'bias'>('commands');
   const [commands, setCommands] = useState<BotCommands>({
     admin_stats: '/admin_stats',
     admin_users: '/admin_users',
@@ -77,6 +78,7 @@ export default function SettingsPage() {
     contact_info: '*Contact Support*\n\nEmail: support@nilebingo.com\nTelegram: @nile_bingo_support',
     winning_patterns_info: '*Winning Patterns*\n\n1. Horizontal Line\n2. Vertical Line\n3. Diagonal Line\n4. Four Corners\n5. Blackout\n\nFirst to complete a pattern wins!',
     how_to_play: '*How to Play BINGO:*\n\n1. Choose your stake (10/20/50 ETB)\n2. Select your card (1-300)\n3. Numbers are drawn\n4. Mark matching numbers\n5. Complete a row/column/diagonal to win!\n\nGood luck!',
+    bot_description: '🎮 Play Bingo Game Online (ቢንጎ ጨዋታ)\n\n🎉🔥 እንኳን ወደ ፏ BINGO🔥🎱 በሰላም መጡ!🔥🎉\n\n🎮 ከብዙ ተጫዋቾች ጋር በቀጥታ የቢንጎ ጨዋታ ይጫወቱ\n💰 ሽልማት ያሸንፉ እና የእርስዎን ገንዘብ ያስተዳድሩ\n⚡️ ፈጣን እና በብዙዎች የተወደደ የብዙ ተጫዋቾች ጨዋታ\n\n👉 አሁን ለመጀመር "Start" ይጫኑ!',
   });
   
   // Game config specific state
@@ -96,13 +98,24 @@ export default function SettingsPage() {
     maxPlayers: 100
   });
 
+  // Gateway specific state
+  const [withdrawRequiredGames, setWithdrawRequiredGames] = useState<number>(5);
+  const [cbeAccount, setCbeAccount] = useState<string>('1000256789123');
+  const [cbeName, setCbeName] = useState<string>('Nile Bingo');
+  const [cbeMax, setCbeMax] = useState<number>(5000);
+  const [telebirrNumber, setTelebirrNumber] = useState<string>('0918281072');
+  const [telebirrName, setTelebirrName] = useState<string>('Melkie');
+  const [telebirrMax, setTelebirrMax] = useState<number>(1000);
+  const [referralBonus, setReferralBonus] = useState<number>(10);
+  const [referralMinDeposit, setReferralMinDeposit] = useState<number>(50);
+
   // Branding specific state
   const [appName, setAppName] = useState('Nile BINGO');
   const [appLogo, setAppLogo] = useState('🎰');
   const [colorScheme, setColorScheme] = useState('gold');
   const [adminVoiceEnabled, setAdminVoiceEnabled] = useState(true);
   const [adminReferralEnabled, setAdminReferralEnabled] = useState(true);
-  const [adminReferralBonus, setAdminReferralBonus] = useState(1);
+  const [appointedWinners, setAppointedWinners] = useState<Record<string, number>>({});
 
   const [loading, setLoading] = useState(true);
 
@@ -119,6 +132,9 @@ export default function SettingsPage() {
         });
         setCommands(prev => ({ ...prev, ...cmdValues }));
         
+        if (config.appointed_winners) {
+          setAppointedWinners(config.appointed_winners);
+        }
         if (typeof config.commission === 'number') {
           setCommission(config.commission);
         }
@@ -140,9 +156,17 @@ export default function SettingsPage() {
         if (config.referralEnabled !== undefined) {
           setAdminReferralEnabled(config.referralEnabled !== false);
         }
-        if (config.referralBonus !== undefined) {
-          setAdminReferralBonus(typeof config.referralBonus === 'number' ? config.referralBonus : 1);
-        }
+        
+        // Gateways loading
+        if (config.withdraw_required_games !== undefined) setWithdrawRequiredGames(Number(config.withdraw_required_games) || 5);
+        if (config.cbe_account !== undefined) setCbeAccount(String(config.cbe_account));
+        if (config.cbe_name !== undefined) setCbeName(String(config.cbe_name));
+        if (config.cbe_max !== undefined) setCbeMax(Number(config.cbe_max) || 5000);
+        if (config.telebirr_number !== undefined) setTelebirrNumber(String(config.telebirr_number));
+        if (config.telebirr_name !== undefined) setTelebirrName(String(config.telebirr_name));
+        if (config.telebirr_max !== undefined) setTelebirrMax(Number(config.telebirr_max) || 1000);
+        if (config.referral_bonus !== undefined) setReferralBonus(Number(config.referral_bonus) || 10);
+        if (config.referral_min_deposit !== undefined) setReferralMinDeposit(Number(config.referral_min_deposit) || 50);
       }
       if (msgs && typeof msgs === 'object') {
         setMessages(prev => ({ ...prev, ...msgs }));
@@ -151,9 +175,8 @@ export default function SettingsPage() {
     }).catch(() => setLoading(false));
   }, []);
 
-  const handleSaveCommands = async () => {
-    // Merge standard commands with are game variables:
-    const mergedConfig = {
+  const getMergedConfig = () => {
+    return {
       ...commands,
       commission,
       rooms: roomsList,
@@ -162,15 +185,31 @@ export default function SettingsPage() {
       colorScheme,
       voiceEnabled: adminVoiceEnabled,
       referralEnabled: adminReferralEnabled,
-      referralBonus: adminReferralBonus
+      withdraw_required_games: withdrawRequiredGames,
+      cbe_account: cbeAccount,
+      cbe_name: cbeName,
+      cbe_max: cbeMax,
+      telebirr_number: telebirrNumber,
+      telebirr_name: telebirrName,
+      telebirr_max: telebirrMax,
+      referral_bonus: referralBonus,
+      referral_min_deposit: referralMinDeposit,
+      appointed_winners: appointedWinners,
     };
+  };
+
+  const saveConfig = async (merged: any) => {
     await fetch('/api/admin/data', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'update_bot_config', commands: mergedConfig }),
+      body: JSON.stringify({ action: 'update_bot_config', commands: merged }),
     });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  };
+
+  const handleSaveCommands = async () => {
+    await saveConfig(getMergedConfig());
   };
 
   const handleSaveMessages = async () => {
@@ -184,45 +223,15 @@ export default function SettingsPage() {
   };
 
   const handleSaveGameSettings = async () => {
-    const mergedConfig = {
-      ...commands,
-      commission,
-      rooms: roomsList,
-      appName,
-      appLogo,
-      colorScheme,
-      voiceEnabled: adminVoiceEnabled,
-      referralEnabled: adminReferralEnabled,
-      referralBonus: adminReferralBonus
-    };
-    await fetch('/api/admin/data', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'update_bot_config', commands: mergedConfig }),
-    });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    await saveConfig(getMergedConfig());
   };
 
   const handleSaveBranding = async () => {
-    const mergedConfig = {
-      ...commands,
-      commission,
-      rooms: roomsList,
-      appName,
-      appLogo,
-      colorScheme,
-      voiceEnabled: adminVoiceEnabled,
-      referralEnabled: adminReferralEnabled,
-      referralBonus: adminReferralBonus
-    };
-    await fetch('/api/admin/data', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'update_bot_config', commands: mergedConfig }),
-    });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    await saveConfig(getMergedConfig());
+  };
+
+  const handleSaveGateways = async () => {
+    await saveConfig(getMergedConfig());
   };
 
   const updateCommand = (key: keyof BotCommands, value: string) => {
@@ -259,61 +268,71 @@ export default function SettingsPage() {
       <h1 className="text-xl font-bold text-white mb-4">Settings</h1>
 
       <div className="glass rounded-xl p-4 max-w-2xl space-y-4">
-        <div>
-          <label className="text-xs text-gray-400 uppercase block mb-1">Admin Telegram Chat ID</label>
-          <input
-            type="text"
-            value={adminChatId}
-            onChange={(e) => setAdminChatId(e.target.value)}
-            className="w-full bg-navy border border-white/10 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-gold/50"
-            placeholder="Set in .env.local ADMIN_CHAT_ID"
-            disabled
-          />
-          <p className="text-[10px] text-gray-500 mt-1">Configure in .env.local: ADMIN_CHAT_ID</p>
-        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="text-xs text-gray-400 uppercase block mb-1">Admin Telegram Chat ID</label>
+            <input
+              type="text"
+              value={adminChatId}
+              className="w-full bg-navy border border-white/10 rounded-lg px-4 py-2 text-sm text-gray-400 focus:outline-none"
+              disabled
+            />
+          </div>
 
-        <div>
-          <label className="text-xs text-gray-400 uppercase block mb-1">Admin Password</label>
-          <input
-            type="password"
-            value={adminPassword}
-            onChange={(e) => setAdminPassword(e.target.value)}
-            className="w-full bg-navy border border-white/10 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-gold/50"
-            placeholder="Set in .env.local ADMIN_PASSWORD"
-            disabled
-          />
-          <p className="text-[10px] text-gray-500 mt-1">Configure in .env.local: ADMIN_PASSWORD</p>
+          <div>
+            <label className="text-xs text-gray-400 uppercase block mb-1">Admin Password</label>
+            <input
+              type="password"
+              value={adminPassword}
+              className="w-full bg-navy border border-white/10 rounded-lg px-4 py-2 text-sm text-gray-400 focus:outline-none"
+              disabled
+            />
+          </div>
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-2 border-b border-white/10 overflow-x-auto">
+        <div className="flex gap-2 border-b border-white/10 overflow-x-auto pb-1">
           <button
             onClick={() => setActiveTab('commands')}
-            className={`px-4 py-2 text-xs font-medium transition-all shrink-0 ${activeTab === 'commands' ? 'text-gold border-b-2 border-gold' : 'text-gray-400 hover:text-white'}`}
+            className={`px-4 py-2 text-xs font-medium transition-all shrink-0 ${activeTab === 'commands' ? 'text-gold border-b-2 border-gold font-bold' : 'text-gray-400 hover:text-white'}`}
           >
             <RefreshCw size={12} className="inline mr-1" />
             Bot Commands
           </button>
           <button
             onClick={() => setActiveTab('messages')}
-            className={`px-4 py-2 text-xs font-medium transition-all shrink-0 ${activeTab === 'messages' ? 'text-gold border-b-2 border-gold' : 'text-gray-400 hover:text-white'}`}
+            className={`px-4 py-2 text-xs font-medium transition-all shrink-0 ${activeTab === 'messages' ? 'text-gold border-b-2 border-gold font-bold' : 'text-gray-400 hover:text-white'}`}
           >
             <MessageSquare size={12} className="inline mr-1" />
             Bot Messages
           </button>
           <button
+            onClick={() => setActiveTab('gateways')}
+            className={`px-4 py-2 text-xs font-medium transition-all shrink-0 ${activeTab === 'gateways' ? 'text-gold border-b-2 border-gold font-bold' : 'text-gray-400 hover:text-white'}`}
+          >
+            <CreditCard size={12} className="inline mr-1" />
+            Deposit, Withdraw & Referrals
+          </button>
+          <button
             onClick={() => setActiveTab('game_config')}
-            className={`px-4 py-2 text-xs font-medium transition-all shrink-0 ${activeTab === 'game_config' ? 'text-gold border-b-2 border-gold' : 'text-gray-400 hover:text-white'}`}
+            className={`px-4 py-2 text-xs font-medium transition-all shrink-0 ${activeTab === 'game_config' ? 'text-gold border-b-2 border-gold font-bold' : 'text-gray-400 hover:text-white'}`}
           >
             <Sliders size={12} className="inline mr-1" />
-            Game settings & stakes
+            Game Rules
           </button>
           <button
             onClick={() => setActiveTab('branding')}
-            className={`px-4 py-2 text-xs font-medium transition-all shrink-0 ${activeTab === 'branding' ? 'text-gold border-b-2 border-gold' : 'text-gray-400 hover:text-white'}`}
+            className={`px-4 py-2 text-xs font-medium transition-all shrink-0 ${activeTab === 'branding' ? 'text-gold border-b-2 border-gold font-bold' : 'text-gray-400 hover:text-white'}`}
           >
             <Sliders size={12} className="inline mr-1" />
-            App Branding
+            Branding
+          </button>
+          <button
+            onClick={() => setActiveTab('bias')}
+            className={`px-4 py-2 text-xs font-medium transition-all shrink-0 ${activeTab === 'bias' ? 'text-gold border-b-2 border-gold font-bold' : 'text-gray-400 hover:text-white'}`}
+          >
+            <Trophy size={12} className="inline mr-1" />
+            Biased Draw Engine
           </button>
         </div>
 
@@ -335,7 +354,7 @@ export default function SettingsPage() {
                 </div>
               ))}
             </div>
-            <button onClick={handleSaveCommands} className="w-full mt-3 bg-gold text-navy font-bold py-2.5 rounded-lg text-xs flex items-center justify-center gap-2">
+            <button onClick={handleSaveCommands} className="w-full mt-3 bg-gold text-navy font-bold py-2.5 rounded-lg text-xs flex items-center justify-center gap-2 cursor-pointer">
               <Save size={14} />
               {saved ? 'Saved!' : 'Save Commands'}
             </button>
@@ -360,9 +379,131 @@ export default function SettingsPage() {
                 </div>
               ))}
             </div>
-            <button onClick={handleSaveMessages} className="w-full mt-3 bg-gold text-navy font-bold py-2.5 rounded-lg text-xs flex items-center justify-center gap-2">
+            <button onClick={handleSaveMessages} className="w-full mt-3 bg-gold text-navy font-bold py-2.5 rounded-lg text-xs flex items-center justify-center gap-2 cursor-pointer">
               <Save size={14} />
               {saved ? 'Saved!' : 'Save Messages'}
+            </button>
+          </div>
+        )}
+
+        {/* Gateways Tab */}
+        {activeTab === 'gateways' && (
+          <div className="p-3 bg-navy rounded-xl space-y-4">
+            <h3 className="text-xs font-semibold text-white">Deposit, Withdraw & Referral Gateway Configurations</h3>
+
+            {/* Withdraw lock */}
+            <div className="bg-navy-light p-3 rounded-lg border border-white/5 space-y-2">
+              <label className="text-xs text-white font-bold uppercase tracking-wider block">🔒 Withdrawal Security Lock</label>
+              <div className="space-y-1">
+                <label className="text-[10px] text-gray-400 block">Games Required to Play Before Withdrawal Is Allowed</label>
+                <input
+                  type="number"
+                  value={withdrawRequiredGames}
+                  onChange={(e) => setWithdrawRequiredGames(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                  className="w-full bg-navy border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
+                  placeholder="e.g. 5"
+                />
+                <p className="text-[8.5px] text-gray-500">Limits withdrawals so users must engage with the bingo rooms before checking out.</p>
+              </div>
+            </div>
+
+            {/* CBE Birr Settings */}
+            <div className="bg-navy-light p-3 rounded-lg border border-white/5 space-y-3">
+              <label className="text-xs text-white font-bold uppercase tracking-wider block">🏦 Commercial Bank of Ethiopia (CBE)</label>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] text-gray-400 block mb-0.5">Account Number</label>
+                  <input
+                    type="text"
+                    value={cbeAccount}
+                    onChange={(e) => setCbeAccount(e.target.value)}
+                    className="w-full bg-navy border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-gray-400 block mb-0.5">Recipient Name</label>
+                  <input
+                    type="text"
+                    value={cbeName}
+                    onChange={(e) => setCbeName(e.target.value)}
+                    className="w-full bg-navy border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] text-gray-400 block mb-0.5">Single Max Deposit Limit (ETB)</label>
+                <input
+                  type="number"
+                  value={cbeMax}
+                  onChange={(e) => setCbeMax(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                  className="w-full bg-navy border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
+                />
+              </div>
+            </div>
+
+            {/* Telebirr Settings */}
+            <div className="bg-navy-light p-3 rounded-lg border border-white/5 space-y-3">
+              <label className="text-xs text-white font-bold uppercase tracking-wider block">📱 Telebirr Mobile Money</label>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] text-gray-400 block mb-0.5">Merchant Phone Number</label>
+                  <input
+                    type="text"
+                    value={telebirrNumber}
+                    onChange={(e) => setTelebirrNumber(e.target.value)}
+                    className="w-full bg-navy border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-gray-400 block mb-0.5">Recipient Name</label>
+                  <input
+                    type="text"
+                    value={telebirrName}
+                    onChange={(e) => setTelebirrName(e.target.value)}
+                    className="w-full bg-navy border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] text-gray-400 block mb-0.5">Single Max Deposit Limit (ETB)</label>
+                <input
+                  type="number"
+                  value={telebirrMax}
+                  onChange={(e) => setTelebirrMax(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                  className="w-full bg-navy border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
+                />
+              </div>
+            </div>
+
+            {/* Referrals */}
+            <div className="bg-navy-light p-3 rounded-lg border border-white/5 space-y-3">
+              <label className="text-xs text-white font-bold uppercase tracking-wider block">👥 Referral Reward Policy</label>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] text-gray-400 block mb-0.5">Referrer Reward (Play Bal)</label>
+                  <input
+                    type="number"
+                    value={referralBonus}
+                    onChange={(e) => setReferralBonus(Math.max(0, parseFloat(e.target.value) || 0))}
+                    className="w-full bg-navy border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-gray-400 block mb-0.5">Min Friend Deposit (ETB)</label>
+                  <input
+                    type="number"
+                    value={referralMinDeposit}
+                    onChange={(e) => setReferralMinDeposit(Math.max(0, parseFloat(e.target.value) || 0))}
+                    className="w-full bg-navy border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
+                  />
+                </div>
+              </div>
+              <p className="text-[8.5px] text-gray-500">The referrer receives the play balance reward once the referred friend completes total deposits of at least the minimum deposit amount.</p>
+            </div>
+
+            <button onClick={handleSaveGateways} className="w-full bg-gold text-navy font-bold py-2.5 rounded-lg text-xs flex items-center justify-center gap-2 cursor-pointer transition-all">
+              <Save size={14} />
+              {saved ? 'Saved!' : 'Save Gateway Configurations'}
             </button>
           </div>
         )}
@@ -410,7 +551,7 @@ export default function SettingsPage() {
                           onClick={() => deleteRoom(room.id)}
                           className="text-red-400 hover:text-red-500 p-1 rounded transition-colors"
                         >
-                          <Trash2 size={13} />
+                          Delete
                         </button>
                       </div>
 
@@ -480,15 +621,15 @@ export default function SettingsPage() {
                   <button
                     onClick={addRoom}
                     disabled={!newRoom.name}
-                    className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white font-bold py-1.5 rounded-md text-xs flex items-center justify-center gap-1 transition-colors"
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white font-bold py-1.5 rounded-md text-xs flex items-center justify-center transition-colors cursor-pointer"
                   >
-                    <Plus size={13} /> Add Room
+                    Add Room
                   </button>
                 </div>
               </div>
             </div>
 
-            <button onClick={handleSaveGameSettings} className="w-full bg-gold text-navy font-bold py-2.5 rounded-lg text-xs flex items-center justify-center gap-2 transition-all">
+            <button onClick={handleSaveGameSettings} className="w-full bg-gold text-navy font-bold py-2.5 rounded-lg text-xs flex items-center justify-center gap-2 cursor-pointer transition-all">
               <Save size={14} />
               {saved ? 'Saved!' : 'Save Game Configuration'}
             </button>
@@ -553,40 +694,116 @@ export default function SettingsPage() {
               <p className="text-[8.5px] text-gray-500">When disabled, voice announcements for drawn balls are muted globally for all players.</p>
             </div>
 
-            <div className="bg-navy-light p-3 rounded-lg border border-white/5 space-y-3">
-              <div>
-                <label className="text-[10px] text-gray-400 uppercase block mb-1">Referral Program Status</label>
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setAdminReferralEnabled(!adminReferralEnabled)}
-                    className={`w-10 h-5 rounded-full transition-colors relative select-none cursor-pointer ${adminReferralEnabled ? 'bg-gold' : 'bg-gray-600'}`}
-                  >
-                    <div className={`w-4 h-4 bg-white rounded-full transition-transform absolute top-0.5 ${adminReferralEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                  </button>
-                  <span className="text-xs text-white font-medium">{adminReferralEnabled ? 'Referral Program Active' : 'Referral Program Inactive'}</span>
-                </div>
+            <div className="bg-navy-light p-3 rounded-lg border border-white/5 space-y-2">
+              <label className="text-[10px] text-gray-400 uppercase block">Referral Program Status</label>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setAdminReferralEnabled(!adminReferralEnabled)}
+                  className={`w-10 h-5 rounded-full transition-colors relative select-none cursor-pointer ${adminReferralEnabled ? 'bg-gold' : 'bg-gray-600'}`}
+                >
+                  <div className={`w-4 h-4 bg-white rounded-full transition-transform absolute top-0.5 ${adminReferralEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                </button>
+                <span className="text-xs text-white font-medium">{adminReferralEnabled ? 'Referral Program Active' : 'Referral Program Inactive'}</span>
               </div>
-              
-              {adminReferralEnabled && (
-                <div className="space-y-1 pt-1.5 border-t border-white/5 animate-fade-in">
-                  <label className="text-[10px] text-gray-400 uppercase block">Earning Balance (Per Referral) in ETB</label>
-                  <input
-                    type="number"
-                    value={adminReferralBonus}
-                    onChange={(e) => setAdminReferralBonus(Math.max(0, parseFloat(e.target.value) || 0))}
-                    className="w-full bg-navy-card border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
-                    placeholder="e.g. 1"
-                  />
-                  <p className="text-[8.5px] text-gray-500">The amount of play balance given to a user when a friend joins via their referral link.</p>
-                </div>
-              )}
             </div>
 
-            <button onClick={handleSaveBranding} className="w-full bg-gold text-navy font-bold py-2.5 rounded-lg text-xs flex items-center justify-center gap-2 transition-all">
+            <button onClick={handleSaveBranding} className="w-full bg-gold text-navy font-bold py-2.5 rounded-lg text-xs flex items-center justify-center gap-2 cursor-pointer transition-all">
               <Save size={14} />
               {saved ? 'Saved!' : 'Save Branding Settings'}
             </button>
+          </div>
+        )}
+
+        {/* Bias Tab */}
+        {activeTab === 'bias' && (
+          <div className="p-3 bg-navy rounded-xl space-y-4 text-left">
+            <h3 className="text-xs font-semibold text-white">Biased Client-Side Draw Engine</h3>
+            <p className="text-[9px] text-gray-500">Configure certain game sessions to draw numbers in favor of a specific card. This seeded randomness forces the designated card to win BINGO.</p>
+
+            <div className="bg-navy-light p-3 rounded-lg border border-white/5 space-y-3">
+              <h4 className="text-[10px] font-bold text-gold uppercase">Appoint Winner for Upcoming/Active Game</h4>
+              <div className="grid grid-cols-2 gap-2 text-[10px]">
+                <div>
+                  <label className="text-gray-400 block mb-0.5">Game Session ID / Room ID (e.g. bronze)</label>
+                  <input
+                    type="text"
+                    id="appoint_game_id"
+                    placeholder="e.g. bronze"
+                    className="w-full bg-navy border border-white/10 rounded-md px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
+                  />
+                </div>
+                <div>
+                  <label className="text-gray-400 block mb-0.5">Appointed Card No (1-100)</label>
+                  <input
+                    type="number"
+                    id="appoint_card_num"
+                    min="1"
+                    max="100"
+                    placeholder="e.g. 58"
+                    className="w-full bg-navy border border-white/10 rounded-md px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
+                  />
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const gEl = document.getElementById('appoint_game_id') as HTMLInputElement;
+                  const cEl = document.getElementById('appoint_card_num') as HTMLInputElement;
+                  const gId = gEl?.value?.trim();
+                  const cNum = parseInt(cEl?.value, 10);
+                  if (gId && cNum >= 1 && cNum <= 100) {
+                    setAppointedWinners(prev => {
+                      const updated = { ...prev, [gId]: cNum };
+                      saveConfig({ ...getMergedConfig(), appointed_winners: updated });
+                      return updated;
+                    });
+                    if (gEl) gEl.value = '';
+                    if (cEl) cEl.value = '';
+                  } else {
+                    alert("Please provide a valid Game Session ID and Card number between 1 and 100.");
+                  }
+                }}
+                className="w-full bg-gold text-navy font-bold py-2 rounded-lg text-xs cursor-pointer transition-all"
+              >
+                Appoint Winner Card
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs text-gray-300 font-bold uppercase tracking-wider block">Active Appointed Rules ({Object.keys(appointedWinners).length})</label>
+              <div className="space-y-1.5 max-h-[40vh] overflow-y-auto">
+                {Object.entries(appointedWinners).map(([gId, cNum]) => (
+                  <div key={gId} className="flex items-center justify-between p-2.5 bg-navy-light border border-white/5 rounded-lg text-xs">
+                    <div>
+                      <span className="text-[10px] text-gray-400 font-bold">GAME ID / ROOM:</span> <span className="font-mono text-white ml-1 font-bold">{gId}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div>
+                        <span className="text-[10px] text-amber-500 font-bold">CARD:</span> <span className="bg-amber-400/10 border border-amber-500/20 text-gold px-2 py-0.5 rounded font-black font-mono ml-1">#{cNum}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAppointedWinners(prev => {
+                            const copy = { ...prev };
+                            delete copy[gId];
+                            saveConfig({ ...getMergedConfig(), appointed_winners: copy });
+                            return copy;
+                          });
+                        }}
+                        className="text-red-400 hover:text-red-500 font-bold uppercase text-[9px] bg-red-500/10 border border-red-500/20 px-2.5 py-1 rounded cursor-pointer"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {Object.keys(appointedWinners).length === 0 && (
+                  <div className="text-gray-500 text-xs italic text-center py-4 bg-navy-light/45 border border-white/5 rounded-lg">No active appointed winner overrides defined. All games currently use fair, un-biased seeded drawing sequences.</div>
+                )}
+              </div>
+            </div>
           </div>
         )}
       </div>
