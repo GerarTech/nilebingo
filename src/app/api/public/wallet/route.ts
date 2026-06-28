@@ -32,40 +32,29 @@ export async function GET(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const { userId, amount, type } = await request.json();
-    // type: 'main_balance' | 'play_balance'
-
     if (!userId || amount === undefined || !type) {
       return NextResponse.json({ error: 'userId, amount, and type are required' }, { status: 400 });
     }
 
-    const column = type === 'main_balance' ? 'main_balance' : 'play_balance';
+    const rpcMethod = type === 'main_balance' ? 'adjust_main_balance' : 'adjust_play_balance';
+
+    const { data: newBalance, error: rpcError } = await supabase.rpc(rpcMethod, {
+      p_user_id: userId,
+      p_amount: amount,
+    });
+
+    if (rpcError) {
+      console.error('Wallet RPC error:', rpcError);
+      return NextResponse.json({ error: 'Failed to update wallet' }, { status: 500 });
+    }
 
     const { data: wallet } = await supabase
       .from('wallets')
       .select('*')
       .eq('user_id', userId)
-      .single();
+      .maybeSingle();
 
-    if (!wallet) {
-      return NextResponse.json({ error: 'Wallet not found' }, { status: 404 });
-    }
-
-    const currentVal = Number((wallet as any)[column]) || 0;
-    const newVal = Math.max(0, currentVal + amount);
-
-    const { data: updatedWallet, error: updateError } = await supabase
-      .from('wallets')
-      .update({ [column]: newVal })
-      .eq('user_id', userId)
-      .select()
-      .single();
-
-    if (updateError) {
-      console.error('Wallet update error:', updateError);
-      return NextResponse.json({ error: 'Failed to update wallet' }, { status: 500 });
-    }
-
-    return NextResponse.json({ wallet: updatedWallet });
+    return NextResponse.json({ wallet });
   } catch (error) {
     console.error('Wallet PATCH error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

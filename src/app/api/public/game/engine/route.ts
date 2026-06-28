@@ -310,16 +310,10 @@ export async function POST(request: NextRequest) {
       const deductFromPlay = totalFee - deductFromMain;
 
       if (deductFromMain > 0) {
-        await supabase
-          .from('wallets')
-          .update({ main_balance: Math.max(0, Number(wallet.main_balance) - deductFromMain) })
-          .eq('user_id', userId);
+        await supabase.rpc('adjust_main_balance', { p_user_id: userId, p_amount: -deductFromMain });
       }
       if (deductFromPlay > 0) {
-        await supabase
-          .from('wallets')
-          .update({ play_balance: Math.max(0, Number(wallet.play_balance) - deductFromPlay) })
-          .eq('user_id', userId);
+        await supabase.rpc('adjust_play_balance', { p_user_id: userId, p_amount: -deductFromPlay });
       }
 
       await supabase.from('transactions').insert({

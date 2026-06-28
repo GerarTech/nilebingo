@@ -322,30 +322,34 @@ function HomePage() {
 
   // ============ CARD TOGGLE ============
   const toggleCard = useCallback(async (num: number) => {
+    if (!gameId || !profile?.id || !isValidUUID(profile.id)) return;
+    const uid = profile.id;
+
     const isSelected = selectedCards.includes(num);
-    const uid = profile?.id;
+
     if (isSelected) {
-      setSelectedCards(prev => { const next = prev.filter(c => c !== num); setPreviewCard(next.length > 0 ? getSeededCard(next[next.length - 1], gameId) : []); return next; });
-      if (gameId && isValidUUID(uid)) {
-        try {
-          await supabase.from('game_card_reservations').delete().eq('game_code', gameId).eq('user_id', uid).eq('card_number', num);
-        } catch (e) {
-          console.error('Failed to release reservation:', e);
-        }
-      }
+      await supabase.from('game_card_reservations').delete().eq('game_code', gameId).eq('user_id', uid).eq('card_number', num);
+      setSelectedCards(prev => {
+        const next = prev.filter(c => c !== num);
+        setPreviewCard(next.length > 0 ? getSeededCard(next[next.length - 1], gameId) : []);
+        return next;
+      });
     } else {
-      setSelectedCards(prev => { if (prev.length >= 2) return prev; const next = [...prev, num]; setPreviewCard(getSeededCard(num, gameId)); return next; });
-      if (gameId && isValidUUID(uid)) {
-        try {
-          const { error } = await supabase.from('game_card_reservations').insert({ game_code: gameId, user_id: uid, card_number: num });
-          if (error) {
-            console.error('Failed to reserve card:', error);
-            const remaining = selectedCards.filter(c => c !== num);
-            setSelectedCards(remaining);
-            setPreviewCard(remaining.length > 0 ? getSeededCard(remaining[remaining.length - 1], gameId) : []);
-          }
-        } catch {}
+      if (selectedCards.length >= 2) return;
+      const { error } = await supabase.from('game_card_reservations').insert({ game_code: gameId, user_id: uid, card_number: num });
+      if (error) {
+        console.error('Failed to reserve card:', error);
+        const errMsg = (error as any)?.message || '';
+        if (errMsg.includes('unique') || errMsg.includes('23505')) {
+          alert('This card was just taken by another player. Please choose a different one.');
+        }
+        return;
       }
+      setSelectedCards(prev => {
+        const next = [...prev, num];
+        setPreviewCard(getSeededCard(num, gameId));
+        return next;
+      });
     }
   }, [gameId, profile?.id, selectedCards]);
 

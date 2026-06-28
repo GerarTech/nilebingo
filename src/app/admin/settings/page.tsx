@@ -123,6 +123,7 @@ export default function SettingsPage() {
   const [rulesText, setRulesText] = useState<string>('');
   const [banks, setBanks] = useState<{id: string; name: string; icon: string; account: string; recipient: string; max: string}[]>([]);
   const [newBank, setNewBank] = useState<{name: string; icon: string; account: string; recipient: string; max: string}>({name: '', icon: '🏦', account: '', recipient: '', max: '5000'});
+  const [adminChatIds, setAdminChatIds] = useState<string>('');
 
   // Branding specific state
   const [botName, setBotName] = useState('Nile BINGO');
@@ -195,6 +196,7 @@ export default function SettingsPage() {
         if (config.signup_bonus !== undefined) setSignupBonus(Number(config.signup_bonus) || 0);
         if (config.rules_text !== undefined) setRulesText(String(config.rules_text) || '');
         if (Array.isArray(config.banks)) setBanks(config.banks);
+        if (Array.isArray(config.admin_chat_ids)) setAdminChatIds(config.admin_chat_ids.join(', '));
       }
       if (msgs && typeof msgs === 'object') {
         setMessages(prev => ({ ...prev, ...msgs }));
@@ -228,6 +230,7 @@ export default function SettingsPage() {
       rules_text: rulesText,
       appointed_winners: appointedWinners,
       banks,
+      admin_chat_ids: adminChatIds.split(/[\s,]+/).filter(Boolean),
     };
   };
 
@@ -452,6 +455,22 @@ export default function SettingsPage() {
                   <p className="text-[8.5px] text-gray-500">Minimum ETB amount users can withdraw per request.</p>
                 </div>
               </div>
+
+            {/* Admin Bot Security */}
+            <div className="bg-navy-light p-3 rounded-lg border border-white/5 space-y-2">
+              <label className="text-xs text-white font-bold uppercase tracking-wider block">🔐 Admin Bot Access</label>
+              <div className="space-y-1">
+                <label className="text-[10px] text-gray-400 block">Authorized Admin Chat IDs (comma or space separated)</label>
+                <input
+                  type="text"
+                  value={adminChatIds}
+                  onChange={(e) => setAdminChatIds(e.target.value)}
+                  className="w-full bg-navy border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
+                  placeholder="e.g. 123456789, 987654321"
+                />
+                <p className="text-[8.5px] text-gray-500">Only these Telegram chat IDs can access the admin bot. Add the numeric IDs separated by commas or spaces.</p>
+              </div>
+            </div>
 
             {/* CBE Birr Settings */}
             <div className="bg-navy-light p-3 rounded-lg border border-white/5 space-y-3">

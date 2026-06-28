@@ -469,9 +469,8 @@ async function executeApprove(chatId: number, tx: any, finalAmount: number) {
         if (totalDepsAmt >= refMinDep) {
           await supabase.from('profiles').update({ referral_claimed: true }).eq('id', tx.user_id);
 
-          const { data: referrerWallet } = await supabase.from('wallets').select('play_balance').eq('user_id', prof.referred_by).single();
-          if (referrerWallet) {
-            await supabase.from('wallets').update({ play_balance: Number(referrerWallet.play_balance) + refBonus }).eq('user_id', prof.referred_by);
+          if (prof.referred_by) {
+            await supabase.rpc('adjust_play_balance', { p_user_id: prof.referred_by, p_amount: refBonus });
 
             const { data: refProfile } = await supabase.from('profiles').select('telegram_id').eq('id', prof.referred_by).single();
             if (refProfile?.telegram_id) {
@@ -550,7 +549,7 @@ export async function POST(request: NextRequest) {
     const messages = await getBotMessages();
     
     const getMsg = (key: string, fallbackKey: string) => {
-      return messages[key] || getText(lang, fallbackKey);
+      return getText(lang, fallbackKey) || messages[key] || fallbackKey;
     };
     
     const defaultCommands = {
@@ -829,20 +828,17 @@ export async function POST(request: NextRequest) {
             const refBonus = Number(commands.referral_bonus || 10);
             if (refBonus > 0) {
               await supabase.from('profiles').update({ referral_claimed: true }).eq('id', newProfile.id);
-              const { data: referrerWallet } = await supabase.from('wallets').select('play_balance').eq('user_id', referredByUUID).single();
-              if (referrerWallet) {
-                await supabase.from('wallets').update({ play_balance: Number(referrerWallet.play_balance) + refBonus }).eq('user_id', referredByUUID);
-                await supabase.from('transactions').insert({
-                  user_id: referredByUUID,
-                  type: 'deposit',
-                  amount: refBonus,
-                  status: 'completed',
-                  reference: `REFERRAL_BONUS_${newProfile.id}_${Date.now()}`,
-                });
-                const { data: refProfile } = await supabase.from('profiles').select('telegram_id, first_name').eq('id', referredByUUID).single();
-                if (refProfile?.telegram_id) {
-                  await sendMessage(refProfile.telegram_id, `🎉 *Referral Bonus Received!*\n\nYour friend *${firstName || 'Player'}* joined Nile BINGO! You earned *${refBonus} ETB* as a referral bonus added to your Play Wallet.\n\nKeep sharing your invite link to earn more! 💰`, { parse_mode: 'Markdown' });
-                }
+              await supabase.rpc('adjust_play_balance', { p_user_id: referredByUUID, p_amount: refBonus });
+              await supabase.from('transactions').insert({
+                user_id: referredByUUID,
+                type: 'deposit',
+                amount: refBonus,
+                status: 'completed',
+                reference: `REFERRAL_BONUS_${newProfile.id}_${Date.now()}`,
+              });
+              const { data: refProfile } = await supabase.from('profiles').select('telegram_id, first_name').eq('id', referredByUUID).single();
+              if (refProfile?.telegram_id) {
+                await sendMessage(refProfile.telegram_id, `🎉 *Referral Bonus Received!*\n\nYour friend *${firstName || 'Player'}* joined Nile BINGO! You earned *${refBonus} ETB* as a referral bonus added to your Play Wallet.\n\nKeep sharing your invite link to earn more! 💰`, { parse_mode: 'Markdown' });
               }
             }
           }
@@ -944,6 +940,21 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ ok: true });
         }
 
+        const banks: any[] = commands.banks || [];
+        const bankId = stateData.bank_id || 'cbe';
+        const bank = banks.find((b: any) => b.id === bankId);
+        const minDeposit = bank?.min ?? (bankId === 'telebirr' ? 10 : 50);
+        const maxDeposit = bank?.max ?? (bankId === 'telebirr' ? Number(commands.telebirr_max || 1000) : Number(commands.cbe_max || 5000));
+
+        if (amount < minDeposit) {
+          await sendMessage(chatId, `❌ Minimum deposit is *${minDeposit} ETB*. Please enter a larger amount.`, { parse_mode: 'Markdown', reply_markup: { keyboard: [[{ text: 'Cancel ❌' }]], resize_keyboard: true, one_time_keyboard: false } });
+          return NextResponse.json({ ok: true });
+        }
+        if (amount > maxDeposit) {
+          await sendMessage(chatId, `❌ Maximum deposit is *${maxDeposit} ETB*. Please enter a smaller amount.`, { parse_mode: 'Markdown', reply_markup: { keyboard: [[{ text: 'Cancel ❌' }]], resize_keyboard: true, one_time_keyboard: false } });
+          return NextResponse.json({ ok: true });
+        }
+
         // Update state to waiting for tx ID
         await supabase
           .from('profiles')
@@ -951,9 +962,6 @@ export async function POST(request: NextRequest) {
           .eq('id', userProfile.id);
 
         // Look up bank details
-        const banks: any[] = commands.banks || [];
-        const bankId = stateData.bank_id || 'cbe';
-        const bank = banks.find((b: any) => b.id === bankId);
         const bankName = bank?.name || (bankId === 'cbe' ? 'CBE' : 'Telebirr');
         const account = bank?.account || (bankId === 'cbe' ? (commands.cbe_account || '1000256789123') : (commands.telebirr_number || '0918281072'));
         const recipient = bank?.recipient || (bankId === 'cbe' ? (commands.cbe_name || 'Nile Bingo') : (commands.telebirr_name || 'Melkie'));

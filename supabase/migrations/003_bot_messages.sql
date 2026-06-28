@@ -6,15 +6,15 @@ CREATE TABLE IF NOT EXISTS bot_messages (
 );
 
 INSERT INTO bot_messages (id, messages) VALUES ('main', '{
-  "welcome": "🎰 Welcome to Nile Bingo!\\n\\nThe most exciting BINGO experience on Telegram.\\n\\nTap the button below to start playing!",
-  "share_contact": "📱 Please share your phone number to continue.\\n\\nThis helps us identify you and provide better support.",
-  "contact_received": "✅ Thank you! Your contact has been shared with our support team.",
-  "balance_info": "💰 *Your Balance*\\n\\nMain Wallet: 0 ETB\\nPlay Wallet: 0 ETB\\nTotal: 0 ETB",
-  "deposit_choose": "💳 *Choose payment method:*\\n\\nSelect your preferred option below:",
+  "welcome": "🎰 *Welcome to Nile BINGO!*\\n\\nExperience the thrill of real-time BINGO right here on Telegram. Quick matches, fair play, and real prizes await!\\n\\n👇 Tap the button below to jump in!",
+  "share_contact": "📱 *Let\\'s get started!*\\n\\nPlease share your phone number so we can set up your account. Your number is kept private and used only for account verification.",
+  "contact_received": "✅ *Welcome aboard!* Your phone number has been verified and your account is ready to go.",
+  "balance_info": "💰 *Your Wallet*\\n\\n• Main Balance: *{main} ETB* (withdrawable)\\n• Play Balance: *{play} ETB* (gameplay only)\\n• Total: *{total} ETB*\\n\\n💡 *Tip:* Main balance is for withdrawals. Play balance is for entering games and cannot be withdrawn.",
+  "deposit_choose": "💳 *Deposit Funds*\\n\\nSelect your preferred payment method below:",
   "deposit_cbe_info": "*CBE Deposit Instructions*\\n\\nAccount: 1000256789123\\nName: Nile Bingo\\nBank: CBE\\n\\nSend amount, then forward SMS confirmation here.",
-  "deposit_telebirr_info": "*Telebirr Deposit Instructions*\\n\\nNumber: 0925502345\\nName: Ashe\\n\\nSend up to 1000 ETB, then forward SMS confirmation here.",
-  "withdraw_info": "*Withdraw Funds*\\n\\nContact support to withdraw. Min: 50 ETB",
-  "contact_info": "*Contact Support*\\n\\nEmail: support@fuabingo.com\\nTelegram: @fua_bingo_support",
-  "winning_patterns_info": "*Winning Patterns*\\n\\n1. Horizontal Line\\n2. Vertical Line\\n3. Diagonal Line\\n4. Four Corners\\n5. Blackout\\n\\nFirst to complete a pattern wins!",
-  "how_to_play": "*How to Play BINGO:*\\n\\n1. Choose your stake (10/20/50 ETB)\\n2. Select your card (1-300)\\n3. Numbers are drawn\\n4. Mark matching numbers\\n5. Complete a row/column/diagonal to win!\\n\\nGood luck!"
+  "deposit_telebirr_info": "*Telebirr Deposit Instructions*\\n\\nNumber: 0918281072\\nName: Melkie\\n\\nSend up to 1000 ETB, then forward SMS confirmation here.",
+  "withdraw_info": "💸 *Withdraw Funds*\\n\\nOnly your *Main Balance* can be withdrawn. Play balance is for gameplay only.\\n\\n📋 *Requirements:*\\n• Play at least {required_games} games first\\n• Minimum withdrawal: {min_amount} ETB\\n\\nTo request a withdrawal, please contact support with your amount and preferred method.",
+  "contact_info": "*📬 Contact Support*\\n\\nHave a question or need help?\\n\\n📧 Email: support@nilebingo.com\\n💬 Telegram: @nile_bingo_support\\n\\nWe typically respond within 24 hours.",
+  "winning_patterns_info": "*🏆 Winning Patterns*\\n\\nComplete any of these to win:\\n\\n1️⃣ *Horizontal Row* — Mark all 5 numbers in any row\\n2️⃣ *Vertical Column* — Mark all 5 numbers in any column\\n\\nWin detection is automatic — no need to shout BINGO! The game instantly checks after every draw.",
+  "how_to_play": "*🎯 How to Play BINGO*\\n\\n1️⃣ Pick a room — Bronze (10 ETB) up to VIP (500 ETB)\\n2️⃣ Choose 1–2 card numbers (each has a unique 5×5 grid)\\n3️⃣ Wait for the game to auto-start when the timer hits zero\\n4️⃣ Numbers 1–75 are drawn every 2 seconds — cards mark automatically\\n5️⃣ First to complete a full row or column wins the prize pool\\n6️⃣ Prize = total stakes × players minus commission\\n\\nGood luck and have fun! 🍀"
 }'::jsonb) ON CONFLICT (id) DO NOTHING;

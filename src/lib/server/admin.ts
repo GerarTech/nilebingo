@@ -393,13 +393,54 @@ export async function adjustBalance(userId: string, amount: number, type: 'main'
     .single();
 
   if (insertedTx) {
-    // Notify in background
     notifyAdminTransactionCompleted(insertedTx.id).catch(err => {
       console.error('Error triggering admin notification for balance adjustment:', err);
     });
   }
 
+  // Notify the user via their Telegram bot
+  notifyUserBalanceChange(userId, amount, type, newBalance, reason).catch(err => {
+    console.error('Error notifying user of balance adjustment:', err);
+  });
+
   return { success: true };
+}
+
+async function notifyUserBalanceChange(userId: string, amount: number, type: 'main' | 'play', newBalance: number, reason: string) {
+  const adminBotToken = process.env.ADMIN_BOT_TOKEN;
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('telegram_id, first_name, language')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (!profile?.telegram_id || !adminBotToken) return;
+
+  const emoji = amount > 0 ? '✅' : '❌';
+  const dirLabel = amount > 0 ? 'credited to' : 'deducted from';
+  const walletLabel = type === 'main' ? 'Main Wallet' : 'Play Wallet';
+  const absAmount = Math.abs(amount).toLocaleString();
+
+  const text = `${emoji} *Balance Update*\n\n` +
+    `💰 *${absAmount} ETB* ${dirLabel} your *${walletLabel}*\n` +
+    `📊 New ${walletLabel} balance: *${newBalance.toLocaleString()} ETB*\n` +
+    `📝 Reason: ${reason}\n\n` +
+    `Use /balance to check your full wallet.`;
+
+  try {
+    await fetch(`https://api.telegram.org/bot${adminBotToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: profile.telegram_id,
+        text,
+        parse_mode: 'Markdown',
+      }),
+      signal: AbortSignal.timeout(5000),
+    });
+  } catch (err) {
+    console.error('Telegram user notification error:', err);
+  }
 }
 
 // Helper to send real-time notification to Admin Telegram Bot for completed transactions
