@@ -896,8 +896,10 @@ export async function POST(request: NextRequest) {
       userProfile = prof;
     }
 
-    // Intercept normal messages if phone is missing and they are not the admin
-    if (telegramIdCheck && !isAdmin && (!userProfile || !userProfile.phone)) {
+    // Intercept normal messages if phone is missing and they are not the admin,
+    // BUT allow users through if they have an active state flow (e.g., deposit)
+    const inActiveState = userProfile?.telegram_state && userProfile.telegram_state !== 'idle';
+    if (telegramIdCheck && !isAdmin && !inActiveState && (!userProfile || !userProfile.phone)) {
       await sendMessage(chatId, getText(lang, 'share_contact'), {
         reply_markup: {
           keyboard: [
@@ -962,7 +964,7 @@ export async function POST(request: NextRequest) {
           .replace('{recipient}', recipient)
           .replace('{amount}', String(amount));
 
-        await sendMessage(chatId, msgText, { parse_mode: 'Markdown' });
+        await sendMessage(chatId, msgText, { parse_mode: 'Markdown', reply_markup: { keyboard: [[{ text: 'Cancel ❌' }]], resize_keyboard: true, one_time_keyboard: false } });
         return NextResponse.json({ ok: true });
       }
 
@@ -970,7 +972,7 @@ export async function POST(request: NextRequest) {
         // User sent a transaction ID
         const txId = text.trim();
         if (!txId || txId.length < 3) {
-          await sendMessage(chatId, '❌ Please enter a valid transaction/reference ID.');
+          await sendMessage(chatId, '❌ Please enter a valid transaction/reference ID.', { parse_mode: 'Markdown', reply_markup: { keyboard: [[{ text: 'Cancel ❌' }]], resize_keyboard: true, one_time_keyboard: false } });
           return NextResponse.json({ ok: true });
         }
 

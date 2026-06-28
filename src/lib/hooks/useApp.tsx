@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useRef, type ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useRef, useEffect, type ReactNode } from 'react';
 import { supabase } from '../supabase';
 import type { Profile, Wallet, TabType } from '../types';
 import { useT, type Language } from '../i18n';
@@ -143,6 +143,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }));
     }
   }, []);
+
+  // Periodically refresh wallet when initialized to keep balance in sync
+  const initializedRef = useRef(false);
+  initializedRef.current = state.initialized;
+  useEffect(() => {
+    if (!state.initialized) return;
+    const interval = setInterval(() => {
+      if (isValidUUID(state.profile?.id)) {
+        fetch(`/api/public/wallet?userId=${state.profile!.id}`)
+          .then(r => r.json())
+          .then(data => {
+            if (data.wallet) setState(prev => ({ ...prev, wallet: data.wallet }));
+          })
+          .catch(() => {});
+      }
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [state.initialized, state.profile?.id]);
 
   const setCurrentGame = useCallback((gameId: string | null) => {
     setState(prev => ({ ...prev, currentGameId: gameId }));

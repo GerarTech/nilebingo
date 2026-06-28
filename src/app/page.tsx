@@ -257,12 +257,22 @@ function HomePage() {
   // ============ REALTIME RESERVATIONS ============
   const refreshGameState = useCallback(async (gId: string) => {
     if (!gId || !isValidUUID(profile?.id)) return;
-    try { await supabase.from('game_card_reservations').delete().eq('game_code', gId).lt('created_at', new Date(Date.now() - 120000).toISOString()); } catch {}
+    try { await supabase.from('game_card_reservations').delete().eq('game_code', gId).lt('created_at', new Date(Date.now() - 600000).toISOString()); } catch {}
     const { data: reservations } = await supabase.from('game_card_reservations').select('card_number, user_id').eq('game_code', gId);
     if (reservations && reservations.length > 0) {
-      setTakenCards(reservations.filter(r => r.user_id !== profile?.id).map(r => r.card_number));
+      const otherCards = reservations.filter(r => r.user_id !== profile?.id).map(r => r.card_number);
+      setTakenCards(otherCards);
       setLobbyPlayerCount(new Set(reservations.map(r => r.user_id)).size);
-    } else { setTakenCards([]); setLobbyPlayerCount(0); }
+    } else {
+      setTakenCards([]);
+      const { data: existingGame } = await supabase.from('games').select('id').eq('code', gId).maybeSingle();
+      if (existingGame) {
+        const { count } = await supabase.from('game_players').select('*', { count: 'exact', head: true }).eq('game_id', existingGame.id);
+        setLobbyPlayerCount(count || 0);
+      } else {
+        setLobbyPlayerCount(0);
+      }
+    }
   }, [profile?.id]);
 
   useEffect(() => { if (!selectedRoom || !gameId || inGame) return; refreshGameState(gameId); }, [selectedRoom?.id, gameId, inGame, refreshGameState]);
@@ -316,10 +326,26 @@ function HomePage() {
     const uid = profile?.id;
     if (isSelected) {
       setSelectedCards(prev => { const next = prev.filter(c => c !== num); setPreviewCard(next.length > 0 ? getSeededCard(next[next.length - 1], gameId) : []); return next; });
-      if (gameId && isValidUUID(uid)) await supabase.from('game_card_reservations').delete().eq('game_code', gameId).eq('user_id', uid).eq('card_number', num);
+      if (gameId && isValidUUID(uid)) {
+        try {
+          await supabase.from('game_card_reservations').delete().eq('game_code', gameId).eq('user_id', uid).eq('card_number', num);
+        } catch (e) {
+          console.error('Failed to release reservation:', e);
+        }
+      }
     } else {
       setSelectedCards(prev => { if (prev.length >= 2) return prev; const next = [...prev, num]; setPreviewCard(getSeededCard(num, gameId)); return next; });
-      if (gameId && isValidUUID(uid)) await supabase.from('game_card_reservations').insert({ game_code: gameId, user_id: uid, card_number: num });
+      if (gameId && isValidUUID(uid)) {
+        try {
+          const { error } = await supabase.from('game_card_reservations').insert({ game_code: gameId, user_id: uid, card_number: num });
+          if (error) {
+            console.error('Failed to reserve card:', error);
+            const remaining = selectedCards.filter(c => c !== num);
+            setSelectedCards(remaining);
+            setPreviewCard(remaining.length > 0 ? getSeededCard(remaining[remaining.length - 1], gameId) : []);
+          }
+        } catch {}
+      }
     }
   }, [gameId, profile?.id, selectedCards]);
 
