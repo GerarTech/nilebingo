@@ -130,68 +130,27 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'gameId and userId are required' }, { status: 400 });
       }
 
-      const { data: game, error: gameError } = await supabase
-        .from('games')
-        .select('*')
-        .eq('id', gameId)
-        .single();
+      const { data: atomicResult, error: atomicError } = await supabase.rpc('atomic_validate_win', {
+        p_game_id: gameId,
+        p_user_id: userId,
+      });
 
-      if (gameError || !game) {
-        return NextResponse.json({ error: 'Game not found' }, { status: 404 });
+      if (atomicError) {
+        console.error('atomic_validate_win error:', atomicError);
+        return NextResponse.json({ error: 'Validation failed' }, { status: 500 });
       }
 
-      if (game.status === 'finished') {
-        return NextResponse.json({ error: 'Game already finished' }, { status: 400 });
+      const result = atomicResult as any;
+      if (!result.success) {
+        const resp: any = { win: false, message: result.error };
+        if (result.winner_id) resp.winner_id = result.winner_id;
+        return NextResponse.json(resp, { status: 400 });
       }
 
-      const { data: gamePlayer, error: playerError } = await supabase
-        .from('game_players')
-        .select('*')
-        .eq('game_id', gameId)
-        .eq('user_id', userId)
-        .single();
+      const winAmount = Number(result.win_amount) || 0;
+      const playerCount = Number(result.player_count) || 1;
 
-      if (playerError || !gamePlayer) {
-        return NextResponse.json({ error: 'Player not found in this game' }, { status: 404 });
-      }
-
-      const card: number[][] = gamePlayer.card;
-      const drawnNumbers: number[] = game.drawn_numbers || [];
-
-      const marked = card.map(row =>
-        row.map(cell => cell === 0 || drawnNumbers.includes(cell))
-      );
-
-      const rowWin = marked.some(row => row.every(cell => cell));
-      const colWin = marked[0].some((_, colIdx) => marked.every(row => row[colIdx]));
-
-      if (!rowWin && !colWin) {
-        return NextResponse.json({ win: false, message: 'No winning pattern found' });
-      }
-
-      const numbersMatched = card
-        .flat()
-        .filter(cell => cell !== 0 && drawnNumbers.includes(cell))
-        .length;
-
-      const { data: gamePlayers } = await supabase
-        .from('game_players')
-        .select('user_id')
-        .eq('game_id', gameId)
-        .eq('is_watching', false);
-
-      const playerCount = gamePlayers ? gamePlayers.length : 1;
-      const winAmount = Math.floor(game.prize_pool / playerCount);
-
-      await supabase
-        .from('games')
-        .update({
-          status: 'finished',
-          winner_id: userId,
-        })
-        .eq('id', gameId);
-
-      await supabase.from('game_card_reservations').delete().eq('game_code', game.code);
+      const { data: profile } = await supabase.from('profiles').select('telegram_id, first_name').eq('id', userId).single();
 
       const newMain = await supabase.rpc('adjust_main_balance', { p_user_id: userId, p_amount: winAmount });
       if (newMain.error) console.error('adjust_main_balance error:', newMain.error);
@@ -201,32 +160,13 @@ export async function POST(request: NextRequest) {
         type: 'win',
         amount: winAmount,
         status: 'completed',
-        reference: `WIN-${game.code}`,
+        reference: `WIN-${gameId}`,
       });
 
       await supabase.from('game_players').update({ auto_mark: true }).eq('game_id', gameId).eq('user_id', userId);
 
-      await supabase.from('game_history').insert({
-        game_id: gameId,
-        user_id: userId,
-        stake: 0,
-        win_amount: winAmount,
-        numbers_matched: numbersMatched,
-      });
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('telegram_id, first_name')
-        .eq('id', userId)
-        .single();
-
       if (profile?.telegram_id && botToken) {
-        const { data: players } = await supabase.from('game_players').select('user_id').eq('game_id', gameId).eq('is_watching', false);
-        const playerCount = players ? players.length : 0;
-        const { data: winnerProfile } = await supabase.from('profiles').select('first_name, username').eq('id', userId).single();
-        const winnerName = winnerProfile?.first_name || winnerProfile?.username || 'Player';
-        const statsMsg = `🎉 *BINGO WIN!*\n\nCongratulations ${profile.first_name || 'Player'}! You won *${winAmount.toLocaleString()} ETB* in game #${game.code}!\n\n📊 *Game Stats:*\n  🆔 Game ID: ${game.code}\n  👥 Total Players: ${playerCount}\n  💰 Prize Pool: ${Number(game.prize_pool || 0).toLocaleString()} ETB\n  🏆 Winner: ${winnerName}\n\nKeep playing and winning! 🍀`;
-        await tgSend(botToken, profile.telegram_id, statsMsg, 'Markdown');
+        await tgSend(botToken, profile.telegram_id, `🎉 *BINGO WIN!*\n\nCongratulations ${profile.first_name || 'Player'}! You won *${winAmount.toLocaleString()} ETB*!\n\nKeep playing and winning! 🍀`);
       }
 
       if (botToken) {
@@ -237,7 +177,7 @@ export async function POST(request: NextRequest) {
         success: true,
         win: true,
         winAmount,
-        numbersMatched,
+        numbersMatched: 0,
         message: `You won ${winAmount.toLocaleString()} ETB!`,
       });
     }
@@ -288,10 +228,6 @@ export async function POST(request: NextRequest) {
           win_amount: 0,
           numbers_matched: numbersMatched,
         });
-      }
-
-      if (botToken) {
-        await sendGameStats(botToken, gameId);
       }
 
       return NextResponse.json({

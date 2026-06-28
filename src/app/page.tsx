@@ -500,14 +500,25 @@ function HomePage() {
       try {
         const { data: g } = await supabase.from('games').select('id, prize_pool').eq('code', gameId).maybeSingle();
         if (g) {
-          const { count } = await supabase.from('game_players').select('*', { count: 'exact', head: true }).eq('game_id', g.id);
-          if (count && count !== liveCountRef.current) { liveCountRef.current = count; setLivePlayerCount(count); }
+          const { count } = await supabase.from('game_players').select('*', { count: 'exact', head: true }).eq('game_id', g.id).eq('is_watching', false);
+          if (count !== null && count !== liveCountRef.current) { liveCountRef.current = count; setLivePlayerCount(count); }
           if (g.prize_pool) setPrizePool(Number(g.prize_pool));
         }
       } catch {}
     }, 1000);
     return () => clearInterval(poll);
   }, [inGame, gameId]);
+
+  // ============ CARD RESERVATION POLLING (1s fallback) ============
+  const reservationPollRef = useRef<NodeJS.Timeout | null>(null);
+  useEffect(() => {
+    if (!selectedRoom || !gameId || inGame) {
+      if (reservationPollRef.current) { clearInterval(reservationPollRef.current); reservationPollRef.current = null; }
+      return;
+    }
+    reservationPollRef.current = setInterval(() => { refreshGameState(gameId); }, 1000);
+    return () => { if (reservationPollRef.current) { clearInterval(reservationPollRef.current); reservationPollRef.current = null; } };
+  }, [selectedRoom?.id, gameId, inGame, refreshGameState]);
 
   // ============ AUTO-MARK ============
   useEffect(() => {
@@ -541,15 +552,33 @@ function HomePage() {
     const stake = selectedStake || 10;
     let playerCount = livePlayerCount;
     try {
-      const { data: g } = await supabase.from('games').select('id').eq('code', gameId).maybeSingle();
+      const { data: g } = await supabase.from('games').select('id, prize_pool').eq('code', gameId).maybeSingle();
       if (g) {
-        const { count } = await supabase.from('game_players').select('*', { count: 'exact', head: true }).eq('game_id', g.id);
+        const { count } = await supabase.from('game_players').select('*', { count: 'exact', head: true }).eq('game_id', g.id).eq('is_watching', false);
         if (count && count > playerCount) playerCount = count;
       }
     } catch {}
     const jackpot = Math.round(stake * (1 + (playerCount - 1) * (1 - commissionRate / 100)));
     updateBalance(jackpot, 'main_balance');
-  }, [gameId, selectedStake, livePlayerCount, addGameToHistory, updateBalance, commissionRate]);
+
+    if (profile?.id) {
+      try {
+        const res = await fetch('/api/public/game/engine', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'validate_win', gameId, userId: profile.id }),
+        });
+        const data = await res.json();
+        if (data.error === 'Game already finished') {
+          setShowWinModal(false);
+          const winnerName = data.winner_id === profile.id ? (profile.first_name || 'You') : 'Another Player';
+          setOpponentWinner(winnerName);
+          if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+          addGameToHistory(gameId, selectedStake || 10, 'loss');
+        }
+      } catch {}
+    }
+  }, [gameId, selectedStake, livePlayerCount, addGameToHistory, updateBalance, commissionRate, profile?.id]);
 
   // ============ SELECT STAKE / ROOM ============
   const selectStake = useCallback((stake: number) => {

@@ -559,13 +559,14 @@ export async function POST(request: NextRequest) {
       deposit: '💳 Deposit',
       withdraw: '💸 Withdraw',
       contact: '📞 Contact Us',
-      instructions: '📜 Game Instruction',
+      instructions: '📜 How to Play',
       transactions: '📒 Transactions',
-      winning_patterns: '🎯 Winning patterns',
+      winning_patterns: '🎯 Winning Patterns',
       language: '🌐 Language',
       mycode: '🔗 My Invite Code',
+      stats: '📊 Stats',
     };
-    
+
     const plainCommands = {
       play: 'play',
       check_balance: 'check_balance',
@@ -577,11 +578,30 @@ export async function POST(request: NextRequest) {
       winning_patterns: 'winning_patterns',
       language: 'language',
       mycode: 'mycode',
+      stats: 'stats',
     };
     
     const userCommands = { ...defaultCommands, ...commands };
+    const SLASH_TO_KEY: Record<string, string> = {
+      '/play': 'play',
+      '/balance': 'check_balance',
+      '/deposit': 'deposit',
+      '/withdraw': 'withdraw',
+      '/instructions': 'instructions',
+      '/transactions': 'transactions',
+      '/patterns': 'winning_patterns',
+      '/language': 'language',
+      '/support': 'contact',
+      '/stats': 'stats',
+    };
     const matchesCommand = (cmdText: string, plainText: string) => {
-      return text === cmdText || text === plainText || text.startsWith(cmdText.split(' ')[0]);
+      if (SLASH_TO_KEY[text] === plainText) return true;
+      if (text === cmdText || text === plainText) return true;
+      const dicts = [EN as Record<string, string>, AM as Record<string, string>];
+      const localized = dicts.map(d => d[plainText]).filter(Boolean);
+      if (localized.includes(text)) return true;
+      if (text.startsWith(cmdText.split(' ')[0])) return true;
+      return false;
     };
 
     // Handle callback queries
@@ -614,6 +634,27 @@ export async function POST(request: NextRequest) {
         const maxAmt = bank?.max || '5000';
         const msgText = getText(lang, 'deposit_amount_prompt').replace('{min}', '50').replace('{max}', maxAmt);
         await sendMessage(chatId, msgText, { parse_mode: 'Markdown', reply_markup: { keyboard: [[{ text: 'Cancel ❌' }]], resize_keyboard: true, one_time_keyboard: false } });
+      } else if (data.startsWith('deposit_cbe_amount_')) {
+        const amount = parseFloat(data.replace('deposit_cbe_amount_', ''));
+        if (!isNaN(amount) && amount > 0) {
+          await answerCallbackQuery(callbackQuery.id, 'CBE selected');
+          await supabase.from('profiles').update({ telegram_state: 'waiting_deposit_txid', telegram_state_data: { bank_id: 'cbe', amount } }).eq('telegram_id', String(from.id));
+          const cbeMax = commands.cbe_max || '5000';
+          const bankName = commands.cbe_name || 'Nile Bingo';
+          const account = commands.cbe_account || '1000256789123';
+          const msgText = getText(lang, 'deposit_txid_prompt').replace('{bank_name}', bankName).replace('{account}', account).replace('{recipient}', bankName).replace('{amount}', String(amount));
+          await sendMessage(chatId, `✅ *Amount confirmed: ${amount.toLocaleString()} ETB*\n\n${msgText}`, { parse_mode: 'Markdown', reply_markup: { keyboard: [[{ text: 'Cancel ❌' }]], resize_keyboard: true, one_time_keyboard: false } });
+        }
+      } else if (data.startsWith('deposit_telebirr_amount_')) {
+        const amount = parseFloat(data.replace('deposit_telebirr_amount_', ''));
+        if (!isNaN(amount) && amount > 0) {
+          await answerCallbackQuery(callbackQuery.id, 'Telebirr selected');
+          await supabase.from('profiles').update({ telegram_state: 'waiting_deposit_txid', telegram_state_data: { bank_id: 'telebirr', amount } }).eq('telegram_id', String(from.id));
+          const telebirrNumber = commands.telebirr_number || '0918281072';
+          const telebirrName = commands.telebirr_name || 'Melkie';
+          const msgText = getText(lang, 'deposit_txid_prompt').replace('{bank_name}', 'Telebirr').replace('{account}', telebirrNumber).replace('{recipient}', telebirrName).replace('{amount}', String(amount));
+          await sendMessage(chatId, `✅ *Amount confirmed: ${amount.toLocaleString()} ETB*\n\n${msgText}`, { parse_mode: 'Markdown', reply_markup: { keyboard: [[{ text: 'Cancel ❌' }]], resize_keyboard: true, one_time_keyboard: false } });
+        }
       } else if (data.startsWith('pub_approve_')) {
         const txId = data.replace('pub_approve_', '');
         await answerCallbackQuery(callbackQuery.id, 'Processing...');
@@ -1226,8 +1267,53 @@ export async function POST(request: NextRequest) {
           ]
         }
       });
+    } else if (matchesCommand(userCommands.stats, plainCommands.stats)) {
+      let playedCount = 0, totalWins = 0, totalSpent = 0;
+      if (userProfile) {
+        const { count: gpCount } = await supabase
+          .from('game_players')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', userProfile.id)
+          .eq('is_watching', false);
+        playedCount = gpCount || 0;
+        const { data: txs } = await supabase
+          .from('transactions')
+          .select('type, amount')
+          .eq('user_id', userProfile.id)
+          .in('type', ['bet', 'win']);
+        if (txs) {
+          for (const t of txs) {
+            if (t.type === 'bet') totalSpent += Number(t.amount) || 0;
+            if (t.type === 'win') totalWins += Number(t.amount) || 0;
+          }
+        }
+      }
+      const statsMsg = `*📊 Your Game Stats*\n\n🎮 Games Played: *${playedCount}*\n💰 Total Bet: *${totalSpent.toLocaleString()} ETB*\n🏆 Total Won: *${totalWins.toLocaleString()} ETB*`;
+      await sendMessage(chatId, statsMsg, { parse_mode: 'Markdown' });
     } else {
-      await sendMessage(chatId, 'Use the buttons below:', getMainKeyboard(lang));
+      const trimmed = text.trim();
+      const parsed = parseFloat(trimmed.replace(/,/g, ''));
+      if (!isNaN(parsed) && parsed > 0 && userProfile) {
+        const cbeMax = Number(commands.cbe_max) || 5000;
+        const telebirrMax = Number(commands.telebirr_max) || 1000;
+        const maxAllowed = Math.max(cbeMax, telebirrMax);
+        if (parsed > maxAllowed) {
+          await sendMessage(chatId, `❌ Maximum deposit is ${maxAllowed.toLocaleString()} ETB. Please enter a smaller amount.`, { parse_mode: 'Markdown', reply_markup: getMainKeyboard(lang) });
+        } else {
+          const msgText = getText(lang, 'deposit_choose').replace('{min}', '10').replace('{max}', String(maxAllowed));
+          await sendMessage(chatId, `💵 *Amount Received: ${parsed.toLocaleString()} ETB*\n\nNow select your payment method below:`, {
+            parse_mode: 'Markdown',
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: '🏦 CBE Birr', callback_data: `deposit_cbe_amount_${parsed}` }],
+                [{ text: '📱 Telebirr', callback_data: `deposit_telebirr_amount_${parsed}` }],
+              ]
+            }
+          });
+        }
+      } else {
+        await sendMessage(chatId, 'Use the buttons below:', getMainKeyboard(lang));
+      }
     }
 
     return NextResponse.json({ ok: true });

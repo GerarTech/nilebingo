@@ -72,7 +72,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const setLanguage = useCallback(async (lang: Language) => {
     setState(prev => ({ ...prev, language: lang }));
     if (state.profile) {
-      await supabase.from('profiles').update({ language: lang }).eq('id', state.profile.id);
+      try {
+        await fetch('/api/public/init', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: state.profile.id, language: lang }),
+        });
+      } catch (e) {
+        console.warn('Could not persist language:', e);
+      }
     }
   }, [state.profile]);
 
@@ -81,136 +89,57 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshWallet = useCallback(async () => {
-    if (!state.profile) return;
-    const { data } = await supabase
-      .from('wallets')
-      .select('*')
-      .eq('user_id', state.profile.id)
-      .single();
-    if (data) setState(prev => ({ ...prev, wallet: data as Wallet }));
-  }, [state.profile]);
+    if (isValidUUID(profileRef.current?.id)) {
+      try {
+        const res = await fetch(`/api/public/wallet?userId=${profileRef.current!.id}`);
+        const data = await res.json();
+        if (data.wallet) setState(prev => ({ ...prev, wallet: data.wallet as Wallet }));
+      } catch (e) {
+        console.warn('Could not refresh wallet:', e);
+      }
+    }
+  }, []);
 
   const initialize = useCallback(async (telegramId: string, firstName?: string, username?: string) => {
     setState(prev => ({ ...prev, loading: true }));
-    
+
     try {
-      // Try to fetch existing profile
-      const { data: existingProfile, error: fetchError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('telegram_id', telegramId)
-        .maybeSingle();
+      const res = await fetch('/api/public/init', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ telegramId, firstName, username }),
+      });
 
-      if (fetchError) throw fetchError;
+      if (!res.ok) throw new Error('Init API returned ' + res.status);
 
-      let profile = existingProfile as Profile | null;
+      const data = await res.json();
 
-      if (!profile) {
-        // Try to create new profile
-        const { data: newProfile, error: createError } = await supabase
-          .from('profiles')
-          .insert({
-            telegram_id: telegramId,
-            first_name: firstName || 'Player',
-            username: username || 'Player',
-            language: 'en',
-            verified: false,
-          })
-          .select()
-          .single();
-
-        if (createError) throw createError;
-
-        if (newProfile) {
-          profile = newProfile as Profile;
-          // Try to create wallet
-          await supabase.from('wallets').insert({
-            user_id: profile.id,
-            main_balance: 0,
-            play_balance: 0,
-          });
-        }
-      } else {
-        // Update first_name and username if they are provided and differ
-        const updates: any = {};
-        if (firstName && profile.first_name !== firstName) updates.first_name = firstName;
-        if (username && profile.username !== username) updates.username = username;
-        
-        if (Object.keys(updates).length > 0) {
-          const { data: updatedProfile } = await supabase
-            .from('profiles')
-            .update(updates)
-            .eq('id', profile.id)
-            .select()
-            .single();
-          if (updatedProfile) {
-            profile = updatedProfile as Profile;
-          }
-        }
-      }
-
-      if (profile) {
-        const { data: wallet } = await supabase
-          .from('wallets')
-          .select('*')
-          .eq('user_id', profile.id)
-          .single();
-
+      if (data.profile) {
         setState(prev => ({
           ...prev,
-          profile,
-          wallet: wallet as Wallet | null,
-          language: (profile?.language as Language) || 'en',
+          profile: data.profile as Profile,
+          wallet: data.wallet as Wallet | null,
+          language: (data.profile.language as Language) || 'en',
           loading: false,
           initialized: true,
         }));
       } else {
-        // Profile fetch/creation failed completely - show app with defaults
         setState(prev => ({
           ...prev,
           loading: false,
           initialized: true,
-          profile: {
-            id: 'local',
-            telegram_id: telegramId,
-            username: username || 'Player',
-            first_name: firstName || 'Player',
-            language: 'en',
-            verified: false,
-            created_at: new Date().toISOString(),
-          } as Profile,
-          wallet: {
-            id: 'local',
-            user_id: 'local',
-            main_balance: 0,
-            play_balance: 0,
-            created_at: new Date().toISOString(),
-          } as Wallet,
+          profile: fallbackProfile(telegramId),
+          wallet: fallbackWallet(),
         }));
       }
     } catch (err) {
-      console.warn('Supabase initialization failed, using local fallback:', err);
-      // Show app with default data regardless of error
+      console.warn('Init API failed, using local fallback:', err);
       setState(prev => ({
         ...prev,
         loading: false,
         initialized: true,
-        profile: {
-          id: 'local-' + Date.now(),
-          telegram_id: telegramId,
-          username: username || 'Player',
-          first_name: firstName || 'Player',
-          language: 'en',
-          verified: false,
-          created_at: new Date().toISOString(),
-        } as Profile,
-        wallet: {
-          id: 'local-' + Date.now(),
-          user_id: 'local-' + Date.now(),
-          main_balance: 0,
-          play_balance: 0,
-          created_at: new Date().toISOString(),
-        } as Wallet,
+        profile: fallbackProfile(telegramId),
+        wallet: fallbackWallet(),
       }));
     }
   }, []);
@@ -236,16 +165,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const profile = profileRef.current;
     if (profile && isValidUUID(profile.id)) {
       try {
-        const rpcMethod = type === 'main_balance' ? 'adjust_main_balance' : 'adjust_play_balance';
-        const result = await (supabase as any).rpc(rpcMethod, {
-          p_user_id: profile.id,
-          p_amount: amount
+        const res = await fetch('/api/public/wallet', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: profile.id, amount, type }),
         });
-        if (result.error) {
-          console.warn(`Could not persist balance update via ${rpcMethod}:`, result.error);
+        const data = await res.json();
+        if (data.wallet) {
+          setState(prev => ({ ...prev, wallet: data.wallet as Wallet }));
         }
       } catch (e) {
-        console.warn('Could not persist wallet balance update to Supabase:', e);
+        console.warn('Could not persist wallet balance update:', e);
       }
     }
   }, []);
@@ -257,10 +187,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       profile: prev.profile ? { ...prev.profile, photo_url: avatar } : null,
     }));
     try {
-      await supabase
-        .from('profiles')
-        .update({ photo_url: avatar })
-        .eq('id', state.profile.id);
+      await fetch('/api/public/init', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: state.profile.id, avatar }),
+      });
     } catch (e) {
       console.warn('Could not persist avatar update to Supabase:', e);
     }

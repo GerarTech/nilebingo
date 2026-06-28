@@ -11,6 +11,24 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 const TG_API = `https://api.telegram.org/bot${botToken}`;
 
+const ADMIN_BOT_COMMANDS = [
+  { command: 'start', description: 'Start the admin bot' },
+  { command: 'admin_stats', description: 'Dashboard statistics' },
+  { command: 'admin_users', description: 'Recent users list' },
+  { command: 'admin_pending', description: 'Pending transactions' },
+  { command: 'admin_games', description: 'Active matches and winners' },
+  { command: 'appoint', description: 'Appoint winner: /appoint <gameId> <cardNum> [afterBalls]' },
+  { command: 'admin_help', description: 'Show all admin commands' },
+];
+
+async function registerAdminBotCommands() {
+  try {
+    await tgCall('setMyCommands', { commands: ADMIN_BOT_COMMANDS });
+  } catch (e) {
+    console.error('Admin bot setMyCommands error:', e);
+  }
+}
+
 async function tgCall(method: string, payload: any = {}): Promise<any> {
   try {
     const res = await fetch(`${TG_API}/${method}`, {
@@ -265,6 +283,7 @@ export async function POST(request: NextRequest) {
 
     // Handle /start command
     if (text === '/start') {
+      await registerAdminBotCommands();
       await sendMessage(chatId, '🔐 Admin Bot Ready\n\nUse the menu below or type /admin_help for commands:', {
         reply_markup: {
           keyboard: [
