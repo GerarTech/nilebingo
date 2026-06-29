@@ -9,8 +9,11 @@ function isValidUUID(id: string | undefined): boolean {
 }
 
 function fallbackProfile(id: string): Profile {
+  const cleanId = String(id).replace(/[^0-9]/g, '');
+  const paddedId = cleanId.padStart(12, '0').slice(-12);
+  const uuid = `00000000-0000-4000-8000-${paddedId}`;
   return {
-    id: 'local-' + Date.now(),
+    id: uuid,
     telegram_id: id,
     username: 'Player',
     first_name: 'Player',
@@ -20,10 +23,13 @@ function fallbackProfile(id: string): Profile {
   };
 }
 
-function fallbackWallet(): Wallet {
+function fallbackWallet(userId: string): Wallet {
+  const cleanId = String(userId).replace(/[^0-9a-f]/gi, '');
+  const paddedId = cleanId.padStart(12, '0').slice(-12);
+  const uuid = `00000000-0000-4000-9000-${paddedId}`;
   return {
-    id: 'local-' + Date.now(),
-    user_id: 'local-' + Date.now(),
+    id: uuid,
+    user_id: userId,
     main_balance: 0,
     play_balance: 0,
     created_at: new Date().toISOString(),
@@ -124,22 +130,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
           initialized: true,
         }));
       } else {
+        const fbProf = fallbackProfile(telegramId);
         setState(prev => ({
           ...prev,
           loading: false,
           initialized: true,
-          profile: fallbackProfile(telegramId),
-          wallet: fallbackWallet(),
+          profile: fbProf,
+          wallet: fallbackWallet(fbProf.id),
         }));
       }
     } catch (err) {
       console.warn('Init API failed, using local fallback:', err);
+      const fbProf = fallbackProfile(telegramId);
       setState(prev => ({
         ...prev,
         loading: false,
         initialized: true,
-        profile: fallbackProfile(telegramId),
-        wallet: fallbackWallet(),
+        profile: fbProf,
+        wallet: fallbackWallet(fbProf.id),
       }));
     }
   }, []);

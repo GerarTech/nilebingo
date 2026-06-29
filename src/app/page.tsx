@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp, AppProvider } from '@/lib/hooks/useApp';
@@ -256,22 +256,26 @@ function HomePage() {
 
   // ============ REALTIME RESERVATIONS ============
   const refreshGameState = useCallback(async (gId: string) => {
-    if (!gId || !isValidUUID(profile?.id)) return;
-    try { await supabase.from('game_card_reservations').delete().eq('game_code', gId).lt('created_at', new Date(Date.now() - 600000).toISOString()); } catch {}
-    const { data: reservations } = await supabase.from('game_card_reservations').select('card_number, user_id').eq('game_code', gId);
-    if (reservations && reservations.length > 0) {
-      const otherCards = reservations.filter(r => r.user_id !== profile?.id).map(r => r.card_number);
-      setTakenCards(otherCards);
-      setLobbyPlayerCount(new Set(reservations.map(r => r.user_id)).size);
-    } else {
-      setTakenCards([]);
-      const { data: existingGame } = await supabase.from('games').select('id').eq('code', gId).maybeSingle();
-      if (existingGame) {
-        const { count } = await supabase.from('game_players').select('*', { count: 'exact', head: true }).eq('game_id', existingGame.id);
-        setLobbyPlayerCount(count || 0);
-      } else {
-        setLobbyPlayerCount(0);
+    if (!gId || !profile || !isValidUUID(profile.id)) return;
+    try {
+      const res = await fetch(`/api/public/game/lobby?gameId=${gId}&userId=${profile.id}`);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      if (data.success) {
+        const reservations = data.reservations || [];
+        const otherCards = reservations.filter((r: any) => r.user_id !== profile.id).map((r: any) => r.card_number);
+        setTakenCards(otherCards.filter((n: number) => n > 0));
+
+        const uniqueUserIds = new Set(reservations.map((r: any) => r.user_id));
+        setLobbyPlayerCount(Math.max(uniqueUserIds.size, data.livePlayerCount || 0));
+
+        const myRes = reservations.filter((r: any) => r.user_id === profile.id).map((r: any) => r.card_number);
+        const activeMyRes = myRes.filter((n: number) => n > 0);
+        setSelectedCards(activeMyRes);
+        setPreviewCard(activeMyRes.length > 0 ? getSeededCard(activeMyRes[activeMyRes.length - 1], gId) : []);
       }
+    } catch (e) {
+      console.error('Failed to refresh game state:', e);
     }
   }, [profile?.id]);
 
@@ -300,24 +304,22 @@ function HomePage() {
   const registerLiveGame = useCallback(async (gId: string, stakeAmt: number, isSpec: boolean, cardsToPlay: number[][][]) => {
     if (!profile || !isValidUUID(profile.id)) return;
     try {
-      let stakeId: string | null = null;
-      const { data: stakeData } = await supabase.from('stakes').select('id').eq('amount', stakeAmt).limit(1);
-      if (stakeData && stakeData.length > 0) stakeId = stakeData[0].id;
-      else { const { data: newStake } = await supabase.from('stakes').insert({ amount: stakeAmt, status: 'open' }).select('id').single(); if (newStake) stakeId = newStake.id; }
-      let dbGameId: string;
-      const { data: existingGame } = await supabase.from('games').select('id, status').eq('code', gId).maybeSingle();
-      if (existingGame) { dbGameId = existingGame.id; if (existingGame.status !== 'active') await supabase.from('games').update({ status: 'active' }).eq('id', dbGameId); }
-      else {
-        const { data: newGame, error: err } = await supabase.from('games').insert({ stake_id: stakeId, code: gId, status: 'active', prize_pool: 0, called_count: 0, drawn_numbers: [] }).select('id').single();
-        if (err || !newGame) return;
-        dbGameId = newGame.id;
-      }
-      const cardsToStore = cardsToPlay.length > 0 ? cardsToPlay : [generateCard()];
-      for (let i = 0; i < Math.min(cardsToStore.length, 1); i++) {
-        await supabase.from('game_players').upsert({ game_id: dbGameId, user_id: profile.id, card: cardsToStore[i], card_number: selectedCards[i] || 0, is_watching: isSpec, auto_mark: autoMark }, { onConflict: 'game_id,user_id' });
-      }
-      try { await supabase.rpc('update_game_prize_pool', { p_game_code: gId, p_stake_amt: stakeAmt }); } catch {}
-    } catch {}
+      await fetch('/api/public/game/lobby', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'register_game',
+          gameId: gId,
+          userId: profile.id,
+          stakeAmount: stakeAmt,
+          isSpectator: isSpec,
+          autoMark,
+          selectedCards,
+        }),
+      });
+    } catch (e) {
+      console.error('Failed to register live game on server:', e);
+    }
   }, [profile, autoMark, selectedCards]);
 
   // ============ CARD TOGGLE ============
@@ -327,31 +329,75 @@ function HomePage() {
 
     const isSelected = selectedCards.includes(num);
 
-    if (isSelected) {
-      await supabase.from('game_card_reservations').delete().eq('game_code', gameId).eq('user_id', uid).eq('card_number', num);
-      setSelectedCards(prev => {
-        const next = prev.filter(c => c !== num);
-        setPreviewCard(next.length > 0 ? getSeededCard(next[next.length - 1], gameId) : []);
-        return next;
+    // Limit check on client side
+    if (!isSelected && selectedCards.length >= 2) {
+      alert(t ? t('max_2_cards') : 'Maximum of 2 cards allowed');
+      return;
+    }
+
+    // Capture previous states for optimistic fallback
+    const prevSelected = [...selectedCards];
+    const prevPreview = [...previewCard];
+    const prevTaken = [...takenCards];
+
+    // 1. Optimistic state updates
+    const nextSelected = isSelected
+      ? prevSelected.filter(c => c !== num)
+      : [...prevSelected, num];
+
+    setSelectedCards(nextSelected);
+    setPreviewCard(nextSelected.length > 0 ? getSeededCard(nextSelected[nextSelected.length - 1], gameId) : []);
+
+    try {
+      const res = await fetch('/api/public/game/lobby', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'toggle_card',
+          gameId,
+          userId: uid,
+          cardNumber: num,
+        }),
       });
-    } else {
-      if (selectedCards.length >= 2) return;
-      const { error } = await supabase.from('game_card_reservations').insert({ game_code: gameId, user_id: uid, card_number: num });
-      if (error) {
-        console.error('Failed to reserve card:', error);
-        const errMsg = (error as any)?.message || '';
-        if (errMsg.includes('unique') || errMsg.includes('23505')) {
+
+      const data = await res.json();
+      if (!res.ok) {
+        // Revert to previous states
+        setSelectedCards(prevSelected);
+        setPreviewCard(prevPreview);
+        setTakenCards(prevTaken);
+
+        if (res.status === 409 || data.error?.includes('taken') || data.error?.includes('unique') || data.error?.includes('23505')) {
           alert('This card was just taken by another player. Please choose a different one.');
+        } else if (res.status === 400 && data.error?.includes('Maximum')) {
+          alert('Maximum of 2 cards allowed');
+        } else {
+          console.error('Failed to toggle card:', data.error);
         }
+        await refreshGameState(gameId);
         return;
       }
-      setSelectedCards(prev => {
-        const next = [...prev, num];
-        setPreviewCard(getSeededCard(num, gameId));
-        return next;
-      });
+
+      if (data.success) {
+        const reservations = data.reservations || [];
+        const myRes = reservations.filter((r: any) => r.user_id === uid).map((r: any) => r.card_number);
+        const activeMyRes = myRes.filter((n: number) => n > 0);
+        setSelectedCards(activeMyRes);
+        setPreviewCard(activeMyRes.length > 0 ? getSeededCard(activeMyRes[activeMyRes.length - 1], gameId) : []);
+
+        const otherCards = reservations.filter((r: any) => r.user_id !== uid).map((r: any) => r.card_number);
+        setTakenCards(otherCards.filter((n: number) => n > 0));
+        setLobbyPlayerCount(new Set(reservations.map((r: any) => r.user_id)).size);
+      }
+    } catch (e) {
+      console.error('Error toggling card:', e);
+      // Revert to previous states
+      setSelectedCards(prevSelected);
+      setPreviewCard(prevPreview);
+      setTakenCards(prevTaken);
+      await refreshGameState(gameId);
     }
-  }, [gameId, profile?.id, selectedCards]);
+  }, [gameId, profile?.id, selectedCards, previewCard, takenCards, refreshGameState]);
 
   // ============ START GAMEPLAY ============
   const startGameplay = useCallback(async (isSpectateMode: boolean) => {
@@ -370,17 +416,8 @@ function HomePage() {
 
     setUserMarkedNumbers([0]); setGameId(activeGameId); setDrawnNumbers([]); drawnRef.current = [];
     setRecentCalled([]); setOpponentWinner(null);
-    await registerLiveGame(activeGameId, entryFee, isSpectateMode, cardsToPlay);
 
-    try {
-      const { data: existingGame } = await supabase.from('games').select('id, prize_pool').eq('code', activeGameId).maybeSingle();
-      if (existingGame) {
-        const { count } = await supabase.from('game_players').select('*', { count: 'exact', head: true }).eq('game_id', existingGame.id);
-        setLivePlayerCount((count || 1));
-        if (existingGame.prize_pool) setPrizePool(Number(existingGame.prize_pool));
-      } else { const { data: reservations } = await supabase.from('game_card_reservations').select('user_id').eq('game_code', activeGameId); if (reservations) setLivePlayerCount(new Set(reservations.map(r => r.user_id)).size || 1); else setLivePlayerCount(selectedRoom.players); }
-    } catch { setLivePlayerCount(selectedRoom.players); }
-
+    // IMMEDIATELY transition to active gameplay screen to eliminate ANY network-related lag
     const virtualCompetitors: VirtualPlayer[] = [];
     let seed = 0;
     for (let i = 0; i < activeGameId.length; i++) seed = (seed * 31 + activeGameId.charCodeAt(i)) & 0xffffffff;
@@ -396,7 +433,30 @@ function HomePage() {
     setDeterministicSequence(sequence);
 
     setIsRegistered(false); setIsSpectatingReady(false);
-  }, [selectedRoom, selectedCards, registerLiveGame, appointedCard, getDeterministicDrawSequence]);
+
+    // Perform game registration and statistics fetching asynchronously in the background
+    (async () => {
+      try {
+        await registerLiveGame(activeGameId, entryFee, isSpectateMode, cardsToPlay);
+        const { data: existingGame } = await supabase.from('games').select('id, prize_pool').eq('code', activeGameId).maybeSingle();
+        if (existingGame) {
+          const { count } = await supabase.from('game_players').select('*', { count: 'exact', head: true }).eq('game_id', existingGame.id);
+          setLivePlayerCount(count || 1);
+          if (existingGame.prize_pool) setPrizePool(Number(existingGame.prize_pool));
+        } else {
+          const { data: reservations } = await supabase.from('game_card_reservations').select('user_id').eq('game_code', activeGameId);
+          if (reservations) {
+            setLivePlayerCount(new Set(reservations.map(r => r.user_id)).size || 1);
+          } else {
+            setLivePlayerCount(selectedRoom.players);
+          }
+        }
+      } catch (err) {
+        console.warn('Background registration or stats fetch failed:', err);
+        setLivePlayerCount(selectedRoom.players);
+      }
+    })();
+  }, [selectedRoom, selectedCards, registerLiveGame, appointedCard, getDeterministicDrawSequence, gameId]);
 
   // Sync refs for tick interval to avoid stale closure issues
   useEffect(() => {
@@ -626,10 +686,20 @@ function HomePage() {
   }, []);
 
   // ============ PLAY / REGISTER / LEAVE ============
-  const watchGame = useCallback(() => {
+  const watchGame = useCallback(async () => {
     setIsSpectatingReady(true);
     const uid = profile?.id;
-    if (gameId && isValidUUID(uid)) supabase.from('game_card_reservations').insert({ game_code: gameId, user_id: uid, card_number: -(Math.floor(Date.now() / 1000) % 100000) }).then();
+    if (gameId && isValidUUID(uid)) {
+      try {
+        await fetch('/api/public/game/lobby', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'watch_game', gameId, userId: uid }),
+        });
+      } catch (e) {
+        console.error('Failed to register watch:', e);
+      }
+    }
   }, [gameId, profile?.id]);
 
   const playWithCard = useCallback(() => {
@@ -644,22 +714,42 @@ function HomePage() {
     setIsRegistered(true);
   }, [selectedCards, selectedRoom, wallet, updateBalance]);
 
-  const unregisterLobby = useCallback(() => {
+  const unregisterLobby = useCallback(async () => {
     if (isRegistered) {
       const fee = selectedRoom ? selectedRoom.entry : 10;
       updateBalance(fee * selectedCards.length, 'play_balance');
       setIsRegistered(false);
     }
     const uid = profile?.id;
-    if (gameId && isValidUUID(uid)) supabase.from('game_card_reservations').delete().eq('game_code', gameId).eq('user_id', uid).then();
+    if (gameId && isValidUUID(uid)) {
+      try {
+        await fetch('/api/public/game/lobby', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'leave_game', gameId, userId: uid }),
+        });
+      } catch (e) {
+        console.error('Failed to leave game on server:', e);
+      }
+    }
     setIsSpectatingReady(false); setTakenCards([]); setLobbyPlayerCount(0);
   }, [isRegistered, selectedCards, selectedRoom, updateBalance, gameId, profile?.id]);
 
-  const leaveGame = useCallback(() => {
+  const leaveGame = useCallback(async () => {
     if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
     if (inGame && !isWatching && gameId && !showWinModal && !opponentWinner) addGameToHistory(gameId, selectedStake || 10, 'loss');
     const uid = profile?.id;
-    if (gameId && isValidUUID(uid)) supabase.from('game_card_reservations').delete().eq('game_code', gameId).eq('user_id', uid).then();
+    if (gameId && isValidUUID(uid)) {
+      try {
+        await fetch('/api/public/game/lobby', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'leave_game', gameId, userId: uid }),
+        });
+      } catch (e) {
+        console.error('Failed to leave game on server:', e);
+      }
+    }
     setInGame(false); setIsWatching(false); setGameCard([]); setDrawnNumbers([]);
     drawnRef.current = []; setSelectedStake(null); setSelectedCards([]); setRecentCalled([]);
     setGameId(''); setShowWinModal(false); setWinningCard([]); setWinningCells([]);
@@ -786,6 +876,7 @@ function HomePage() {
           onPlay={playWithCard}
           onUnregister={unregisterLobby}
           onDeposit={() => { setSelectedCards([]); setPreviewCard([]); setSelectedRoom(null); setWalletView('deposit'); setActiveTab('wallet'); }}
+          commissionRate={commissionRate}
         />
       );
     }

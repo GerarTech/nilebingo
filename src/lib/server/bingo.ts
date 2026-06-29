@@ -19,9 +19,11 @@ export function getSeededCard(cardNumber: number, gameId?: string): number[][] {
   const columns: number[][] = [];
   let gameSeed = 0;
   if (gameId) {
-    for (let i = 0; i < gameId.length; i++) gameSeed = ((gameSeed << 5) - gameSeed) + gameId.charCodeAt(i);
+    for (let i = 0; i < gameId.length; i++) {
+      gameSeed = ((gameSeed * 31 + gameId.charCodeAt(i)) >>> 0);
+    }
   }
-  const seed = cardNumber * 7919 + gameSeed;
+  const seed = ((cardNumber * 7919 + gameSeed) >>> 0);
 
   for (let col = 0; col < 5; col++) {
     const label = COLUMN_LABELS[col];
@@ -49,10 +51,11 @@ export function getSeededCard(cardNumber: number, gameId?: string): number[][] {
 
 // Seeded random for deterministic card generation
 function seededRandom(seed: number): () => number {
-  let s = seed;
+  let s = (seed >>> 0) % 2147483647;
+  if (s <= 0) s = 1;
   return () => {
     s = (s * 16807) % 2147483647;
-    return (s - 1) / 2147483646;
+    return s / 2147483647;
   };
 }
 
@@ -61,7 +64,9 @@ function seededShuffle<T>(array: T[], seed: number): T[] {
   const random = seededRandom(seed);
   for (let i = arr.length - 1; i > 0; i--) {
     const j = Math.floor(random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
+    if (j >= 0 && j < arr.length) {
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
   }
   return arr;
 }

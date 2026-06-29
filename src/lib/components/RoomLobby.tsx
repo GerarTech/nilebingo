@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import BingoGrid from './BingoGrid';
 import { getSeededCard } from '../server/bingo';
@@ -31,12 +31,14 @@ interface RoomLobbyProps {
   onPlay: () => void;
   onUnregister: () => void;
   onDeposit: () => void;
+  commissionRate: number;
 }
 
 export default function RoomLobby({
   room, gameId, selectedCards, takenCards, lobbyPlayerCount,
   previewCard, isRegistered, walletBalance, wallet, t,
   onBack, onToggleCard, onPlay, onUnregister, onDeposit,
+  commissionRate,
 }: RoomLobbyProps) {
   const cards = Array.from({ length: 100 }, (_, i) => i + 1);
   const fee = room.entry;
@@ -55,6 +57,32 @@ export default function RoomLobby({
               <span className="text-sm font-bold text-[#ff7a22] uppercase">seconds</span>
             </div>
             <p className="text-[10px] text-gray-400 mt-2">Game will start when countdown hits zero.</p>
+          </div>
+
+          <div className="bg-gradient-to-r from-[#111c30] to-[#0d1627] border border-[#ff5a00]/20 rounded-2xl p-4 shadow-xl relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-[radial-gradient(circle_at_center,rgba(254,232,0,0.05)_0%,transparent_70%)] pointer-events-none" />
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-[9px] text-[#ff7a22] font-black uppercase tracking-wider flex items-center gap-1">
+                  <span>🏆</span> ESTIMATED GAME PRIZE
+                </div>
+                <div className="flex items-baseline gap-1 mt-1">
+                  <span className="text-2xl font-black text-gold tracking-tight">
+                    {Math.round(fee * (1 + (Math.max(lobbyPlayerCount, room.players) - 1) * (1 - commissionRate / 100))).toLocaleString()}
+                  </span>
+                  <span className="text-xs font-bold text-gray-300">{t('birr')}</span>
+                </div>
+                <p className="text-[9px] text-gray-400 mt-1">
+                  Commission of {commissionRate}% has been deducted from other players&apos; stakes.
+                </p>
+              </div>
+              <div className="text-right">
+                <span className="text-[8px] text-emerald-400 font-black uppercase block tracking-wider animate-pulse">● LIVE POOL</span>
+                <span className="text-xs font-bold text-white mt-1 block">
+                  {(Math.max(lobbyPlayerCount, room.players) * fee).toLocaleString()} ETB
+                </span>
+              </div>
+            </div>
           </div>
 
           <div className="bg-[#141f33]/60 border border-[#233c66]/30 p-4 rounded-2xl relative overflow-hidden">
@@ -131,6 +159,39 @@ export default function RoomLobby({
         <div className="bg-gradient-to-br from-[#ff5a00] to-amber-600 rounded-xl px-2.5 flex flex-col items-center justify-center font-black text-center shadow-lg shadow-[#ff5a00]/20 w-14 border border-white/10 select-none h-12 self-center shrink-0">
           <span className="text-[7px] text-white/80 uppercase font-bold tracking-tight">WAIT</span>
           <span className="text-base text-white font-black leading-none mt-0.5">{room.countdown}S</span>
+        </div>
+      </div>
+
+      {/* 🏆 LIVE PAYOUT PREDICTION */}
+      <div className="bg-gradient-to-r from-[#111c30] to-[#0d1627] border border-[#ff5a00]/20 rounded-2xl p-3.5 mb-4 shadow-xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-24 h-24 bg-[radial-gradient(circle_at_center,rgba(254,232,0,0.05)_0%,transparent_70%)] pointer-events-none" />
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex-1">
+            <div className="text-[9px] text-[#ff7a22] font-black uppercase tracking-wider flex items-center gap-1">
+              <span className="inline-block animate-bounce">🏆</span> ESTIMATED PRIZE PAYOUT
+            </div>
+            <div className="flex items-baseline gap-1 mt-1">
+              <span className="text-2xl font-black text-gold tracking-tight">
+                {Math.round(fee * (1 + (Math.max(lobbyPlayerCount, room.players) - 1) * (1 - commissionRate / 100))).toLocaleString()}
+              </span>
+              <span className="text-xs font-bold text-gray-300">{t('birr')}</span>
+            </div>
+            <div className="text-[9.5px] text-gray-400 mt-1 flex flex-col gap-0.5 font-medium">
+              <span>
+                • Live Players: <strong className="text-emerald-400">{lobbyPlayerCount || room.players}</strong> {lobbyPlayerCount === 0 && <span className="text-gray-500 italic">(Room Default)</span>}
+              </span>
+              <span>
+                • Commission: <strong className="text-amber-400">{commissionRate}%</strong> deducted from opponent stakes
+              </span>
+            </div>
+          </div>
+          <div className="text-right flex flex-col justify-center items-end bg-[#1a2a47]/40 p-2 rounded-xl border border-[#233c66]/40 min-w-[100px] shrink-0">
+            <span className="text-[8px] text-gray-400 font-extrabold uppercase">Est. Jackpot</span>
+            <span className="text-sm font-black text-gold mt-1">
+              {Math.round(fee * (1 + (Math.max(lobbyPlayerCount, room.players) - 1) * (1 - commissionRate / 100))).toLocaleString()} ETB
+            </span>
+            <span className="text-[8px] text-emerald-400 font-bold mt-0.5 animate-pulse">100% Secure</span>
+          </div>
         </div>
       </div>
 
