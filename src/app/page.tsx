@@ -193,7 +193,7 @@ function HomePage() {
 
   const addGameToHistory = useCallback((gId: string, stakeAmt: number, outcome: 'win' | 'loss') => {
     if (isWatching || !gId) return;
-    const actualPrize = outcome === 'win' ? Math.round(stakeAmt * (1 + (livePlayerCount - 1) * (1 - commissionRate / 100))) : -stakeAmt;
+        const actualPrize = outcome === 'win' ? Math.round(stakeAmt * livePlayerCount * (1 - commissionRate / 100)) : -stakeAmt;
     setStakeHistory(prev => {
       const exists = prev.some(item => item.gameId === gId && item.result === outcome);
       if (exists) return prev;
@@ -203,7 +203,7 @@ function HomePage() {
       return newHistory;
     });
     if (profile?.id) {
-      const pot = Math.round(stakeAmt * (1 + (livePlayerCount - 1) * (1 - commissionRate / 100)));
+            const pot = Math.round(stakeAmt * livePlayerCount * (1 - commissionRate / 100));
       fetch('/api/public/games/record', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -644,7 +644,7 @@ function HomePage() {
         if (count && count > playerCount) playerCount = count;
       }
     } catch {}
-    const jackpot = Math.round(stake * (1 + (playerCount - 1) * (1 - commissionRate / 100)));
+        const jackpot = Math.round(stake * playerCount * (1 - commissionRate / 100));
     updateBalance(jackpot, 'main_balance');
 
     if (profile?.id) {

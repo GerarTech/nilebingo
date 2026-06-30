@@ -56,9 +56,10 @@ BEGIN
     RETURN json_build_object('success', false, 'error', 'No winning pattern found');
   END IF;
 
-  SELECT COUNT(*) INTO v_player_count FROM game_players WHERE game_id = p_game_id AND is_watching = false;
+    SELECT COUNT(*) INTO v_player_count FROM game_players WHERE game_id = p_game_id AND is_watching = false;
   IF v_player_count < 1 THEN v_player_count := 1; END IF;
-  v_win_amount := FLOOR(v_game.prize_pool / v_player_count);
+  -- Winner takes the entire prize pool (commission already deducted when the pool was calculated)
+  v_win_amount := FLOOR(v_game.prize_pool);
 
   UPDATE games SET status = 'finished', winner_id = p_user_id WHERE id = p_game_id;
 

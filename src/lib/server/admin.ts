@@ -150,7 +150,8 @@ export async function getTransactions(options: {
 }) {
   let query = supabase
     .from('transactions')
-    .select('*, profiles!inner(telegram_id, username, first_name)')
+    .select('*, profiles!inner(telegram_id, username, first_name)', { count: 'exact' })
+    .neq('reference', '__DRAFT__')
     .order('created_at', { ascending: false });
 
   if (options.type) query = query.eq('type', options.type);
@@ -172,6 +173,7 @@ export async function approveTransaction(transactionId: string, adminId: string)
 
   if (!tx) return { error: 'Transaction not found' };
   if (tx.status !== 'pending') return { error: 'Transaction already processed' };
+  if (tx.reference === '__DRAFT__') return { error: 'Transaction is still awaiting TX ID from user' };
 
   // Update transaction status
   const { error: updateError } = await supabase

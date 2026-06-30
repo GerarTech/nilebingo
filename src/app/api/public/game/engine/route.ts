@@ -242,9 +242,18 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'userId and cardNumbers array are required' }, { status: 400 });
       }
 
-      const { stakeId, stakeAmount } = body;
+            const { stakeId, stakeAmount } = body;
       const code = 'BG-' + Math.floor(100000 + Math.random() * 900000);
-      const prizePool = (stakeAmount || 10) * cardNumbers.length * 8;
+
+      // Fetch commission rate from bot_config so the prize pool matches the admin setting
+      let commission = 10;
+      try {
+        const { data: configData } = await supabase.from('bot_config').select('commands').eq('id', 'main').single();
+        const config = configData?.commands || {};
+        if (typeof config.commission === 'number') commission = config.commission;
+      } catch {}
+
+      const prizePool = Math.round((stakeAmount || 10) * cardNumbers.length * (1 - commission / 100));
 
       const { data: wallet } = await supabase
         .from('wallets')

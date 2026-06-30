@@ -73,7 +73,7 @@ export default function RoomLobby({
                   <span className="text-xs font-bold text-gray-300">{t('birr')}</span>
                 </div>
                 <p className="text-[9px] text-gray-400 mt-1">
-                  Commission of {commissionRate}% has been deducted from other players&apos; stakes.
+                                    Commission of {commissionRate}% is deducted from the total prize pool.
                 </p>
               </div>
               <div className="text-right">
@@ -167,7 +167,7 @@ export default function RoomLobby({
         <div className="bg-[#141f33] border border-[#233c66]/30 p-2.5 rounded-xl flex-1 text-center shadow-lg">
           <div className="text-[7.5px] text-gray-400 font-extrabold uppercase tracking-wider">PRIZE</div>
           <div className="text-sm font-black text-gold mt-1">
-            {Math.round(fee * (1 + (Math.max(lobbyPlayerCount, room.players) - 1) * (1 - commissionRate / 100))).toLocaleString()} {t('birr')}
+                        {Math.round(fee * Math.max(lobbyPlayerCount, room.players) * (1 - commissionRate / 100)).toLocaleString()} {t('birr')}
           </div>
         </div>
         <div className="bg-[#141f33] border border-[#233c66]/30 p-2.5 rounded-xl flex-1 text-center shadow-lg">

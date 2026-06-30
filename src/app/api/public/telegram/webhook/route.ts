@@ -18,6 +18,32 @@ let messagesCacheTime = 0;
 const COMMANDS_CACHE_TTL = 30000; // 30 seconds
 const MESSAGES_CACHE_TTL = 30000; // 30 seconds
 
+async function safeUpdateState(telegramId: string, state: string, data?: any) {
+  try {
+    const update: any = { telegram_state: state };
+    if (data !== undefined) update.telegram_state_data = data;
+    await supabase.from('profiles').update(update).eq('telegram_id', telegramId);
+  } catch (e) {
+    console.error('safeUpdateState failed (column may not exist):', e);
+  }
+}
+
+async function createDraftDeposit(userId: string, amount: number) {
+  try {
+    await supabase.from('transactions').insert({
+      user_id: userId,
+      type: 'deposit',
+      amount,
+      status: 'pending',
+      reference: '__DRAFT__',
+    });
+  } catch (e) {
+    console.error('createDraftDeposit failed:', e);
+  }
+}
+
+const DRAFT_REF = '__DRAFT__';
+
 async function getBotCommands(): Promise<Record<string, any>> {
   const now = Date.now();
   if (cachedCommands && (now - commandsCacheTime) < COMMANDS_CACHE_TTL && Object.keys(cachedCommands).length > 0) {
@@ -608,13 +634,13 @@ export async function POST(request: NextRequest) {
       const data = callbackQuery.data;
       if (data === 'deposit_cbe') {
         await answerCallbackQuery(callbackQuery.id);
-        await supabase.from('profiles').update({ telegram_state: 'waiting_deposit_amount', telegram_state_data: { bank_id: 'cbe' } }).eq('telegram_id', String(from.id));
+        await safeUpdateState(String(from.id), 'waiting_deposit_amount', { bank_id: 'cbe' });
         const cbeMax = commands.cbe_max || '5000';
         const msgText = getText(lang, 'deposit_amount_prompt').replace('{min}', '50').replace('{max}', cbeMax);
         await sendMessage(chatId, msgText, { parse_mode: 'Markdown', reply_markup: { keyboard: [[{ text: 'Cancel ❌' }]], resize_keyboard: true, one_time_keyboard: false } });
       } else if (data === 'deposit_telebirr') {
         await answerCallbackQuery(callbackQuery.id);
-        await supabase.from('profiles').update({ telegram_state: 'waiting_deposit_amount', telegram_state_data: { bank_id: 'telebirr' } }).eq('telegram_id', String(from.id));
+        await safeUpdateState(String(from.id), 'waiting_deposit_amount', { bank_id: 'telebirr' });
         const telebirrMax = commands.telebirr_max || '1000';
         const msgText = getText(lang, 'deposit_amount_prompt').replace('{min}', '10').replace('{max}', telebirrMax);
         await sendMessage(chatId, msgText, { parse_mode: 'Markdown', reply_markup: { keyboard: [[{ text: 'Cancel ❌' }]], resize_keyboard: true, one_time_keyboard: false } });
@@ -627,7 +653,7 @@ export async function POST(request: NextRequest) {
       } else if (data.startsWith('deposit_bank_')) {
         const bankId = data.replace('deposit_bank_', '');
         await answerCallbackQuery(callbackQuery.id);
-        await supabase.from('profiles').update({ telegram_state: 'waiting_deposit_amount', telegram_state_data: { bank_id: bankId } }).eq('telegram_id', String(from.id));
+        await safeUpdateState(String(from.id), 'waiting_deposit_amount', { bank_id: bankId });
         const banks: any[] = commands.banks || [];
         const bank = banks.find((b: any) => b.id === bankId);
         const maxAmt = bank?.max || '5000';
@@ -637,8 +663,9 @@ export async function POST(request: NextRequest) {
         const amount = parseFloat(data.replace('deposit_cbe_amount_', ''));
         if (!isNaN(amount) && amount > 0) {
           await answerCallbackQuery(callbackQuery.id, 'CBE selected');
-          await supabase.from('profiles').update({ telegram_state: 'waiting_deposit_txid', telegram_state_data: { bank_id: 'cbe', amount } }).eq('telegram_id', String(from.id));
-          const cbeMax = commands.cbe_max || '5000';
+          await safeUpdateState(String(from.id), 'waiting_deposit_txid', { bank_id: 'cbe', amount });
+          const { data: cprof } = await supabase.from('profiles').select('id').eq('telegram_id', String(from.id)).maybeSingle();
+          if (cprof) await createDraftDeposit(cprof.id, amount);
           const bankName = commands.cbe_name || 'Nile Bingo';
           const account = commands.cbe_account || '1000256789123';
           const msgText = getText(lang, 'deposit_txid_prompt').replace('{bank_name}', bankName).replace('{account}', account).replace('{recipient}', bankName).replace('{amount}', String(amount));
@@ -648,7 +675,9 @@ export async function POST(request: NextRequest) {
         const amount = parseFloat(data.replace('deposit_telebirr_amount_', ''));
         if (!isNaN(amount) && amount > 0) {
           await answerCallbackQuery(callbackQuery.id, 'Telebirr selected');
-          await supabase.from('profiles').update({ telegram_state: 'waiting_deposit_txid', telegram_state_data: { bank_id: 'telebirr', amount } }).eq('telegram_id', String(from.id));
+          await safeUpdateState(String(from.id), 'waiting_deposit_txid', { bank_id: 'telebirr', amount });
+          const { data: tprof } = await supabase.from('profiles').select('id').eq('telegram_id', String(from.id)).maybeSingle();
+          if (tprof) await createDraftDeposit(tprof.id, amount);
           const telebirrNumber = commands.telebirr_number || '0918281072';
           const telebirrName = commands.telebirr_name || 'Melkie';
           const msgText = getText(lang, 'deposit_txid_prompt').replace('{bank_name}', 'Telebirr').replace('{account}', telebirrNumber).replace('{recipient}', telebirrName).replace('{amount}', String(amount));
@@ -789,15 +818,19 @@ export async function POST(request: NextRequest) {
         .maybeSingle();
 
       if (!existing) {
+        // Insert with only guaranteed columns (telegram_state/referred_by may not exist yet)
         await supabase.from('profiles').insert({
           telegram_id: telegramId,
           first_name: firstName || null,
           username: username || null,
           language: 'en',
           verified: false,
-          referred_by: referredByUUID,
-          telegram_state: 'idle'
         });
+        // Best-effort set optional columns
+        if (referredByUUID) {
+          try { await supabase.from('profiles').update({ referred_by: referredByUUID }).eq('telegram_id', telegramId); } catch {}
+        }
+        await safeUpdateState(telegramId, 'idle');
         
         const { data: newProfile } = await supabase
           .from('profiles')
@@ -912,10 +945,7 @@ export async function POST(request: NextRequest) {
     let stateCancelledMessageSent = false;
     if (userProfile && userProfile.telegram_state && userProfile.telegram_state !== 'idle') {
       if (isCommandText(text, userCommands, plainCommands)) {
-        await supabase
-          .from('profiles')
-          .update({ telegram_state: 'idle', telegram_state_data: {} })
-          .eq('id', userProfile.id);
+        await safeUpdateState(String(from.id), 'idle');
         
         if (text.toLowerCase() !== 'cancel') {
           await sendMessage(chatId, 'Previous flow cancelled. Starting new command.');
@@ -956,10 +986,10 @@ export async function POST(request: NextRequest) {
         }
 
         // Update state to waiting for tx ID
-        await supabase
-          .from('profiles')
-          .update({ telegram_state: 'waiting_deposit_txid', telegram_state_data: { ...stateData, amount } })
-          .eq('id', userProfile.id);
+        await safeUpdateState(String(from.id), 'waiting_deposit_txid', { ...stateData, amount });
+
+        // Create draft deposit for catch-all fallback
+        await createDraftDeposit(userProfile.id, amount);
 
         // Look up bank details
         const bankName = bank?.name || (bankId === 'cbe' ? 'CBE' : 'Telebirr');
@@ -999,27 +1029,46 @@ export async function POST(request: NextRequest) {
 
         if (existingTx) {
           await sendMessage(chatId, `❌ *Duplicate Transaction*\n\nThis transaction reference ID (\`${txId}\`) has already been submitted or processed.`, { parse_mode: 'Markdown', ...getMainKeyboard(lang) });
-          await supabase.from('profiles').update({ telegram_state: 'idle', telegram_state_data: {} }).eq('id', userProfile.id);
+          await safeUpdateState(String(from.id), 'idle');
           return NextResponse.json({ ok: true });
         }
 
         // Reset state
-        await supabase.from('profiles').update({ telegram_state: 'idle', telegram_state_data: {} }).eq('id', userProfile.id);
+        await safeUpdateState(String(from.id), 'idle');
 
-        // Insert pending deposit
-        const { data: tx } = await supabase
+        // Check for existing draft deposit first (fallback path)
+        const { data: draftTx } = await supabase
           .from('transactions')
-          .insert({
-            user_id: userProfile.id,
-            type: 'deposit',
-            amount,
-            status: 'pending',
-            reference: txId
-          })
-          .select()
-          .single();
+          .select('id')
+          .eq('user_id', userProfile.id)
+          .eq('reference', DRAFT_REF)
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
-        if (tx) {
+        let txId_full: string | null = null;
+        if (draftTx) {
+          // Update draft with actual TX ID
+          await supabase.from('transactions').update({ reference: txId }).eq('id', draftTx.id);
+          txId_full = draftTx.id;
+        } else {
+          // Normal path: insert new pending deposit
+          const { data: tx } = await supabase
+            .from('transactions')
+            .insert({
+              user_id: userProfile.id,
+              type: 'deposit',
+              amount,
+              status: 'pending',
+              reference: txId
+            })
+            .select()
+            .single();
+          txId_full = tx?.id || null;
+        }
+
+        if (txId_full) {
           const msgText = getText(lang, 'deposit_submitted')
             .replace('{amount}', amount.toLocaleString())
             .replace('{bank}', bankName)
@@ -1027,7 +1076,7 @@ export async function POST(request: NextRequest) {
           await sendMessage(chatId, msgText, { parse_mode: 'Markdown', ...getMainKeyboard(lang) });
 
           if (adminChatId) {
-            await sendMessage(adminChatId, `⏳ *New Deposit Request*\n\n👤 User: ${userProfile.first_name || 'Unknown'}${userProfile.username ? ` (@${userProfile.username})` : ''}\n📞 Phone: ${userProfile.phone || 'N/A'}\n💰 Amount: *${amount} ETB*\n🏦 Bank: *${bankName}*\n🆔 TX ID: \`${txId}\`\n\nApprove: /approve_${tx.id.slice(0, 8)}\nReject: /reject_${tx.id.slice(0, 8)}`, { parse_mode: 'Markdown' });
+            await sendMessage(adminChatId, `⏳ *New Deposit Request*\n\n👤 User: ${userProfile.first_name || 'Unknown'}${userProfile.username ? ` (@${userProfile.username})` : ''}\n📞 Phone: ${userProfile.phone || 'N/A'}\n💰 Amount: *${amount} ETB*\n🏦 Bank: *${bankName}*\n🆔 TX ID: \`${txId}\`\n\nApprove: /approve_${txId_full.slice(0, 8)}\nReject: /reject_${txId_full.slice(0, 8)}`, { parse_mode: 'Markdown' });
           }
         }
         return NextResponse.json({ ok: true });
@@ -1038,7 +1087,7 @@ export async function POST(request: NextRequest) {
         const method = state === 'waiting_deposit_cbe' ? 'cbe' : 'telebirr';
         const parsed = parseDepositSMS(text, method);
 
-        await supabase.from('profiles').update({ telegram_state: 'idle', telegram_state_data: {} }).eq('id', userProfile.id);
+        await safeUpdateState(String(from.id), 'idle');
 
         if (parsed) {
           const { data: existingTx } = await supabase.from('transactions').select('id').eq('reference', parsed.txId).maybeSingle();
@@ -1300,31 +1349,71 @@ export async function POST(request: NextRequest) {
       }
       const statsMsg = `*📊 Your Game Stats*\n\n🎮 Games Played: *${playedCount}*\n💰 Total Bet: *${totalSpent.toLocaleString()} ETB*\n🏆 Total Won: *${totalWins.toLocaleString()} ETB*`;
       await sendMessage(chatId, statsMsg, { parse_mode: 'Markdown' });
-    } else {
-      const trimmed = text.trim();
-      const parsed = parseFloat(trimmed.replace(/,/g, ''));
-      if (!isNaN(parsed) && parsed > 0 && userProfile) {
-        const cbeMax = Number(commands.cbe_max) || 5000;
-        const telebirrMax = Number(commands.telebirr_max) || 1000;
-        const maxAllowed = Math.max(cbeMax, telebirrMax);
-        if (parsed > maxAllowed) {
-          await sendMessage(chatId, `❌ Maximum deposit is ${maxAllowed.toLocaleString()} ETB. Please enter a smaller amount.`, { parse_mode: 'Markdown', reply_markup: getMainKeyboard(lang) });
-        } else {
-          const msgText = getText(lang, 'deposit_choose').replace('{min}', '10').replace('{max}', String(maxAllowed));
-          await sendMessage(chatId, `💵 *Amount Received: ${parsed.toLocaleString()} ETB*\n\nNow select your payment method below:`, {
-            parse_mode: 'Markdown',
-            reply_markup: {
-              inline_keyboard: [
-                [{ text: '🏦 CBE Birr', callback_data: `deposit_cbe_amount_${parsed}` }],
-                [{ text: '📱 Telebirr', callback_data: `deposit_telebirr_amount_${parsed}` }],
-              ]
-            }
-          });
-        }
       } else {
-        await sendMessage(chatId, 'Use the buttons below:', getMainKeyboard(lang));
+        const trimmed = text.trim();
+        const parsed = parseFloat(trimmed.replace(/,/g, ''));
+        if (!isNaN(parsed) && parsed > 0 && userProfile) {
+          const cbeMax = Number(commands.cbe_max) || 5000;
+          const telebirrMax = Number(commands.telebirr_max) || 1000;
+          const maxAllowed = Math.max(cbeMax, telebirrMax);
+          if (parsed > maxAllowed) {
+            await sendMessage(chatId, `❌ Maximum deposit is ${maxAllowed.toLocaleString()} ETB. Please enter a smaller amount.`, { parse_mode: 'Markdown', reply_markup: getMainKeyboard(lang) });
+          } else {
+            const msgText = getText(lang, 'deposit_choose').replace('{min}', '10').replace('{max}', String(maxAllowed));
+            await sendMessage(chatId, `💵 *Amount Received: ${parsed.toLocaleString()} ETB*\n\nNow select your payment method below:`, {
+              parse_mode: 'Markdown',
+              reply_markup: {
+                inline_keyboard: [
+                  [{ text: '🏦 CBE Birr', callback_data: `deposit_cbe_amount_${parsed}` }],
+                  [{ text: '📱 Telebirr', callback_data: `deposit_telebirr_amount_${parsed}` }],
+                ]
+              }
+            });
+          }
+        } else if (userProfile && text.length > 2) {
+          // Fallback: check for a draft deposit awaiting TX ID
+          const { data: draftTx } = await supabase
+            .from('transactions')
+            .select('id, amount')
+            .eq('user_id', userProfile.id)
+            .eq('reference', DRAFT_REF)
+            .eq('status', 'pending')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (draftTx) {
+            const txId = text.trim();
+            // Double spent protection
+            const { data: dupTx } = await supabase
+              .from('transactions')
+              .select('id')
+              .eq('reference', txId)
+              .neq('reference', DRAFT_REF)
+              .maybeSingle();
+
+            if (dupTx) {
+              await sendMessage(chatId, `❌ *Duplicate Transaction*\n\nThis reference ID has already been used.`, { parse_mode: 'Markdown', ...getMainKeyboard(lang) });
+            } else {
+              // Update draft with actual TX ID
+              await supabase.from('transactions').update({ reference: txId }).eq('id', draftTx.id);
+              const bankName = 'CBE';
+              const msgText = getText(lang, 'deposit_submitted')
+                .replace('{amount}', Number(draftTx.amount).toLocaleString())
+                .replace('{bank}', bankName)
+                .replace('{txid}', txId);
+              await sendMessage(chatId, msgText, { parse_mode: 'Markdown', ...getMainKeyboard(lang) });
+              if (adminChatId) {
+                await sendMessage(adminChatId, `⏳ *New Deposit Request*\n\n👤 User: ${userProfile.first_name || 'Unknown'}${userProfile.username ? ` (@${userProfile.username})` : ''}\n💰 Amount: *${Number(draftTx.amount)} ETB*\n🆔 TX ID: \`${txId}\`\n\nApprove: /approve_${draftTx.id.slice(0, 8)}\nReject: /reject_${draftTx.id.slice(0, 8)}`, { parse_mode: 'Markdown' });
+              }
+            }
+          } else {
+            await sendMessage(chatId, 'Use the buttons below:', getMainKeyboard(lang));
+          }
+        } else {
+          await sendMessage(chatId, 'Use the buttons below:', getMainKeyboard(lang));
+        }
       }
-    }
 
     return NextResponse.json({ ok: true });
   } catch (error) {
