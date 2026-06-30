@@ -19,6 +19,8 @@ import {
   createStake,
   getContacts,
   adjustBalance,
+  setBalance,
+  deleteUser,
   getBotConfig,
   updateBotConfig,
   getBotMessages,
@@ -146,7 +148,21 @@ export async function POST(request: NextRequest) {
         if (users) {
           for (const user of users) {
             try {
-              await bot.telegram.sendMessage(user.telegram_id, body.message);
+              if (body.media_url && body.media_type === 'photo') {
+                await bot.telegram.sendPhoto(user.telegram_id, body.media_url, {
+                  caption: body.message || undefined,
+                  parse_mode: 'Markdown',
+                });
+              } else if (body.media_url && body.media_type === 'video') {
+                await bot.telegram.sendVideo(user.telegram_id, body.media_url, {
+                  caption: body.message || undefined,
+                  parse_mode: 'Markdown',
+                });
+              } else {
+                await bot.telegram.sendMessage(user.telegram_id, body.message, {
+                  parse_mode: 'Markdown',
+                });
+              }
               sent++;
             } catch {
               failed++;
@@ -154,6 +170,14 @@ export async function POST(request: NextRequest) {
           }
         }
         return NextResponse.json({ sent, failed });
+      }
+      case 'set_balance': {
+        const result = await setBalance(body.userId, body.walletType, body.value);
+        return NextResponse.json(result);
+      }
+      case 'delete_user': {
+        const result = await deleteUser(body.userId);
+        return NextResponse.json(result);
       }
       case 'update_bot_config': {
         const result = await updateBotConfig(body.commands);

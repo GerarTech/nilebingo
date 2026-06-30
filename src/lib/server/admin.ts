@@ -316,7 +316,33 @@ export async function updateBotConfig(commands: Record<string, any>) {
   return { success: true };
 }
 
-// Get bot messages
+// Set exact balance (no notification, no transaction record)
+export async function setBalance(userId: string, type: 'main' | 'play', value: number) {
+  const column = type === 'main' ? 'main_balance' : 'play_balance';
+
+  if (value < 0) return { error: 'Balance cannot be negative' };
+
+  const { error: updateError } = await supabase
+    .from('wallets')
+    .update({ [column]: value })
+    .eq('user_id', userId);
+
+  if (updateError) return { error: updateError.message };
+  return { success: true };
+}
+
+// Delete user and all associated data
+export async function deleteUser(userId: string) {
+  const childTables = ['game_card_reservations', 'game_players', 'transactions', 'wallets'];
+  for (const table of childTables) {
+    const { error } = await supabase.from(table).delete().eq('user_id', userId);
+    if (error) return { error: error.message };
+  }
+  const { error: profileErr } = await supabase.from('profiles').delete().eq('id', userId);
+  if (profileErr) return { error: profileErr.message };
+  return { success: true };
+}
+
 export async function getBotMessages() {
   const { data } = await supabase
     .from('bot_messages')

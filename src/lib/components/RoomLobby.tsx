@@ -162,36 +162,17 @@ export default function RoomLobby({
         </div>
       </div>
 
-      {/* 🏆 LIVE PAYOUT PREDICTION */}
-      <div className="bg-gradient-to-r from-[#111c30] to-[#0d1627] border border-[#ff5a00]/20 rounded-2xl p-3.5 mb-4 shadow-xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-24 h-24 bg-[radial-gradient(circle_at_center,rgba(254,232,0,0.05)_0%,transparent_70%)] pointer-events-none" />
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex-1">
-            <div className="text-[9px] text-[#ff7a22] font-black uppercase tracking-wider flex items-center gap-1">
-              <span className="inline-block animate-bounce">🏆</span> ESTIMATED PRIZE PAYOUT
-            </div>
-            <div className="flex items-baseline gap-1 mt-1">
-              <span className="text-2xl font-black text-gold tracking-tight">
-                {Math.round(fee * (1 + (Math.max(lobbyPlayerCount, room.players) - 1) * (1 - commissionRate / 100))).toLocaleString()}
-              </span>
-              <span className="text-xs font-bold text-gray-300">{t('birr')}</span>
-            </div>
-            <div className="text-[9.5px] text-gray-400 mt-1 flex flex-col gap-0.5 font-medium">
-              <span>
-                • Live Players: <strong className="text-emerald-400">{lobbyPlayerCount || room.players}</strong> {lobbyPlayerCount === 0 && <span className="text-gray-500 italic">(Room Default)</span>}
-              </span>
-              <span>
-                • Commission: <strong className="text-amber-400">{commissionRate}%</strong> deducted from opponent stakes
-              </span>
-            </div>
+      {/* 🏆 PRIZE & PLAYERS */}
+      <div className="flex items-stretch gap-1.5 mb-4">
+        <div className="bg-[#141f33] border border-[#233c66]/30 p-2.5 rounded-xl flex-1 text-center shadow-lg">
+          <div className="text-[7.5px] text-gray-400 font-extrabold uppercase tracking-wider">PRIZE</div>
+          <div className="text-sm font-black text-gold mt-1">
+            {Math.round(fee * (1 + (Math.max(lobbyPlayerCount, room.players) - 1) * (1 - commissionRate / 100))).toLocaleString()} {t('birr')}
           </div>
-          <div className="text-right flex flex-col justify-center items-end bg-[#1a2a47]/40 p-2 rounded-xl border border-[#233c66]/40 min-w-[100px] shrink-0">
-            <span className="text-[8px] text-gray-400 font-extrabold uppercase">Est. Jackpot</span>
-            <span className="text-sm font-black text-gold mt-1">
-              {Math.round(fee * (1 + (Math.max(lobbyPlayerCount, room.players) - 1) * (1 - commissionRate / 100))).toLocaleString()} ETB
-            </span>
-            <span className="text-[8px] text-emerald-400 font-bold mt-0.5 animate-pulse">100% Secure</span>
-          </div>
+        </div>
+        <div className="bg-[#141f33] border border-[#233c66]/30 p-2.5 rounded-xl flex-1 text-center shadow-lg">
+          <div className="text-[7.5px] text-gray-400 font-extrabold uppercase tracking-wider">PLAYERS</div>
+          <div className="text-sm font-black text-emerald-400 mt-1">{lobbyPlayerCount || room.players}</div>
         </div>
       </div>
 

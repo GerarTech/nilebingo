@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Search, Check, X, Phone, User as UserIcon, Wallet, ArrowUpDown } from 'lucide-react';
+import { Search, Check, X, Phone, User as UserIcon, Wallet, ArrowUpDown, Trash2, AlertTriangle } from 'lucide-react';
 
 interface UserWithWallet {
   id: string;
@@ -23,6 +23,9 @@ export default function UsersPage() {
   const [adjustAmount, setAdjustAmount] = useState('');
   const [adjustType, setAdjustType] = useState<'main' | 'play'>('main');
   const [adjustReason, setAdjustReason] = useState('');
+  const [setValue, setSetValue] = useState('');
+  const [setType, setSetType] = useState<'main' | 'play'>('main');
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const loadUsers = () => {
     fetch('/api/admin/data?action=users')
@@ -37,6 +40,7 @@ export default function UsersPage() {
     const res = await fetch(`/api/admin/data?action=user&userId=${userId}`);
     const data = await res.json();
     setSelectedUser(data);
+    setConfirmDelete(false);
   };
 
   const handleAdjustBalance = async () => {
@@ -59,6 +63,41 @@ export default function UsersPage() {
     setAdjustAmount('');
     setAdjustReason('');
     loadUserDetail(selectedUser.id);
+    loadUsers();
+  };
+
+  const handleSetBalance = async () => {
+    if (!selectedUser || !setValue) return;
+    const value = parseFloat(setValue);
+    if (isNaN(value) || value < 0) return;
+
+    await fetch('/api/admin/data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'set_balance',
+        userId: selectedUser.id,
+        value,
+        walletType: setType,
+      }),
+    });
+
+    setSetValue('');
+    loadUserDetail(selectedUser.id);
+    loadUsers();
+  };
+
+  const handleDeleteUser = async () => {
+    if (!selectedUser) return;
+    await fetch('/api/admin/data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'delete_user',
+        userId: selectedUser.id,
+      }),
+    });
+    setSelectedUser(null);
     loadUsers();
   };
 
@@ -149,9 +188,24 @@ export default function UsersPage() {
                 </div>
               )}
 
-              {/* Adjust Balance */}
+              {/* Set Exact Balance (no notification) */}
+              {selectedUser.wallet && (
+                <div className="mt-4 p-3 bg-navy rounded-xl">
+                  <h4 className="text-xs font-semibold text-white mb-2">Set Exact Balance <span className="text-[8px] text-gray-500 font-normal">(no notification)</span></h4>
+                  <div className="space-y-2">
+                    <select value={setType} onChange={(e) => setSetType(e.target.value as any)} className="w-full bg-navy-light border border-white/10 rounded-lg px-3 py-2 text-xs text-white">
+                      <option value="main">Main Wallet</option>
+                      <option value="play">Play Wallet</option>
+                    </select>
+                    <input type="number" value={setValue} onChange={(e) => setSetValue(e.target.value)} placeholder="Exact new balance" className="w-full bg-navy-light border border-white/10 rounded-lg px-3 py-2 text-xs text-white" />
+                    <button onClick={handleSetBalance} className="w-full bg-emerald-600 text-white font-bold py-2 rounded-lg text-xs hover:bg-emerald-500">Set Balance</button>
+                  </div>
+                </div>
+              )}
+
+              {/* Adjust Balance (with notification) */}
               <div className="mt-4 p-3 bg-navy rounded-xl">
-                <h4 className="text-xs font-semibold text-white mb-2">Adjust Balance</h4>
+                <h4 className="text-xs font-semibold text-white mb-2">Adjust Balance <span className="text-[8px] text-gray-500 font-normal">(sends notification)</span></h4>
                 <div className="space-y-2">
                   <select value={adjustType} onChange={(e) => setAdjustType(e.target.value as any)} className="w-full bg-navy-light border border-white/10 rounded-lg px-3 py-2 text-xs text-white">
                     <option value="main">Main Wallet</option>
@@ -159,8 +213,32 @@ export default function UsersPage() {
                   </select>
                   <input type="number" value={adjustAmount} onChange={(e) => setAdjustAmount(e.target.value)} placeholder="Amount (+/-)" className="w-full bg-navy-light border border-white/10 rounded-lg px-3 py-2 text-xs text-white" />
                   <input type="text" value={adjustReason} onChange={(e) => setAdjustReason(e.target.value)} placeholder="Reason" className="w-full bg-navy-light border border-white/10 rounded-lg px-3 py-2 text-xs text-white" />
-                  <button onClick={handleAdjustBalance} className="w-full bg-gold text-navy font-bold py-2 rounded-lg text-xs">Apply</button>
+                  <button onClick={handleAdjustBalance} className="w-full bg-gold text-navy font-bold py-2 rounded-lg text-xs">Apply Adjustment</button>
                 </div>
+              </div>
+
+              {/* Delete User */}
+              <div className="mt-4 p-3 bg-red-900/20 border border-red-500/20 rounded-xl">
+                <h4 className="text-xs font-semibold text-red-400 mb-2 flex items-center gap-1"><Trash2 size={12} /> Delete User</h4>
+                {!confirmDelete ? (
+                  <button onClick={() => setConfirmDelete(true)} className="w-full bg-red-500/10 border border-red-500/30 text-red-400 font-bold py-2 rounded-lg text-xs hover:bg-red-500/20">
+                    Delete This User
+                  </button>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-1.5 text-[10px] text-red-300">
+                      <AlertTriangle size={12} /> This will permanently delete the user and all associated data.
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={handleDeleteUser} className="flex-1 bg-red-600 text-white font-bold py-2 rounded-lg text-xs hover:bg-red-500">
+                        Confirm Delete
+                      </button>
+                      <button onClick={() => setConfirmDelete(false)} className="flex-1 bg-navy border border-white/10 text-gray-300 font-bold py-2 rounded-lg text-xs hover:bg-white/5">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Recent Transactions */}

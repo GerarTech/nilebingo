@@ -380,11 +380,7 @@ function HomePage() {
 
       if (data.success) {
         const reservations = data.reservations || [];
-        const myRes = reservations.filter((r: any) => r.user_id === uid).map((r: any) => r.card_number);
-        const activeMyRes = myRes.filter((n: number) => n > 0);
-        setSelectedCards(activeMyRes);
-        setPreviewCard(activeMyRes.length > 0 ? getSeededCard(activeMyRes[activeMyRes.length - 1], gameId) : []);
-
+        // Only update server-side data that can't be determined optimistically
         const otherCards = reservations.filter((r: any) => r.user_id !== uid).map((r: any) => r.card_number);
         setTakenCards(otherCards.filter((n: number) => n > 0));
         setLobbyPlayerCount(new Set(reservations.map((r: any) => r.user_id)).size);
