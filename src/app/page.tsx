@@ -669,20 +669,6 @@ function HomePage() {
     setWinningCard(card);
     setWinningCells(getWinningCells(card, drawn));
     setShowWinModal(true);
-    addGameToHistory(gameId, selectedStake || 10, 'win');
-    const entryFee = selectedRoom?.entry || 10;
-    const numCards = Math.max(1, playerCards.length);
-    let playerCount = livePlayerCount;
-    try {
-      const { data: g } = await supabase.from('games').select('id, prize_pool').eq('code', gameId).maybeSingle();
-      if (g) {
-        const { count } = await supabase.from('game_players').select('*', { count: 'exact', head: true }).eq('game_id', g.id).eq('is_watching', false);
-        if (count && count > playerCount) playerCount = count;
-      }
-    } catch {}
-    // Prize pool = entry fee × total cards in game × (1 - commission)
-    const totalCards = playerCount - 1 + numCards;
-    const jackpot = Math.round(entryFee * totalCards * (1 - commissionRate / 100));
 
     if (profile?.id) {
       try {
@@ -692,19 +678,25 @@ function HomePage() {
           body: JSON.stringify({ action: 'validate_win', gameId, userId: profile.id }),
         });
         const data = await res.json();
-        if (data.error === 'Game already finished') {
-          setShowWinModal(false);
-          const winnerName = data.winner_id === profile.id ? (profile.first_name || 'You') : 'Another Player';
-          setOpponentWinner(winnerName);
-          if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
-          addGameToHistory(gameId, selectedStake || 10, 'loss');
+        if (data.success) {
+          addGameToHistory(gameId, selectedStake || 10, 'win');
           await refreshWallet();
+        } else if (data.error === 'Game already finished') {
+          if (data.winner_id === profile.id) {
+            addGameToHistory(gameId, selectedStake || 10, 'win');
+            await refreshWallet();
+          } else {
+            setShowWinModal(false);
+            setOpponentWinner(data.winner_id ? 'Another Player' : null);
+            if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+            await refreshWallet();
+          }
         } else {
           await refreshWallet();
         }
       } catch {}
     }
-  }, [gameId, selectedStake, livePlayerCount, addGameToHistory, refreshWallet, commissionRate, profile?.id]);
+  }, [gameId, selectedStake, addGameToHistory, refreshWallet, profile?.id]);
 
   // ============ SELECT STAKE / ROOM ============
   const selectStake = useCallback((stake: number) => {

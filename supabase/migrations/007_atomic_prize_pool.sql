@@ -22,8 +22,8 @@ BEGIN
     v_commission := 10;
   END;
 
-  -- Count total unique players and total cards sold
-  SELECT COUNT(*) INTO v_player_count FROM game_players WHERE game_id = v_game_id;
+  -- Count total unique players (exclude watchers) and total cards sold
+  SELECT COUNT(*) INTO v_player_count FROM game_players WHERE game_id = v_game_id AND is_watching = false;
   SELECT COUNT(*) INTO v_total_cards FROM game_card_reservations WHERE game_code = p_game_code AND card_number > 0;
 
   -- Use at least the player count (each player has at least 1 card)

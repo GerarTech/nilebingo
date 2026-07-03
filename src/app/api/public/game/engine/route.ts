@@ -37,7 +37,7 @@ async function sendGameStats(botToken: string, gameId: string) {
     if (game.stake_id) {
       const { data: stake } = await supabase.from('stakes').select('amount').eq('id', game.stake_id).single();
       if (stake) {
-        const { count: cards } = await supabase.from('game_card_reservations').select('id', { count: 'exact', head: true }).eq('game_code', game.code);
+        const { count: cards } = await supabase.from('game_card_reservations').select('id', { count: 'exact', head: true }).eq('game_code', game.code).gt('card_number', 0);
         const totalEntities = Math.max(playerCount, cards || 0);
         commission = Math.max(0, (Number(stake.amount) * totalEntities) - prize);
       }
