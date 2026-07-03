@@ -103,12 +103,15 @@ export default function RoomLobby({
       <div className="flex items-stretch gap-1.5 mb-4">
         <div className="bg-[#141f33] border border-[#233c66]/30 p-2.5 rounded-xl flex-1 text-center shadow-lg">
           <div className="text-[7.5px] text-gray-400 font-extrabold uppercase tracking-wider">WALLET</div>
-          <div className="text-sm font-black text-white mt-1">{(wallet?.main_balance || 0).toLocaleString()} {t('birr')}</div>
+          <div className="text-sm font-black text-white mt-1">{totalBalance.toLocaleString()} {t('birr')}</div>
         </div>
         <div className="bg-[#141f33] border border-[#233c66]/30 p-2.5 rounded-xl flex-1 text-center shadow-lg">
           <div className="text-[7.5px] text-gray-400 font-extrabold uppercase tracking-wider">PRIZE</div>
           <div className="text-sm font-black text-gold mt-1">
-            {Math.round(fee * (Math.max(lobbyPlayerCount, room.players) - 1 + Math.max(1, selectedCards.length)) * (1 - commissionRate / 100)).toLocaleString()} {t('birr')}
+            {(() => {
+              const totalCards = Math.max(lobbyPlayerCount, room.players) - 1 + (selectedCards.length || 1);
+              return `${Math.round(fee * totalCards * (1 - commissionRate / 100)).toLocaleString()} ${t('birr')}`;
+            })()}
           </div>
         </div>
         <div className="bg-[#141f33] border border-[#233c66]/30 p-2.5 rounded-xl flex-1 text-center shadow-lg">

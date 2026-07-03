@@ -173,6 +173,26 @@ async function sendPhoto(chatId: string | number, photoDataUrl: string, caption:
   }
 }
 
+/** Send a deposit-pending alert to admin bot and notification channels */
+async function sendAdminDepositAlert(text: string) {
+  if (adminBotToken && adminChatId) {
+    try {
+      await fetch(`https://api.telegram.org/bot${adminBotToken}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: adminChatId, text, parse_mode: 'Markdown' }),
+        signal: AbortSignal.timeout(5000),
+      });
+    } catch (e) { /* ignore */ }
+  }
+  try {
+    const { notifyEvent } = await import('@/lib/server/admin');
+    const plain = text.replace(/\*+/g, '');
+    const body = plain.indexOf('\n\n') !== -1 ? plain.substring(plain.indexOf('\n\n') + 2) : plain;
+    notifyEvent('deposit_pending', body);
+  } catch (e) { /* ignore */ }
+}
+
 async function answerCallbackQuery(callbackQueryId: string, text?: string) {
   return tgCall('answerCallbackQuery', { callback_query_id: callbackQueryId, text });
 }
@@ -1121,27 +1141,8 @@ export async function POST(request: NextRequest) {
           await sendMessage(chatId, msgText, { parse_mode: 'Markdown', ...getMainKeyboard(lang) });
 
           // Direct admin alert via admin bot
-          if (adminBotToken && adminChatId) {
-            try {
-              await fetch(`https://api.telegram.org/bot${adminBotToken}/sendMessage`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  chat_id: adminChatId,
-                  text: `⏳ *New Deposit Request*\n\n👤 User: ${userProfile.first_name || 'Unknown'}${userProfile.username ? ` (@${userProfile.username})` : ''}\n📞 Phone: ${userProfile.phone || 'N/A'}\n💰 Amount: *${amount} ETB*\n🏦 Bank: *${bankName}*\n🆔 TX ID: \`${txId}\`\n\nApprove: /approve_${txId_full.slice(0, 8)}\nReject: /reject_${txId_full.slice(0, 8)}`,
-                  parse_mode: 'Markdown',
-                }),
-                signal: AbortSignal.timeout(5000),
-              });
-            } catch (e) { /* ignore */ }
-          }
-          // Route to notification channels
-          try {
-            const { notifyEvent } = await import('@/lib/server/admin');
-            const userName = userProfile.first_name || userProfile.username || 'Unknown';
-            const channelMsg = `⏳ *NEW DEPOSIT REQUEST*\n\n👤 *User:* ${userName}\n📞 *Phone:* ${userProfile.phone || 'N/A'}\n💰 *Amount:* ${amount} ETB\n🏦 *Bank:* ${bankName}\n🆔 *TX ID:* \`${txId}\`\n🆔 *Tx ID:* \`${txId_full.slice(0, 8)}...\``;
-            notifyEvent('deposit_pending', channelMsg);
-          } catch (e) { /* ignore */ }
+          const userName = userProfile.first_name || userProfile.username || 'Unknown';
+          sendAdminDepositAlert(`⏳ *New Deposit Request*\n\n👤 *User:* ${userName}\n📞 *Phone:* ${userProfile.phone || 'N/A'}\n💰 *Amount:* ${amount} ETB\n🏦 *Bank:* ${bankName}\n🆔 *TX ID:* \`${txId}\`\n\nApprove: /approve_${txId_full.slice(0, 8)}\nReject: /reject_${txId_full.slice(0, 8)}`);
         }
         return NextResponse.json({ ok: true });
       }
@@ -1164,32 +1165,16 @@ export async function POST(request: NextRequest) {
           const { data: tx } = await supabase.from('transactions').insert({ user_id: userProfile.id, type: 'deposit', amount: parsed.amount, status: 'pending', reference: parsed.txId, details: { bank_name: smsBankName } }).select().single();
           if (tx) {
             await sendMessage(chatId, `⏳ *Deposit Submitted for Review*\n\nTransaction ID: \`${parsed.txId}\`\nAmount: *${parsed.amount.toLocaleString()} ETB*\n\nAn admin will verify and approve your deposit shortly.`, { parse_mode: 'Markdown', ...getMainKeyboard(lang) });
-            if (adminChatId) {
-              await sendMessage(adminChatId, `⏳ *Pending Deposit (SMS Auto)*\n\n👤 ${userProfile.first_name || 'Unknown'}${userProfile.username ? ` (@${userProfile.username})` : ''}\n💰 *${parsed.amount} ETB*\n🆔 \`${parsed.txId}\`\n🏦 ${smsBankName}\n\n/approve_${tx.id.slice(0, 8)}`, { parse_mode: 'Markdown' });
-            }
-            // Route to channels
-            try {
-              const { notifyEvent } = await import('@/lib/server/admin');
-              const userName = userProfile.first_name || userProfile.username || 'Unknown';
-              const channelMsg = `⏳ *NEW DEPOSIT REQUEST (SMS Auto)*\n\n👤 *User:* ${userName}\n💰 *Amount:* ${parsed.amount.toLocaleString()} ETB\n🏦 *Bank:* ${smsBankName}\n🆔 *TX ID:* \`${parsed.txId}\`\n🆔 *ID:* \`${tx.id.slice(0, 8)}...\``;
-              notifyEvent('deposit_pending', channelMsg);
-            } catch (e) { /* ignore */ }
+            const userName = userProfile.first_name || userProfile.username || 'Unknown';
+            sendAdminDepositAlert(`⏳ *New Deposit Request (SMS Auto)*\n\n👤 *User:* ${userName}\n💰 *Amount:* ${parsed.amount.toLocaleString()} ETB\n🏦 *Bank:* ${smsBankName}\n🆔 *TX ID:* \`${parsed.txId}\`\n\nApprove: /approve_${tx.id.slice(0, 8)}\nReject: /reject_${tx.id.slice(0, 8)}`);
           }
         } else {
           const smsLabel = method === 'cbe' ? 'CBE' : 'Telebirr';
           const { data: tx } = await supabase.from('transactions').insert({ user_id: userProfile.id, type: 'deposit', amount: 0, status: 'pending', reference: text, details: { bank_name: smsLabel } }).select().single();
           if (tx) {
             await sendMessage(chatId, `⏳ *Deposit Pending Review*\n\nWe couldn't auto-verify your SMS. An admin will review it manually.`, { parse_mode: 'Markdown', ...getMainKeyboard(lang) });
-            if (adminChatId) {
-              await sendMessage(adminChatId, `⏳ *Manual Deposit*\n\n👤 ${userProfile.first_name || 'Unknown'}${userProfile.username ? ` (@${userProfile.username})` : ''}\n📝 \`${text}\`\n🏦 ${smsLabel}\n\n/approve_${tx.id.slice(0, 8)}`, { parse_mode: 'Markdown' });
-            }
-            // Route to channels
-            try {
-              const { notifyEvent } = await import('@/lib/server/admin');
-              const userName = userProfile.first_name || userProfile.username || 'Unknown';
-              const channelMsg = `⏳ *MANUAL DEPOSIT REVIEW*\n\n👤 *User:* ${userName}\n📝 *Raw:* \`${text}\`\n🏦 *Bank:* ${smsLabel}\n🆔 *ID:* \`${tx.id.slice(0, 8)}...\``;
-              notifyEvent('deposit_pending', channelMsg);
-            } catch (e) { /* ignore */ }
+            const userName = userProfile.first_name || userProfile.username || 'Unknown';
+            sendAdminDepositAlert(`⏳ *Manual Deposit Review*\n\n👤 *User:* ${userName}\n📝 *Raw:* \`${text}\`\n🏦 *Bank:* ${smsLabel}\n\nApprove: /approve_${tx.id.slice(0, 8)}\nReject: /reject_${tx.id.slice(0, 8)}`);
           }
         }
         return NextResponse.json({ ok: true });
