@@ -82,7 +82,8 @@ export async function GET(request: NextRequest) {
         return NextResponse.json(result);
       }
       case 'games': {
-        const games = await getGames();
+        const search = searchParams.get('search') || undefined;
+        const games = await getGames(search);
         return NextResponse.json(games);
       }
       case 'game': {

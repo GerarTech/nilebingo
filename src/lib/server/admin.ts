@@ -427,13 +427,18 @@ export async function rejectTransaction(transactionId: string) {
 }
 
 // Get all games
-export async function getGames() {
-  const { data } = await supabase
+export async function getGames(search?: string) {
+  let query = supabase
     .from('games')
     .select('*, stakes(amount), profiles!winner_id(username, first_name)')
     .order('created_at', { ascending: false })
     .limit(50);
 
+  if (search) {
+    query = query.or(`code.ilike.%${search}%,id.ilike.%${search}%`);
+  }
+
+  const { data } = await query;
   return data || [];
 }
 

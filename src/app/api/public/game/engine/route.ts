@@ -55,11 +55,7 @@ async function sendGameStats(botToken: string, gameId: string) {
     if (adminChatIdEnv) {
       await tgSend(botToken, adminChatIdEnv, statsMsg, 'Markdown');
     }
-    // Route to game_winner notification channels
-    try {
-      const { notifyEvent } = await import('@/lib/server/admin');
-      notifyEvent('game_winner', statsMsg);
-    } catch (e) { /* ignore */ }
+    // Notification handled by record route — remove duplicate
   } catch (e) {
     console.error('sendGameStats error:', e);
   }

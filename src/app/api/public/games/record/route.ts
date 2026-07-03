@@ -101,8 +101,7 @@ export async function POST(request: NextRequest) {
         const commissionWon = Math.round((Number(stakeAmount) * totalPlayersCount) - Number(prizePool));
 
         const text = `🏆 *BINGO WINNER*\n\n` +
-                     `🆔 Game: \`${game.id.slice(0, 8)}...\`\n` +
-                     `🎫 Code: \`${code}\`\n` +
+                     `🎫 Game: \`${code}\`\n` +
                      `👤 *Player:* ${playerName}${identifier ? ` (${identifier})` : ''}\n` +
                      `🏠 *Room:* ${roomName || 'Quick Lobby'}\n` +
                      `👥 *Total Players:* ${totalPlayersCount}\n` +
