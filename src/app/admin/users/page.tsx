@@ -30,7 +30,7 @@ export default function UsersPage() {
   const loadUsers = () => {
     fetch('/api/admin/data?action=users')
       .then(r => r.json())
-      .then(d => { setUsers(d); setLoading(false); })
+      .then(d => { if (Array.isArray(d)) setUsers(d); setLoading(false); })
       .catch(() => setLoading(false));
   };
 
