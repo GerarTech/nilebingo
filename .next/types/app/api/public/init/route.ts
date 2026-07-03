@@ -1,4 +1,4 @@
-// File: d:\HB Technologies\BINGO\nilebingo1\src\app\api\public\init\route.ts
+// File: D:\HB Technologies\BINGO\nilebingo1\src\app\api\public\init\route.ts
 import * as entry from '../../../../../../src/app/api/public/init/route.js'
 import type { NextRequest } from 'next/server.js'
 

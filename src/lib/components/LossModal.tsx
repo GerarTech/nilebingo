@@ -8,7 +8,6 @@ interface LossModalProps {
   stake: number;
   livePlayerCount: number;
   commissionRate: number;
-  prizePool: number;
   gameCards: number[][][];
   cardNumbers: number[];
   drawnNumbers: number[];
@@ -18,12 +17,12 @@ interface LossModalProps {
 }
 
 export default function LossModal({
-  show, opponentName, stake, livePlayerCount, commissionRate, prizePool,
+  show, opponentName, stake, livePlayerCount, commissionRate,
   gameCards, cardNumbers, drawnNumbers, countdown, onSkip, t,
 }: LossModalProps) {
   if (!show) return null;
 
-  const singlePrize = prizePool > 0 ? prizePool : Math.round(stake * livePlayerCount * (1 - commissionRate / 100));
+  const singlePrize = Math.round(stake * livePlayerCount * (1 - commissionRate / 100));
 
   return (
     <div

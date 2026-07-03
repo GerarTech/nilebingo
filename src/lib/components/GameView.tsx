@@ -233,7 +233,6 @@ export default function GameView({
         stake={selectedStake}
         livePlayerCount={livePlayerCount}
         commissionRate={commissionRate}
-        prizePool={prizePool}
         gameCards={playerCards.length > 0 ? playerCards : (gameCard.length > 0 ? [gameCard] : [])}
         cardNumbers={selectedCards}
         drawnNumbers={drawnNumbers}
