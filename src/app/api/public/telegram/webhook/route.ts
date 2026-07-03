@@ -380,8 +380,13 @@ function isCommandText(text: string, userCommands: any, plainCommands: any): boo
   if (t.startsWith('/')) return true;
   if (t.toLowerCase() === 'cancel' || t === 'Cancel ❌' || t === '❌ Cancel') return true;
   if (t === '👥 Invite Friends') return true;
-  
-  for (const val of Object.values(userCommands)) {
+
+  // Only check against known UI command labels — NOT config values like
+  // telebirr_max, cbe_max, referral_bonus, etc. which are also in userCommands
+  // and would falsely match numeric deposit amounts (e.g. "50", "1000").
+  const commandKeys = ['play', 'check_balance', 'deposit', 'withdraw', 'contact', 'instructions', 'transactions', 'winning_patterns', 'language', 'mycode', 'stats'];
+  for (const key of commandKeys) {
+    const val = userCommands[key];
     if (typeof val === 'string' && t.startsWith(val.split(' ')[0])) return true;
   }
   for (const val of Object.values(plainCommands)) {
@@ -1204,19 +1209,37 @@ export async function POST(request: NextRequest) {
     } else if (matchesCommand(userCommands.check_balance, plainCommands.check_balance)) {
       let mainBal = 0;
       let playBal = 0;
-      
-      if (userProfile) {
+
+      // Ensure we have a valid profile — look up by telegram_id if not already loaded
+      let balanceProfile = userProfile;
+      if (!balanceProfile && telegramIdCheck) {
+        const { data: prof } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('telegram_id', telegramIdCheck)
+          .maybeSingle();
+        balanceProfile = prof;
+      }
+
+      if (balanceProfile) {
         const { data: wall } = await supabase
           .from('wallets')
           .select('main_balance, play_balance')
-          .eq('user_id', userProfile.id)
+          .eq('user_id', balanceProfile.id)
           .maybeSingle();
         if (wall) {
           mainBal = Number(wall.main_balance) || 0;
           playBal = Number(wall.play_balance) || 0;
+        } else {
+          // Create wallet if it doesn't exist (matches webapp init behavior)
+          await supabase.from('wallets').insert({
+            user_id: balanceProfile.id,
+            main_balance: 0,
+            play_balance: 0,
+          });
         }
       }
-      
+
       let msgText = getMsg('balance_info', 'balance_info');
       msgText = msgText
         .replace('{main}', mainBal.toLocaleString())
@@ -1243,16 +1266,43 @@ export async function POST(request: NextRequest) {
       });
     } else if (matchesCommand(userCommands.withdraw, plainCommands.withdraw)) {
       let playedCount = 0;
-      if (userProfile) {
+      let mainBal = 0;
+      let playBal = 0;
+
+      // Ensure we have a valid profile - look up by telegram_id if not already loaded
+      let withdrawProfile = userProfile;
+      if (!withdrawProfile && telegramIdCheck) {
+        const { data: prof } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('telegram_id', telegramIdCheck)
+          .maybeSingle();
+        withdrawProfile = prof;
+      }
+
+      if (withdrawProfile) {
         const { count } = await supabase
           .from('game_players')
           .select('id', { count: 'exact', head: true })
-          .eq('user_id', userProfile.id)
+          .eq('user_id', withdrawProfile.id)
           .eq('is_watching', false);
         playedCount = count || 0;
+
+        // Fetch actual wallet balance (same source as webapp)
+        const { data: wall } = await supabase
+          .from('wallets')
+          .select('main_balance, play_balance')
+          .eq('user_id', withdrawProfile.id)
+          .maybeSingle();
+        if (wall) {
+          mainBal = Number(wall.main_balance) || 0;
+          playBal = Number(wall.play_balance) || 0;
+        }
       }
 
       const reqGames = Number(commands.withdraw_required_games || 5);
+      const minAmount = Number(commands.withdraw_min_amount || 50);
+
       if (playedCount < reqGames) {
         const remaining = reqGames - playedCount;
         const lockMsg = getText(lang, 'withdraw_required')
@@ -1261,40 +1311,58 @@ export async function POST(request: NextRequest) {
           .replace('{remaining}', String(remaining));
         await sendMessage(chatId, lockMsg, { parse_mode: 'Markdown' });
       } else {
-        const reqGames = Number(commands.withdraw_required_games || 5);
-        const minAmount = Number(commands.withdraw_min_amount || 50);
         const withdrawText = getText(lang, 'withdraw_info')
           .replace('{required_games}', String(reqGames))
           .replace('{min_amount}', String(minAmount));
-        await sendMessage(chatId, withdrawText, { parse_mode: 'Markdown' });
+        // Show actual balances so user knows what's withdrawable (matches webapp)
+        const balanceLine = `\n\n*Your Balances:*\n• Main (withdrawable): *${mainBal.toLocaleString()} ETB*\n• Play (gameplay only): *${playBal.toLocaleString()} ETB*`;
+        await sendMessage(chatId, withdrawText + balanceLine, { parse_mode: 'Markdown' });
       }
     } else if (matchesCommand(userCommands.contact, plainCommands.contact)) {
       await sendMessage(chatId, getMsg('contact_info', 'contact_info'), { parse_mode: 'Markdown' });
     } else if (matchesCommand(userCommands.instructions, plainCommands.instructions)) {
       await sendMessage(chatId, getMsg('how_to_play', 'how_to_play'), { parse_mode: 'Markdown' });
     } else if (matchesCommand(userCommands.transactions, plainCommands.transactions)) {
-      if (userProfile) {
+      // Ensure we have a valid profile - look up by telegram_id if not already loaded
+      let txProfile = userProfile;
+      if (!txProfile && telegramIdCheck) {
+        const { data: prof } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('telegram_id', telegramIdCheck)
+          .maybeSingle();
+        txProfile = prof;
+      }
+
+      if (txProfile) {
+        // Fetch transactions from the same table the webapp uses
         const { data: txs } = await supabase
           .from('transactions')
           .select('*')
-          .eq('user_id', userProfile.id)
+          .eq('user_id', txProfile.id)
           .order('created_at', { ascending: false })
-          .limit(5);
+          .limit(10);
 
         if (!txs || txs.length === 0) {
-          await sendMessage(chatId, 'No transactions found.');
+          await sendMessage(chatId, getText(lang, 'transactions_empty'), { parse_mode: 'Markdown' });
         } else {
+          // Build a single consolidated message with all transactions (matches webapp data)
+          let txList = '';
           for (const t of txs) {
-            const typeLabel = t.type === 'deposit' ? 'PURCHASE' : t.type === 'withdraw' ? 'WITHDRAWAL' : t.type === 'win' ? 'GAME WIN' : t.type === 'bet' ? 'GAME PLAY' : t.type.toUpperCase();
+            const typeLabel = t.type === 'deposit' ? 'DEPOSIT' : t.type === 'withdraw' ? 'WITHDRAWAL' : t.type === 'win' ? 'GAME WIN' : t.type === 'bet' ? 'GAME PLAY' : t.type === 'transfer_to_play' ? 'TO PLAY' : t.type === 'transfer_to_main' ? 'TO MAIN' : t.type.toUpperCase();
             const statusLabel = t.status.charAt(0).toUpperCase() + t.status.slice(1);
-            const dateStr = new Date(t.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) + ', ' + new Date(t.created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
-            
-            const blockText = `\`\`\`\nType: ${typeLabel}\nAmount: ETB ${Number(t.amount).toFixed(2)}\nStatus: ${statusLabel}\nDate: ${dateStr}\n\`\`\``;
-            await sendMessage(chatId, blockText, { parse_mode: 'Markdown' });
+            const statusIcon = t.status === 'completed' ? '\u2705' : t.status === 'pending' ? '\u23f3' : '\u274c';
+            const dateStr = new Date(t.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) + ' ' + new Date(t.created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+            const ref = t.reference && t.reference !== '__DRAFT__' ? '\n   Ref: ' + t.reference : '';
+            const amount = Number(t.amount) || 0;
+            const sign = (t.type === 'deposit' || t.type === 'win') ? '+' : (t.type === 'withdraw' || t.type === 'bet') ? '-' : '';
+            txList += statusIcon + ' ' + typeLabel + ' | ' + sign + amount.toFixed(2) + ' ETB | ' + statusLabel + '\n   ' + dateStr + ref + '\n\n';
           }
+          const msgText = getText(lang, 'transactions_prompt').replace('{transactions}', txList.trim());
+          await sendMessage(chatId, msgText, { parse_mode: 'Markdown' });
         }
       } else {
-        await sendMessage(chatId, 'No transactions found.');
+        await sendMessage(chatId, getText(lang, 'transactions_empty'), { parse_mode: 'Markdown' });
       }
     } else if (text === '/invite' || text.toLowerCase() === 'invite' || text === '👥 Invite Friends' || text.includes('invite') || matchesCommand(userCommands.mycode, plainCommands.mycode)) {
       const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'fuabingobot';

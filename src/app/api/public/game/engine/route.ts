@@ -76,11 +76,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'gameId is required' }, { status: 400 });
       }
 
+      // Look up game by code (gameId from client is the code, not UUID)
       const { data: game, error: gameError } = await supabase
         .from('games')
         .select('*')
-        .eq('id', gameId)
-        .single();
+        .eq('code', gameId)
+        .maybeSingle();
 
       if (gameError || !game) {
         return NextResponse.json({ error: 'Game not found' }, { status: 404 });
@@ -108,7 +109,7 @@ export async function POST(request: NextRequest) {
           current_number: nextNumber,
           called_count: newDrawnNumbers.length,
         })
-        .eq('id', gameId)
+        .eq('id', game.id)
         .select()
         .single();
 
@@ -130,25 +131,108 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'gameId and userId are required' }, { status: 400 });
       }
 
-      const { data: atomicResult, error: atomicError } = await supabase.rpc('atomic_validate_win', {
-        p_game_id: gameId,
-        p_user_id: userId,
-      });
+      // Look up game by code (gameId from client is the code, not UUID)
+      const { data: gameByCode } = await supabase
+        .from('games')
+        .select('id, status, prize_pool, code, winner_id')
+        .eq('code', gameId)
+        .maybeSingle();
 
-      if (atomicError) {
-        console.error('atomic_validate_win error:', atomicError);
-        return NextResponse.json({ error: 'Validation failed' }, { status: 500 });
+      if (!gameByCode) {
+        return NextResponse.json({ error: 'Game not found' }, { status: 404 });
       }
 
-      const result = atomicResult as any;
-      if (!result.success) {
-        const resp: any = { win: false, message: result.error };
-        if (result.winner_id) resp.winner_id = result.winner_id;
-        return NextResponse.json(resp, { status: 400 });
+      // If game already finished, return the winner
+      if (gameByCode.status === 'finished') {
+        return NextResponse.json({
+          win: false,
+          error: 'Game already finished',
+          winner_id: gameByCode.winner_id,
+        }, { status: 400 });
       }
 
-      const winAmount = Number(result.win_amount) || 0;
-      const playerCount = Number(result.player_count) || 1;
+      // Get the player's card
+      const { data: gamePlayer } = await supabase
+        .from('game_players')
+        .select('card, is_watching')
+        .eq('game_id', gameByCode.id)
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (!gamePlayer) {
+        return NextResponse.json({ error: 'Player not found in this game' }, { status: 404 });
+      }
+
+      if (gamePlayer.is_watching) {
+        return NextResponse.json({ error: 'Spectators cannot win' }, { status: 400 });
+      }
+
+      // Get drawn numbers
+      const { data: gameData } = await supabase
+        .from('games')
+        .select('drawn_numbers')
+        .eq('id', gameByCode.id)
+        .single();
+
+      const drawnNumbers: number[] = gameData?.drawn_numbers || [];
+      const card: number[][] = gamePlayer.card || [];
+
+      if (!card || card.length === 0) {
+        return NextResponse.json({ error: 'No card found' }, { status: 400 });
+      }
+
+      // Validate win: check if any row or column is fully marked
+      let hasRowWin = false;
+      let hasColWin = false;
+
+      // Check rows
+      for (let row = 0; row < card.length; row++) {
+        let rowComplete = true;
+        for (let col = 0; col < card[row].length; col++) {
+          const cell = card[row][col];
+          if (cell === 0) continue; // Free space
+          if (!drawnNumbers.includes(cell)) {
+            rowComplete = false;
+            break;
+          }
+        }
+        if (rowComplete) {
+          hasRowWin = true;
+          break;
+        }
+      }
+
+      // Check columns
+      if (!hasRowWin) {
+        for (let col = 0; col < 5; col++) {
+          let colComplete = true;
+          for (let row = 0; row < card.length; row++) {
+            const cell = card[row]?.[col];
+            if (cell === 0) continue; // Free space
+            if (cell === undefined || !drawnNumbers.includes(cell)) {
+              colComplete = false;
+              break;
+            }
+          }
+          if (colComplete) {
+            hasColWin = true;
+            break;
+          }
+        }
+      }
+
+      if (!hasRowWin && !hasColWin) {
+        return NextResponse.json({ win: false, error: 'No winning pattern found' }, { status: 400 });
+      }
+
+      // Count players
+      const { count: playerCount } = await supabase
+        .from('game_players')
+        .select('id', { count: 'exact', head: true })
+        .eq('game_id', gameByCode.id)
+        .eq('is_watching', false);
+
+      const winAmount = Math.floor(Number(gameByCode.prize_pool) || 0);
 
       const { data: profile } = await supabase.from('profiles').select('telegram_id, first_name').eq('id', userId).single();
 
@@ -163,14 +247,20 @@ export async function POST(request: NextRequest) {
         reference: `WIN-${gameId}`,
       });
 
-      await supabase.from('game_players').update({ auto_mark: true }).eq('game_id', gameId).eq('user_id', userId);
+      // Mark game as finished with winner
+      await supabase.from('games').update({ status: 'finished', winner_id: userId }).eq('id', gameByCode.id);
+
+      // Clean up card reservations
+      await supabase.from('game_card_reservations').delete().eq('game_code', gameByCode.code);
+
+      await supabase.from('game_players').update({ auto_mark: true }).eq('game_id', gameByCode.id).eq('user_id', userId);
 
       if (profile?.telegram_id && botToken) {
         await tgSend(botToken, profile.telegram_id, `🎉 *BINGO WIN!*\n\nCongratulations ${profile.first_name || 'Player'}! You won *${winAmount.toLocaleString()} ETB*!\n\nKeep playing and winning! 🍀`);
       }
 
       if (botToken) {
-        await sendGameStats(botToken, gameId);
+        await sendGameStats(botToken, gameByCode.id);
       }
 
       return NextResponse.json({
@@ -187,14 +277,19 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'gameId and userId are required' }, { status: 400 });
       }
 
+      // Look up game by code (gameId from client is the code, not UUID)
       const { data: game } = await supabase
         .from('games')
         .select('*')
-        .eq('id', gameId)
-        .single();
+        .eq('code', gameId)
+        .maybeSingle();
 
-      if (game && game.status !== 'finished') {
-        await supabase.from('games').update({ status: 'finished' }).eq('id', gameId);
+      if (!game) {
+        return NextResponse.json({ error: 'Game not found' }, { status: 404 });
+      }
+
+      if (game.status !== 'finished') {
+        await supabase.from('games').update({ status: 'finished' }).eq('id', game.id);
       }
 
       await supabase.from('game_card_reservations').delete().eq('game_code', game.code);
@@ -202,9 +297,9 @@ export async function POST(request: NextRequest) {
       const { data: gamePlayer } = await supabase
         .from('game_players')
         .select('*')
-        .eq('game_id', gameId)
+        .eq('game_id', game.id)
         .eq('user_id', userId)
-        .single();
+        .maybeSingle();
 
       const drawnNumbers: number[] = game?.drawn_numbers || [];
       const card: number[][] = gamePlayer?.card || [];
@@ -216,13 +311,13 @@ export async function POST(request: NextRequest) {
       const existingHistory = await supabase
         .from('game_history')
         .select('id')
-        .eq('game_id', gameId)
+        .eq('game_id', game.id)
         .eq('user_id', userId)
         .maybeSingle();
 
       if (!existingHistory.data) {
         await supabase.from('game_history').insert({
-          game_id: gameId,
+          game_id: game.id,
           user_id: userId,
           stake: 0,
           win_amount: 0,
@@ -242,7 +337,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'userId and cardNumbers array are required' }, { status: 400 });
       }
 
-            const { stakeId, stakeAmount } = body;
+      const { stakeId, stakeAmount } = body;
       const code = 'BG-' + Math.floor(100000 + Math.random() * 900000);
 
       // Fetch commission rate from bot_config so the prize pool matches the admin setting

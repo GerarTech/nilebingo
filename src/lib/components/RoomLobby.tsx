@@ -145,12 +145,14 @@ export default function RoomLobby({
 
       <div className="flex items-stretch gap-1.5 mb-4">
         <div className="bg-[#141f33] border border-[#233c66]/30 p-2.5 rounded-xl flex-1 text-center shadow-lg">
-          <div className="text-[7.5px] text-gray-400 font-extrabold uppercase tracking-wider">MAIN</div>
+          <div className="text-[7.5px] text-gray-400 font-extrabold uppercase tracking-wider">WALLET</div>
           <div className="text-sm font-black text-white mt-1">{(wallet?.main_balance || 0).toLocaleString()} {t('birr')}</div>
         </div>
-        <div className="bg-[#141f33] border border-[#233c66]/30 p-2.5 rounded-xl flex-1 text-center shadow-lg">
-          <div className="text-[7.5px] text-gray-400 font-extrabold uppercase tracking-wider">PLAY</div>
-          <div className="text-sm font-black text-amber-400 mt-1">{(wallet?.play_balance || 0).toLocaleString()} {t('birr')}</div>
+         <div className="bg-[#141f33] border border-[#233c66]/30 p-2.5 rounded-xl flex-1 text-center shadow-lg">
+          <div className="text-[7.5px] text-gray-400 font-extrabold uppercase tracking-wider">PRIZE</div>
+          <div className="text-sm font-black text-gold mt-1">
+                        {Math.round(fee * Math.max(lobbyPlayerCount, room.players) * (1 - commissionRate / 100)).toLocaleString()} {t('birr')}
+          </div>
         </div>
         <div className="bg-[#141f33] border border-[#233c66]/30 p-2.5 rounded-xl flex-1 text-center shadow-lg">
           <div className="text-[7.5px] text-gray-400 font-extrabold uppercase tracking-wider">STAKE</div>
@@ -164,12 +166,7 @@ export default function RoomLobby({
 
       {/* 🏆 PRIZE & PLAYERS */}
       <div className="flex items-stretch gap-1.5 mb-4">
-        <div className="bg-[#141f33] border border-[#233c66]/30 p-2.5 rounded-xl flex-1 text-center shadow-lg">
-          <div className="text-[7.5px] text-gray-400 font-extrabold uppercase tracking-wider">PRIZE</div>
-          <div className="text-sm font-black text-gold mt-1">
-                        {Math.round(fee * Math.max(lobbyPlayerCount, room.players) * (1 - commissionRate / 100)).toLocaleString()} {t('birr')}
-          </div>
-        </div>
+       
         <div className="bg-[#141f33] border border-[#233c66]/30 p-2.5 rounded-xl flex-1 text-center shadow-lg">
           <div className="text-[7.5px] text-gray-400 font-extrabold uppercase tracking-wider">PLAYERS</div>
           <div className="text-sm font-black text-emerald-400 mt-1">{lobbyPlayerCount || room.players}</div>

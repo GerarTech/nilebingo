@@ -48,17 +48,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Insufficient main wallet balance.' }, { status: 400 });
     }
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('games_played')
-      .eq('id', userId)
-      .single();
+    // Count games played from game_players table (same logic as bot)
+    const { count: gamesPlayed } = await supabase
+      .from('game_players')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('is_watching', false);
 
-    const gamesPlayed = Number(profile?.games_played) || 0;
-    if (gamesPlayed < requiredGames) {
-      return NextResponse.json({ error: `You must play at least ${requiredGames} games before withdrawing. Completed: ${gamesPlayed}` }, { status: 400 });
+    if ((gamesPlayed || 0) < requiredGames) {
+      return NextResponse.json({ error: 'You must play at least ' + requiredGames + ' games before withdrawing. Completed: ' + (gamesPlayed || 0) }, { status: 400 });
     }
-
     const { data: txData, error: txError } = await supabase
       .from('transactions')
       .insert({

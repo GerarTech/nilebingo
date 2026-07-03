@@ -72,7 +72,7 @@ function HomePage() {
   const [recentCalled, setRecentCalled] = useState<{ num: number; label: string }[]>([]);
   const [showRules, setShowRules] = useState(false);
   const [cardPickerCountdown, setCardPickerCountdown] = useState(50);
-  const [livePlayerCount, setLivePlayerCount] = useState(20);
+  const [livePlayerCount, setLivePlayerCount] = useState(1);
   const [prizePool, setPrizePool] = useState(0);
   const [gameId, setGameId] = useState('');
   const [previewCard, setPreviewCard] = useState<number[][]>([]);
@@ -281,14 +281,34 @@ function HomePage() {
 
   useEffect(() => { if (!selectedRoom || !gameId || inGame) return; refreshGameState(gameId); }, [selectedRoom?.id, gameId, inGame, refreshGameState]);
 
+  // Light polling that only updates takenCards and lobbyPlayerCount
+  // Does NOT overwrite selectedCards to avoid flicker during card selection
+  const refreshTakenCards = useCallback(async (gId: string) => {
+    if (!gId || !profile || !isValidUUID(profile.id)) return;
+    try {
+      const res = await fetch(`/api/public/game/lobby?gameId=${gId}&userId=${profile.id}`);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      if (data.success) {
+        const reservations = data.reservations || [];
+        const otherCards = reservations.filter((r: any) => r.user_id !== profile.id).map((r: any) => r.card_number);
+        setTakenCards(otherCards.filter((n: number) => n > 0));
+        const uniqueUserIds = new Set(reservations.map((r: any) => r.user_id));
+        setLobbyPlayerCount(Math.max(uniqueUserIds.size, data.livePlayerCount || 0));
+      }
+    } catch (e) {
+      // Silent fail for polling
+    }
+  }, [profile?.id]);
+
   useEffect(() => {
     if (!selectedRoom || !gameId || inGame) return;
     const channel = supabase.channel(`game-${gameId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'game_card_reservations', filter: `game_code=eq.${gameId}` }, () => refreshGameState(gameId))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'game_card_reservations', filter: `game_code=eq.${gameId}` }, () => refreshTakenCards(gameId))
       .subscribe();
     realtimeChannelRef.current = channel;
     return () => { if (realtimeChannelRef.current) { supabase.removeChannel(realtimeChannelRef.current); realtimeChannelRef.current = null; } };
-  }, [selectedRoom?.id, gameId, inGame, refreshGameState]);
+  }, [selectedRoom?.id, gameId, inGame, refreshTakenCards]);
 
   // ============ INIT & VOICE ============
   useEffect(() => { if (typeof window !== 'undefined' && window.speechSynthesis) window.speechSynthesis.getVoices(); }, []);
@@ -484,7 +504,27 @@ function HomePage() {
         }
         return { ...r, status: 'starting_soon' as const, countdown: remaining, winAmount: Math.round((r.entry * r.players) * (1 - cr / 100)) };
       }));
-      if (sr && !ig) {
+      // Update game ID when cycle changes (countdown wraps around) and user is in lobby
+      if (sr && !ig && !ir) {
+        const period = getRoomPeriod(sr.id);
+        const elapsed = currentSec % period;
+        const remaining = period - elapsed;
+        // When countdown just reset (remaining === period), generate new game ID for the new cycle
+        if (remaining === period) {
+          const newCycle = Math.floor(currentSec / period);
+          const newGameId = generateDeterministicGameId(sr.id, newCycle);
+          setGameId(prevId => {
+            if (prevId !== newGameId) {
+              // Clear card selections when game ID changes (new game cycle)
+              setSelectedCards([]);
+              setPreviewCard([]);
+              setTakenCards([]);
+              setLobbyPlayerCount(0);
+              return newGameId;
+            }
+            return prevId;
+          });
+        }
       }
     }, 1000);
     return () => clearInterval(tick);
@@ -575,7 +615,7 @@ function HomePage() {
   useEffect(() => { drawnRef.current = drawnNumbers; }, [drawnNumbers]);
 
   // ============ LIVE PLAYER COUNT POLLING ============
-  const liveCountRef = useRef<number>(20);
+  const liveCountRef = useRef<number>(1);
   useEffect(() => {
     if (!inGame || !gameId) return;
     liveCountRef.current = livePlayerCount;
@@ -602,9 +642,9 @@ function HomePage() {
       if (reservationPollRef.current) { clearInterval(reservationPollRef.current); reservationPollRef.current = null; }
       return;
     }
-    reservationPollRef.current = setInterval(() => { refreshGameState(gameId); }, 1000);
+    reservationPollRef.current = setInterval(() => { refreshTakenCards(gameId); }, 1000);
     return () => { if (reservationPollRef.current) { clearInterval(reservationPollRef.current); reservationPollRef.current = null; } };
-  }, [selectedRoom?.id, gameId, inGame, refreshGameState]);
+  }, [selectedRoom?.id, gameId, inGame, refreshTakenCards]);
 
   // ============ AUTO-MARK ============
   useEffect(() => {
