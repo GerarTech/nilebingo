@@ -1,6 +1,6 @@
 export const am = {
   // Common
-  app_name: 'ፉአ ቢንጎ',
+  app_name: 'ናይል ቢንጎ',
   tab_game: 'ጨዋታ',
   tab_scores: 'ውጤቶች',
   tab_history: 'ታሪክ',
