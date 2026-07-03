@@ -85,7 +85,7 @@ export default function SettingsPage() {
     deposit_cbe_info: '*CBE Deposit Instructions*\n\nAccount: 1000256789123\nName: Nile Bingo\nBank: CBE\n\n1. Send your deposit using CBE Birr\n2. Copy/forward the full SMS confirmation here\n3. Admin will verify and credit your balance\n\nMin deposit: 10 ETB',
     deposit_telebirr_info: '*Telebirr Deposit Instructions*\n\nNumber: 0925502345\nName: Ashe\n\n1. Send up to 1000 ETB using Telebirr\n2. Copy/forward the full SMS confirmation here\n3. Admin will verify and credit your balance\n\nMin deposit: 10 ETB',
     withdraw_info: '*Withdraw Funds*\n\nWithdrawals are processed manually by our team.\n\nRequirements:\n• Main Wallet balance only (Play Wallet cannot be withdrawn)\n• Minimum withdrawal: 50 ETB\n• You must have played at least 5 games\n\nTo request a withdrawal, please contact support with:\n• Amount to withdraw\n• Your preferred receiving method\n\nWe process withdrawals within 24 hours.',
-    contact_info: '*Contact Support*\n\nEmail: support@nilebingo.com\nTelegram: @nile_bingo_support',
+    contact_info: '*Contact Support*\n\nEmail: {support_email}\nTelegram: {support_telegram}',
     winning_patterns_info: '*Winning Patterns*\n\n1. Horizontal Line\n2. Vertical Line\n3. Diagonal Line\n4. Four Corners\n5. Blackout\n\nFirst to complete a pattern wins!',
     how_to_play: '*How to Play BINGO:*\n\n1. Choose your stake (10/20/50 ETB)\n2. Select your card (1-300)\n3. Numbers are drawn\n4. Mark matching numbers\n5. Complete a row/column/diagonal to win!\n\nGood luck!',
     bot_description: '🎮 Play Bingo Game Online (ቢንጎ ጨዋታ)\n\n🎉🔥 እንኳን ወደ Nile BINGO🔥🎱 በሰላም መጡ! 🔥🎉\n\n🎮 ከብዙ ተጫዋቾች ጋር በቀጥታ የቢንጎ ጨዋታ ይጫወቱ\n💰 ሽልማት ያሸንፉ እና የእርስዎን ገንዘብ ያስተዳድሩ\n⚡️ ፈጣን እና በብዙዎች የተወደደ የብዙ ተጫዋቾች ጨዋታ\n\n👉 አሁን ለመጀመር /start ይጫኑ!',
@@ -136,6 +136,7 @@ export default function SettingsPage() {
   const [appLogo, setAppLogo] = useState('🎰');
   const [appLogoPng, setAppLogoPng] = useState<string | null>(null);
   const [colorScheme, setColorScheme] = useState('gold');
+  const [welcomeImage, setWelcomeImage] = useState<string | null>(null);
   const [adminReferralEnabled, setAdminReferralEnabled] = useState(true);
   const [appointedWinners, setAppointedWinners] = useState<Record<string, {card_number: number, after_balls: number}>>({});
 
@@ -183,6 +184,9 @@ export default function SettingsPage() {
         if (config.colorScheme) {
           setColorScheme(config.colorScheme);
         }
+        if (config.welcomeImage) {
+          setWelcomeImage(config.welcomeImage);
+        }
         if (config.referralEnabled !== undefined) {
           setAdminReferralEnabled(config.referralEnabled !== false);
         }
@@ -227,6 +231,7 @@ export default function SettingsPage() {
       appLogo,
       appLogoPng,
       colorScheme,
+      welcomeImage,
       referralEnabled: adminReferralEnabled,
       withdraw_required_games: withdrawRequiredGames,
       withdraw_min_amount: withdrawMinAmount,
@@ -783,6 +788,30 @@ export default function SettingsPage() {
                 <div className="mt-2 flex items-center gap-2">
                   <img src={appLogoPng} alt="Logo Preview" className="w-10 h-10 rounded-lg border border-white/10 object-contain bg-navy-light" />
                   <button onClick={() => setAppLogoPng(null)} className="text-[10px] text-red-400 hover:text-red-300">Remove</button>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className="text-[10px] text-gray-400 uppercase block mb-1">Welcome Image (sent with /start message)</label>
+              <p className="text-[8.5px] text-gray-500 mb-1.5">Upload an image that will be sent alongside the welcome message. Max 500KB.</p>
+              <input
+                type="file"
+                accept="image/png,image/jpeg"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  if (file.size > 500 * 1024) { alert('File too large. Max 500KB.'); return; }
+                  const reader = new FileReader();
+                  reader.onload = (ev) => setWelcomeImage(ev.target?.result as string);
+                  reader.readAsDataURL(file);
+                }}
+                className="w-full text-xs text-gray-400 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-gold file:text-navy file:cursor-pointer hover:file:bg-gold/90"
+              />
+              {welcomeImage && (
+                <div className="mt-2 flex items-center gap-2">
+                  <img src={welcomeImage} alt="Welcome Preview" className="w-10 h-10 rounded-lg border border-white/10 object-contain bg-navy-light" />
+                  <button onClick={() => setWelcomeImage(null)} className="text-[10px] text-red-400 hover:text-red-300">Remove</button>
                 </div>
               )}
             </div>

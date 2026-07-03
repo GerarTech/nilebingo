@@ -5,6 +5,7 @@ const botToken = process.env.TELEGRAM_BOT_TOKEN || '';
 const hostUrl = process.env.HOST_URL || 'http://localhost:3002';
 const miniAppUrl = hostUrl;
 const adminChatId = process.env.ADMIN_CHAT_ID || '';
+const adminBotToken = process.env.ADMIN_BOT_TOKEN || '';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key';
@@ -65,11 +66,11 @@ async function getBotCommands(): Promise<Record<string, any>> {
       admin_help: '/admin_help',
       admin_approve: '/approve_',
       admin_reject: '/reject_',
-      telebirr_number: '0918281072',
-      telebirr_name: 'Melkie',
+      telebirr_number: 'CHANGE_ME',
+      telebirr_name: 'CHANGE_ME',
       telebirr_max: '1000',
-      cbe_account: '1000256789123',
-      cbe_name: 'Nile Bingo',
+      cbe_account: 'CHANGE_ME',
+      cbe_name: 'CHANGE_ME',
       cbe_max: '5000',
       withdraw_required_games: '5',
       referral_bonus: '10',
@@ -86,11 +87,11 @@ async function getBotCommands(): Promise<Record<string, any>> {
       admin_help: '/admin_help',
       admin_approve: '/approve_',
       admin_reject: '/reject_',
-      telebirr_number: '0918281072',
-      telebirr_name: 'Melkie',
+      telebirr_number: 'CHANGE_ME',
+      telebirr_name: 'CHANGE_ME',
       telebirr_max: '1000',
-      cbe_account: '1000256789123',
-      cbe_name: 'Nile Bingo',
+      cbe_account: 'CHANGE_ME',
+      cbe_name: 'CHANGE_ME',
       cbe_max: '5000',
       withdraw_required_games: '5',
       referral_bonus: '10',
@@ -141,6 +142,35 @@ async function tgCall(method: string, payload: any = {}): Promise<any> {
 
 async function sendMessage(chatId: string | number, text: string, extra: any = {}) {
   return tgCall('sendMessage', { chat_id: chatId, text, ...extra });
+}
+
+async function sendPhoto(chatId: string | number, photoDataUrl: string, caption: string, extra: any = {}) {
+  try {
+    const parts = photoDataUrl.split(',');
+    const mime = parts[0].match(/:(.*?);/)?.[1] || 'image/png';
+    const bytes = atob(parts[1]);
+    const arr = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+    const blob = new Blob([arr], { type: mime });
+    const ext = mime.includes('png') ? 'png' : 'jpg';
+    const formData = new FormData();
+    formData.append('chat_id', String(chatId));
+    formData.append('photo', blob, `welcome.${ext}`);
+    formData.append('caption', caption);
+    formData.append('parse_mode', 'Markdown');
+    if (extra.reply_markup) {
+      formData.append('reply_markup', JSON.stringify(extra.reply_markup));
+    }
+    const res = await fetch(`${TG_API}/sendPhoto`, {
+      method: 'POST',
+      body: formData,
+      signal: AbortSignal.timeout(15000),
+    });
+    return await res.json();
+  } catch (err) {
+    console.error('sendPhoto error:', err);
+    return { ok: false };
+  }
 }
 
 async function answerCallbackQuery(callbackQueryId: string, text?: string) {
@@ -199,7 +229,7 @@ const EN = {
   deposit_submitted: '⏳ *Deposit Submitted*\n\nYour deposit of *{amount} ETB* via *{bank}* has been received and is pending review.\n\n🆔 Reference: `{txid}`\n\nOur team will verify and approve it shortly. You\'ll receive a notification once credited! ✅',
   withdraw_info: '💸 *Withdraw Funds*\n\nOnly your *Main Balance* can be withdrawn. Play balance is for gameplay only.\n\n📋 *Requirements:*\n• Play at least {required_games} games first\n• Minimum withdrawal: {min_amount} ETB\n\nTo request a withdrawal, please contact support with your amount and preferred method.',
   withdraw_required: '🚫 *Withdrawal Locked*\n\nYou need to play at least *{required} games* before you can withdraw.\n\n✅ Games played: *{played}*\n❌ Remaining: *{remaining}*\n\nKeep playing — you\'re almost there! 💪',
-  contact_info: '*📬 Contact Support*\n\nHave a question or need help?\n\n📧 Email: support@nilebingo.com\n💬 Telegram: @nile_bingo_support\n\nWe typically respond within 24 hours.',
+  contact_info: '*📬 Contact Support*\n\nHave a question or need help?\n\n📧 Email: {support_email}\n💬 Telegram: {support_telegram}\n\nWe typically respond within 24 hours.',
   winning_patterns_info: '*🏆 Winning Patterns*\n\nComplete any of these to win:\n\n1️⃣ *Horizontal Row* — Mark all 5 numbers in any row\n2️⃣ *Vertical Column* — Mark all 5 numbers in any column\n\nWin detection is automatic — no need to shout BINGO! The game instantly checks after every draw.',
   language_menu: '🌍 *Select Language / ቋንቋ ምረጥ*',
   transactions_prompt: '📒 *Recent Transactions*\n\n{transactions}\n\nFor full history, open the Mini App Wallet tab.',
@@ -908,12 +938,19 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ ok: true });
       }
 
-      await sendMessage(chatId, getText(lang, 'welcome'), {
-        reply_markup: {
-          inline_keyboard: [[{ text: getText(lang, 'play'), web_app: { url: miniAppUrl } }]]
-        }
-      });
-      
+      if (commands.welcomeImage) {
+        await sendPhoto(chatId, commands.welcomeImage, getText(lang, 'welcome'), {
+          reply_markup: {
+            inline_keyboard: [[{ text: getText(lang, 'play'), web_app: { url: miniAppUrl } }]]
+          }
+        });
+      } else {
+        await sendMessage(chatId, getText(lang, 'welcome'), {
+          reply_markup: {
+            inline_keyboard: [[{ text: getText(lang, 'play'), web_app: { url: miniAppUrl } }]]
+          }
+        });
+      }
       await sendMessage(chatId, 'Menu:', getMainKeyboard(lang));
       return NextResponse.json({ ok: true });
     }
@@ -1083,8 +1120,20 @@ export async function POST(request: NextRequest) {
             .replace('{txid}', txId);
           await sendMessage(chatId, msgText, { parse_mode: 'Markdown', ...getMainKeyboard(lang) });
 
-          if (adminChatId) {
-            await sendMessage(adminChatId, `⏳ *New Deposit Request*\n\n👤 User: ${userProfile.first_name || 'Unknown'}${userProfile.username ? ` (@${userProfile.username})` : ''}\n📞 Phone: ${userProfile.phone || 'N/A'}\n💰 Amount: *${amount} ETB*\n🏦 Bank: *${bankName}*\n🆔 TX ID: \`${txId}\`\n\nApprove: /approve_${txId_full.slice(0, 8)}\nReject: /reject_${txId_full.slice(0, 8)}`, { parse_mode: 'Markdown' });
+          // Direct admin alert via admin bot
+          if (adminBotToken && adminChatId) {
+            try {
+              await fetch(`https://api.telegram.org/bot${adminBotToken}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  chat_id: adminChatId,
+                  text: `⏳ *New Deposit Request*\n\n👤 User: ${userProfile.first_name || 'Unknown'}${userProfile.username ? ` (@${userProfile.username})` : ''}\n📞 Phone: ${userProfile.phone || 'N/A'}\n💰 Amount: *${amount} ETB*\n🏦 Bank: *${bankName}*\n🆔 TX ID: \`${txId}\`\n\nApprove: /approve_${txId_full.slice(0, 8)}\nReject: /reject_${txId_full.slice(0, 8)}`,
+                  parse_mode: 'Markdown',
+                }),
+                signal: AbortSignal.timeout(5000),
+              });
+            } catch (e) { /* ignore */ }
           }
           // Route to notification channels
           try {
@@ -1227,11 +1276,17 @@ export async function POST(request: NextRequest) {
 
     // Process normal commands
     if (matchesCommand(userCommands.play, plainCommands.play)) {
-      await sendMessage(chatId, getMsg('welcome', 'welcome'), {
+      const welcomeText = getMsg('welcome', 'welcome');
+      const keyboard = {
         reply_markup: {
           inline_keyboard: [[{ text: getText(lang, 'play'), web_app: { url: miniAppUrl } }]]
         }
-      });
+      };
+      if (commands.welcomeImage) {
+        await sendPhoto(chatId, commands.welcomeImage, welcomeText, keyboard);
+      } else {
+        await sendMessage(chatId, welcomeText, keyboard);
+      }
     } else if (matchesCommand(userCommands.check_balance, plainCommands.check_balance)) {
       let mainBal = 0;
       let playBal = 0;
@@ -1391,7 +1446,7 @@ export async function POST(request: NextRequest) {
         await sendMessage(chatId, getText(lang, 'transactions_empty'), { parse_mode: 'Markdown' });
       }
     } else if (text === '/invite' || text.toLowerCase() === 'invite' || text === '👥 Invite Friends' || text.includes('invite') || matchesCommand(userCommands.mycode, plainCommands.mycode)) {
-      const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'fuabingobot';
+      const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'YOUR_BOT_USERNAME';
       const refLink = `https://t.me/${botUsername}?start=ref_${from.id}`;
       const refBonus = commands.referral_bonus || 10;
       const refMinDep = commands.referral_min_deposit || 50;

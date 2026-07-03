@@ -4,6 +4,7 @@ import { notifyAdminTransactionCompleted } from '@/lib/server/admin';
 
 const botToken = process.env.ADMIN_BOT_TOKEN || '';
 const adminChatId = process.env.ADMIN_CHAT_ID || '';
+const userBotToken = process.env.TELEGRAM_BOT_TOKEN || '';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key';
@@ -318,10 +319,10 @@ async function handleAdminReject(chatId: number, txId: string) {
     const amountStr = Number(tx.amount).toLocaleString();
     const txLabel = tx.type === 'deposit' ? 'Deposit' : 'Withdrawal';
 
-    // Notify user
-    if (prof.telegram_id) {
+    // Notify user via user bot
+    if (prof.telegram_id && userBotToken) {
       try {
-        await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+        await fetch(`https://api.telegram.org/bot${userBotToken}/sendMessage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -564,13 +565,20 @@ export async function POST(request: NextRequest) {
         const amountStr = Number(tx.amount).toLocaleString();
         const txLabel = tx.type === 'deposit' ? 'Deposit' : 'Withdrawal';
 
-        // Notify the user
-        try {
-          const { data: prof } = await supabase.from('profiles').select('telegram_id, first_name, username').eq('id', tx.user_id).single();
-          if (prof?.telegram_id) {
-            await sendMessage(prof.telegram_id, `✅ *${txLabel} Approved!*\n\nYour ${tx.type} of *${amountStr} ETB* via *${bankName}* (TX ID: \`${userRef}\`) has been approved and credited to your wallet.`, { parse_mode: 'Markdown' });
-          }
-        } catch (e) { /* ignore */ }
+        // Notify the user via user bot
+        if (userBotToken) {
+          try {
+            const { data: prof } = await supabase.from('profiles').select('telegram_id, first_name, username').eq('id', tx.user_id).single();
+            if (prof?.telegram_id) {
+              await fetch(`https://api.telegram.org/bot${userBotToken}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chat_id: prof.telegram_id, text: `✅ *${txLabel} Approved!*\n\nYour ${tx.type} of *${amountStr} ETB* via *${bankName}* (TX ID: \`${userRef}\`) has been approved and credited to your wallet.`, parse_mode: 'Markdown' }),
+                signal: AbortSignal.timeout(5000),
+              });
+            }
+          } catch (e) { /* ignore */ }
+        }
 
         // Route to subscribed channels
         const eventName = tx.type === 'deposit' ? 'deposit_approved' : 'withdraw_approved';
@@ -616,11 +624,11 @@ export async function POST(request: NextRequest) {
         const amountStr = Number(tx?.amount || 0).toLocaleString();
         const txLabel = tx?.type === 'deposit' ? 'Deposit' : 'Withdrawal';
 
-        // Notify user
+        // Notify user via user bot
         const prof = tx?.profiles || {};
-        if (prof.telegram_id) {
+        if (prof.telegram_id && userBotToken) {
           try {
-            await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+            await fetch(`https://api.telegram.org/bot${userBotToken}/sendMessage`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({

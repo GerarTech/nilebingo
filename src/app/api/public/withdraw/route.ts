@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key';
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+if (!supabaseUrl || !supabaseServiceKey) throw new Error('Missing Supabase environment variables');
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 export async function POST(request: NextRequest) {
@@ -86,9 +87,9 @@ export async function POST(request: NextRequest) {
       notifyEvent('withdraw_pending', channelMsg);
 
       if (userTelegramId) {
-        const adminBotToken = process.env.ADMIN_BOT_TOKEN;
-        if (adminBotToken) {
-          await fetch(`https://api.telegram.org/bot${adminBotToken}/sendMessage`, {
+        const userBotToken = process.env.TELEGRAM_BOT_TOKEN;
+        if (userBotToken) {
+          await fetch(`https://api.telegram.org/bot${userBotToken}/sendMessage`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

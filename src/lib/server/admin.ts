@@ -85,29 +85,33 @@ export async function notifyEvent(event: NotifyEvent, text: string, parseMode = 
   // Fallback to env-configured admin
   if (envBotToken && envChatId) {
     try {
-      await fetch(`https://api.telegram.org/bot${envBotToken}/sendMessage`, {
+      const res = await fetch(`https://api.telegram.org/bot${envBotToken}/sendMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ chat_id: envChatId, text, parse_mode: parseMode }),
         signal: AbortSignal.timeout(5000),
       });
+      const json = await res.json();
+      if (!json.ok) console.error('notifyEvent env admin fallback error:', json);
     } catch (err) {
-      console.error('notifyEvent env admin fallback:', err);
+      console.error('notifyEvent env admin fallback fetch error:', err);
     }
   }
 }
 
-/** Send a direct message to a user via ADMIN_BOT_TOKEN */
+/** Send a direct message to a user via TELEGRAM_BOT_TOKEN (user bot) */
 export async function notifyUser(telegramId: string | number, text: string, parseMode = 'Markdown') {
-  const botToken = process.env.ADMIN_BOT_TOKEN;
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
   if (!botToken) return;
   try {
-    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+    const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ chat_id: String(telegramId), text, parse_mode: parseMode }),
       signal: AbortSignal.timeout(5000),
     });
+    const json = await res.json();
+    if (!json.ok) console.error('notifyUser Telegram error:', json);
   } catch (err) {
     console.error('notifyUser error:', err);
   }
@@ -115,7 +119,8 @@ export async function notifyUser(telegramId: string | number, text: string, pars
 
 // Verify admin access
 export function verifyAdmin(password: string): boolean {
-  const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
+  const adminPassword = process.env.ADMIN_PASSWORD;
+  if (!adminPassword) return false;
   return password === adminPassword;
 }
 
@@ -581,7 +586,7 @@ export async function updateBotMessages(messages: Record<string, any>) {
         body: JSON.stringify({ description: messages.bot_description }),
         signal: AbortSignal.timeout(5000),
       }).then(r => r.json()).then(data => {
-        console.log('Telegram setMyDescription response:', data);
+        console.info('Telegram setMyDescription sync ok');
       });
     } catch (err) {
       console.error('Failed to sync bot description with Telegram:', err);

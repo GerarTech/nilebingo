@@ -3,8 +3,9 @@ import { createClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key';
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+if (!supabaseUrl || !supabaseServiceKey) throw new Error('Missing Supabase environment variables');
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 export async function GET(request: NextRequest) {
@@ -22,7 +23,7 @@ export async function GET(request: NextRequest) {
     const appName = config.appName || 'Nile BINGO';
     const appLogo = config.appLogo || '🎰';
     const appLogoPng = config.appLogoPng || null;
-    const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'yenedating_bot';
+    const botUsername = process.env.TELEGRAM_BOT_USERNAME || '';
     const colorScheme = config.colorScheme || 'gold';
     const referralEnabled = config.referralEnabled !== false;
     const referralBonus = typeof config.referral_bonus === 'number' ? config.referral_bonus : (typeof config.referralBonus === 'number' ? config.referralBonus : 10);
