@@ -31,6 +31,11 @@ async function registerAdminBotCommands() {
   }
 }
 
+// Register commands on module load so they appear without requiring /start
+if (botToken) {
+  registerAdminBotCommands().catch(() => {});
+}
+
 async function tgCall(method: string, payload: any = {}): Promise<any> {
   try {
     const res = await fetch(`${TG_API}/${method}`, {
