@@ -21,7 +21,7 @@ export default function GamesPage() {
     if (q) params.set('search', q);
     fetch(`/api/admin/data?${params}`)
       .then(r => r.json())
-      .then(d => { setGames(d); setLoading(false); })
+      .then(d => { if (Array.isArray(d)) setGames(d); setLoading(false); })
       .catch(() => setLoading(false));
   };
 

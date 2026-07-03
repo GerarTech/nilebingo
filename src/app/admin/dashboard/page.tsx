@@ -30,7 +30,7 @@ export default function DashboardPage() {
       fetch('/api/admin/data?action=dashboard').then(r => r.json()),
       fetch('/api/admin/data?action=bot_config').then(r => r.json()),
     ])
-      .then(([d, cfg]) => { setStats(d); setBranding(cfg); setLoading(false); })
+      .then(([d, cfg]) => { if (d && typeof d.totalUsers === 'number') setStats(d); setBranding(cfg); setLoading(false); })
       .catch(() => setLoading(false));
   }, []);
 
