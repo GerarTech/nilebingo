@@ -339,17 +339,11 @@ export async function approveTransaction(transactionId: string, adminId: string)
   if (updateError) return { error: updateError.message };
 
   // Update wallet balance
-  if (tx.type === 'deposit') {
-    await supabase.rpc('add_to_main_balance', {
-      user_id: tx.user_id,
-      amount: tx.amount,
-    });
-  } else if (tx.type === 'withdraw') {
-    await supabase.rpc('subtract_from_main_balance', {
-      user_id: tx.user_id,
-      amount: tx.amount,
-    });
-  }
+  const amount = tx.type === 'withdraw' ? -Math.abs(Number(tx.amount)) : Math.abs(Number(tx.amount));
+  await supabase.rpc('adjust_main_balance', {
+    p_user_id: tx.user_id,
+    p_amount: amount,
+  });
 
   // Notify user
   const prof = tx.profiles as any || {};

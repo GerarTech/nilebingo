@@ -75,33 +75,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to create transaction.' }, { status: 500 });
     }
 
-    const adminBotToken = process.env.ADMIN_BOT_TOKEN;
-    const adminChatId = process.env.ADMIN_CHAT_ID;
+    // Route to notification channels (notifyEvent falls back to ADMIN env vars)
+    try {
+      const { data: prof } = await supabase.from('profiles').select('first_name, username, telegram_id').eq('id', userId).single();
+      const userName = prof?.first_name || prof?.username || 'Unknown';
+      const userTelegramId = prof?.telegram_id;
+      const methodLabel = method === 'telebirr' ? 'Telebirr' : 'CBE Birr';
+      const channelMsg = `💸 *NEW WITHDRAWAL REQUEST*\n\n👤 *User:* ${userName}\n💰 *Amount:* ${withdrawAmount.toLocaleString()} ETB\n🏦 *Method:* ${methodLabel}\n📱 *Account:* ${accountNumber}\n👤 *Name:* ${accountName}\n🆔 *ID:* \`${txData.id.slice(0, 8)}...\``;
+      const { notifyEvent } = await import('@/lib/server/admin');
+      notifyEvent('withdraw_pending', channelMsg);
 
-    if (adminBotToken && adminChatId) {
-      try {
-        const { data: prof } = await supabase.from('profiles').select('first_name, username, telegram_id').eq('id', userId).single();
-        const userName = prof?.first_name || prof?.username || 'Unknown';
-        const userTelegramId = prof?.telegram_id;
-
-        const methodLabel = method === 'telebirr' ? 'Telebirr' : 'CBE Birr';
-        const msg = `💸 *New Withdrawal Request*\n\n👤 User: ${userName}\n💰 Amount: ${withdrawAmount.toLocaleString()} ETB\n🏦 Method: ${methodLabel}\n📱 Account: ${accountNumber}\n👤 Name: ${accountName}\n🆔 TxID: \`${txData.id.slice(0, 8)}\`\n\nUse /approve_${txData.id.slice(0, 8)} to approve or /reject_${txData.id.slice(0, 8)} to reject.`;
-
-        await fetch(`https://api.telegram.org/bot${adminBotToken}/sendMessage`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chat_id: adminChatId, text: msg, parse_mode: 'Markdown' }),
-          signal: AbortSignal.timeout(10000),
-        });
-
-        // Route to notification channels
-        try {
-          const { notifyEvent } = await import('@/lib/server/admin');
-          const channelMsg = `💸 *NEW WITHDRAWAL REQUEST*\n\n👤 *User:* ${userName}\n💰 *Amount:* ${withdrawAmount.toLocaleString()} ETB\n🏦 *Method:* ${methodLabel}\n📱 *Account:* ${accountNumber}\n👤 *Name:* ${accountName}\n🆔 *ID:* \`${txData.id.slice(0, 8)}...\``;
-          notifyEvent('withdraw_pending', channelMsg);
-        } catch (e) { /* ignore */ }
-
-        if (userTelegramId) {
+      if (userTelegramId) {
+        const adminBotToken = process.env.ADMIN_BOT_TOKEN;
+        if (adminBotToken) {
           await fetch(`https://api.telegram.org/bot${adminBotToken}/sendMessage`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -113,9 +99,9 @@ export async function POST(request: NextRequest) {
             signal: AbortSignal.timeout(10000),
           });
         }
-      } catch (e) {
-        console.error('Withdraw notification error:', e);
       }
+    } catch (e) {
+      console.error('Withdraw notification error:', e);
     }
 
     return NextResponse.json({ success: true, txId: txData.id });
