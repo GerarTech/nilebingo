@@ -620,6 +620,14 @@ export async function POST(request: NextRequest) {
             await sendMessage(chatId, `❌ Deposit approval aborted — wallet not credited.`);
             return NextResponse.json({ ok: true });
           }
+        } else if (tx.type === 'withdraw') {
+          const { error: balanceError } = await supabase.rpc('adjust_main_balance', { p_user_id: tx.user_id, p_amount: -Number(tx.amount) });
+          if (balanceError) {
+            console.error('adjust_main_balance error:', balanceError);
+            await sendMessage(chatId, `⚠️ *Balance deduction failed*: ${balanceError.message}\n\nTransaction remains pending. Please check the wallet and retry.`, { parse_mode: 'Markdown' });
+            await sendMessage(chatId, `❌ Withdrawal approval aborted — wallet not debited.`);
+            return NextResponse.json({ ok: true });
+          }
         }
 
         // Mark transaction as completed AFTER balance is credited (correct order)

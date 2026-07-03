@@ -323,7 +323,21 @@ function HomePage() {
     if (typeof window !== 'undefined') {
       const tg = (window as any).Telegram?.WebApp;
       if (tg) { tg.ready(); tg.expand(); const user = tg.initDataUnsafe?.user; initialize(String(user?.id || '999999999'), user?.first_name, user?.username); }
-      else initialize('999999999');
+      else {
+        const guestId = (() => {
+          try {
+            let id = localStorage.getItem('fallback_user_id');
+            if (!id) {
+              id = `guest_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+              localStorage.setItem('fallback_user_id', id);
+            }
+            return id;
+          } catch {
+            return `guest_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+          }
+        })();
+        initialize(guestId);
+      }
     }
   }, [initialize]);
 
