@@ -904,7 +904,6 @@ function HomePage() {
             showWinModal={showWinModal} showLossModal={opponentWinner !== null} showLeaveModal={showLeaveModal}
             winningCard={winningCard} winningCells={winningCells} commissionRate={commissionRate}
             prizePool={prizePool} resultCountdown={resultCountdown} t={t}
-            otherPlayers={otherPlayers}
             onSetAutoMark={setAutoMark} onSetAutoWin={setAutoWin}
             onManualDraw={manualDraw} onBingo={handleBingo} onLeave={leaveGame}
             onLeaveAttempt={handleLeaveAttempt}
