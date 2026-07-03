@@ -87,7 +87,7 @@ export default function GameView({
             { label: t('game_id'), value: `#${gameId.substring(0, 5)}` },
             { label: t('players'), value: <RollingCounter value={livePlayerCount} /> },
             { label: 'Bet', value: `${selectedStake} ETB` },
-            { label: t('prize'), value: <span className="text-gold"><RollingCounter value={Math.round((selectedStake * livePlayerCount) * (1 - commissionRate / 100))} suffix=" ETB" /></span> },
+            { label: t('prize'), value: <span className="text-gold"><RollingCounter value={prizePool} suffix=" ETB" /></span> },
           ].map((stat, i) => (
             <div key={i} className="glass rounded-xl p-2.5 text-center flex flex-col justify-center border border-white/5 bg-navy-card/45 relative overflow-hidden group">
               <div className="absolute top-0 left-0 w-full h-[1.5px] bg-gradient-to-r from-transparent via-white/5 to-transparent" />
