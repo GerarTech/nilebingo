@@ -97,30 +97,24 @@ export async function POST(request: NextRequest) {
           .select('id', { count: 'exact', head: true })
           .eq('game_id', game.id);
 
+        const totalPlayersCount = totalPlayers || 1;
+        const commissionWon = Math.round((Number(stakeAmount) * totalPlayersCount) - Number(prizePool));
+
         const text = `🏆 *BINGO WINNER*\n\n` +
                      `🆔 Game: \`${game.id.slice(0, 8)}...\`\n` +
                      `🎫 Code: \`${code}\`\n` +
                      `👤 *Player:* ${playerName}${identifier ? ` (${identifier})` : ''}\n` +
                      `🏠 *Room:* ${roomName || 'Quick Lobby'}\n` +
-                     `👥 *Total Players:* ${totalPlayers || 1}\n` +
+                     `👥 *Total Players:* ${totalPlayersCount}\n` +
                      `💰 *Stake:* ${stakeAmount} ETB\n` +
                      `🏆 *Prize Pool:* ${Number(prizePool).toLocaleString()} ETB\n` +
+                     `💵 *Commission Won:* ${commissionWon.toLocaleString()} ETB\n` +
                      `🔢 *Called Numbers:* ${Array.isArray(drawnNumbers) ? drawnNumbers.length : 0}\n` +
                      `⏱️ *Date:* ${new Date().toLocaleString()}`;
 
-        // Route through notification channels
+        // Route through notification channels (notifyEvent already falls back to env vars)
         const { notifyEvent } = await import('@/lib/server/admin');
         notifyEvent('game_winner', text);
-
-        // Also send to env-configured admin as fallback
-        const adminBotToken = process.env.ADMIN_BOT_TOKEN;
-        const adminChatId = process.env.ADMIN_CHAT_ID;
-        if (adminBotToken && adminChatId) {
-          await fetch(`https://api.telegram.org/bot${adminBotToken}/sendMessage`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chat_id: adminChatId, text, parse_mode: 'Markdown' }),
-          });
-        }
       } catch (tgErr) {
         console.error('Error sending game winner notification:', tgErr);
       }
