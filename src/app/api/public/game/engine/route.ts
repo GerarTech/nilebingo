@@ -29,13 +29,31 @@ async function sendGameStats(botToken: string, gameId: string) {
     const { data: players } = await supabase.from('game_players').select('*, profiles(first_name, username)').eq('game_id', gameId);
     const playerCount = players ? players.filter((p: any) => !p.is_watching).length : 0;
     const winnerName = game.winner?.first_name || game.winner?.username || 'N/A';
-    const prize = Number(game.prize_pool || 0).toLocaleString();
+    const prize = Number(game.prize_pool || 0);
     const drawnCount = (game.drawn_numbers || []).length;
+
+    // Calculate commission earned
+    let commission = 0;
+    if (game.stake_id) {
+      const { data: stake } = await supabase.from('stakes').select('amount').eq('id', game.stake_id).single();
+      if (stake) {
+        const { count: cards } = await supabase.from('game_card_reservations').select('id', { count: 'exact', head: true }).eq('game_code', game.code);
+        const totalEntities = Math.max(playerCount, cards || 0);
+        commission = Math.max(0, (Number(stake.amount) * totalEntities) - prize);
+      }
+    }
+    if (commission === 0) {
+      // Back-calculate from commission rate
+      const { data: configData } = await supabase.from('bot_config').select('commands').eq('id', 'main').single();
+      const rate = Number(configData?.commands?.commission || 15);
+      commission = prize * rate / (100 - rate);
+    }
 
     let statsMsg = `*🏁 GAME FINISHED*\n\n`;
     statsMsg += `🆔 Game ID: \`${game.code}\`\n`;
     statsMsg += `👥 Players: ${playerCount}\n`;
-    statsMsg += `💰 Prize Pool: ${prize} ETB\n`;
+    statsMsg += `💰 Prize Pool: ${prize.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ETB\n`;
+    statsMsg += `💵 Commission: ${commission.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ETB\n`;
     statsMsg += `🎱 Numbers Drawn: ${drawnCount}/75\n`;
     statsMsg += `🏆 Winner: ${winnerName}\n`;
 
@@ -255,7 +273,7 @@ export async function POST(request: NextRequest) {
         .eq('game_id', gameByCode.id)
         .eq('is_watching', false);
 
-      const winAmount = Math.floor(Number(gameByCode.prize_pool) || 0);
+      const winAmount = Number(gameByCode.prize_pool) || 0;
 
       const { data: profile } = await supabase.from('profiles').select('telegram_id, first_name').eq('id', userId).single();
 

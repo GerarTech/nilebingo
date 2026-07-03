@@ -515,29 +515,26 @@ function HomePage() {
         }
         return { ...r, status: 'starting_soon' as const, countdown: remaining, winAmount: Math.round((r.entry * r.players) * (1 - cr / 100)) };
       }));
-      // Update game ID when cycle changes (countdown wraps around) and user is in lobby
+      // Update game ID every tick based on the current cycle so the lobby always
+      // shows the correct game ID for the upcoming round (not just at the 1-second
+      // boundary which is easily missed).
       if (sr && !ig && !ir) {
         const period = getRoomPeriod(sr.id);
-        const elapsed = currentSec % period;
-        const remaining = period - elapsed;
-        // When countdown just reset (remaining === period), generate new game ID for the new cycle
-        if (remaining === period) {
-          const newCycle = Math.floor(currentSec / period);
-          const newGameId = generateDeterministicGameId(sr.id, newCycle);
-          setGameId(prevId => {
-            if (prevId !== newGameId) {
-              // Clear all game-cycle state when game ID changes (new game cycle)
-              setSelectedCards([]);
-              setPreviewCard([]);
-              setTakenCards([]);
-              setLobbyPlayerCount(0);
-              setIsRegistered(false);
-              setIsSpectatingReady(false);
-              return newGameId;
-            }
-            return prevId;
-          });
-        }
+        const newCycle = Math.floor(currentSec / period);
+        const newGameId = generateDeterministicGameId(sr.id, newCycle);
+        setGameId(prevId => {
+          if (prevId !== newGameId) {
+            // Clear all game-cycle state when game ID changes (new game cycle)
+            setSelectedCards([]);
+            setPreviewCard([]);
+            setTakenCards([]);
+            setLobbyPlayerCount(0);
+            setIsRegistered(false);
+            setIsSpectatingReady(false);
+            return newGameId;
+          }
+          return prevId;
+        });
       }
     }, 1000);
     return () => clearInterval(tick);
@@ -686,7 +683,6 @@ function HomePage() {
     // Prize pool = entry fee × total cards in game × (1 - commission)
     const totalCards = playerCount - 1 + numCards;
     const jackpot = Math.round(entryFee * totalCards * (1 - commissionRate / 100));
-    updateBalance(jackpot, 'main_balance');
 
     if (profile?.id) {
       try {
@@ -702,10 +698,13 @@ function HomePage() {
           setOpponentWinner(winnerName);
           if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
           addGameToHistory(gameId, selectedStake || 10, 'loss');
+          await refreshWallet();
+        } else {
+          await refreshWallet();
         }
       } catch {}
     }
-  }, [gameId, selectedStake, livePlayerCount, addGameToHistory, updateBalance, commissionRate, profile?.id]);
+  }, [gameId, selectedStake, livePlayerCount, addGameToHistory, refreshWallet, commissionRate, profile?.id]);
 
   // ============ SELECT STAKE / ROOM ============
   const selectStake = useCallback((stake: number) => {
@@ -811,9 +810,10 @@ function HomePage() {
     drawnRef.current = []; setSelectedStake(null); setSelectedCards([]); setRecentCalled([]);
     setShowWinModal(false); setWinningCard([]); setWinningCells([]);
     setOtherPlayers([]); setOpponentWinner(null);
+    await refreshWallet();
     setTakenCards([]); setLobbyPlayerCount(0);
     if (realtimeChannelRef.current) { supabase.removeChannel(realtimeChannelRef.current); realtimeChannelRef.current = null; }
-  }, [inGame, isWatching, gameId, showWinModal, opponentWinner, selectedStake, addGameToHistory, profile?.id]);
+  }, [inGame, isWatching, gameId, showWinModal, opponentWinner, selectedStake, addGameToHistory, profile?.id, refreshWallet]);
 
   const handleLeaveAttempt = useCallback(() => {
     if (isWatching) leaveGame();
@@ -911,6 +911,7 @@ function HomePage() {
             profile={profile} gameCard={gameCard} playerCards={playerCards} selectedCards={selectedCards}
             drawnNumbers={drawnNumbers} gameId={gameId} selectedStake={selectedStake || 10}
             inGame={inGame} isWatching={isWatching} autoMark={autoMark} autoWin={autoWin}
+            userMarkedNumbers={userMarkedNumbers}
             language={language} livePlayerCount={livePlayerCount}
             recentCalled={recentCalled} opponentWinner={opponentWinner}
             showWinModal={showWinModal} showLossModal={opponentWinner !== null} showLeaveModal={showLeaveModal}

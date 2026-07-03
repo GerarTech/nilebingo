@@ -216,32 +216,62 @@ async function handleAdminGames(chatId: number) {
 }
 
 async function handleAdminCommission(chatId: number) {
-  const { data: transactions } = await supabase
-    .from('transactions')
-    .select('type, amount, created_at');
-
-  let totalBets = 0, totalWins = 0;
-  let todayBets = 0, todayWins = 0;
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
 
-  if (transactions) {
-    for (const t of transactions) {
-      const amt = Number(t.amount) || 0;
-      const isToday = new Date(t.created_at) >= todayStart;
-      if (t.type === 'bet') {
-        totalBets += amt;
-        if (isToday) todayBets += amt;
+  // Fetch all finished games
+  const { data: games } = await supabase
+    .from('games')
+    .select('id, code, prize_pool, stake_id, created_at')
+    .eq('status', 'finished');
+
+  let totalCommission = 0, todayCommission = 0;
+  let totalBets = 0, todayBets = 0;
+  let gameCount = 0;
+
+  if (games) {
+    for (const game of games) {
+      const isToday = new Date(game.created_at) >= todayStart;
+
+      const { count: playerCount } = await supabase
+        .from('game_players')
+        .select('id', { count: 'exact', head: true })
+        .eq('game_id', game.id)
+        .eq('is_watching', false);
+
+      if (!playerCount || playerCount === 0) continue;
+
+      const { count: cardCount } = await supabase
+        .from('game_card_reservations')
+        .select('id', { count: 'exact', head: true })
+        .eq('game_code', game.code);
+
+      const totalEntities = Math.max(playerCount, cardCount || 0);
+
+      let stakeAmt = 0;
+      if (game.stake_id) {
+        const { data: stake } = await supabase
+          .from('stakes')
+          .select('amount')
+          .eq('id', game.stake_id)
+          .single();
+        stakeAmt = Number(stake?.amount) || 0;
       }
-      if (t.type === 'win') {
-        totalWins += amt;
-        if (isToday) todayWins += amt;
-      }
+
+      if (stakeAmt === 0) continue;
+
+      const prize = Number(game.prize_pool) || 0;
+      const entryTotal = stakeAmt * totalEntities;
+      const commission = entryTotal - prize;
+
+      if (commission < 0) continue;
+
+      totalCommission += commission;
+      totalBets += entryTotal;
+      if (isToday) { todayCommission += commission; todayBets += entryTotal; }
+      gameCount++;
     }
   }
-
-  const totalCommission = Math.max(0, totalBets - totalWins);
-  const todayCommission = Math.max(0, todayBets - todayWins);
 
   // Get configured commission rate
   let commissionRate = 10;
@@ -256,8 +286,8 @@ async function handleAdminCommission(chatId: number) {
     `📊 *Total Commission:* ${totalCommission.toLocaleString()} ETB`,
     `📅 *Today:* ${todayCommission.toLocaleString()} ETB`,
     ``,
-    `📈 Total Bets: ${totalBets.toLocaleString()} ETB`,
-    `🏆 Total Wins: ${totalWins.toLocaleString()} ETB`,
+    `📈 Total Entry Fees: ${totalBets.toLocaleString()} ETB`,
+    `🎮 Games Counted: ${gameCount}`,
     `🔢 Rate: ${commissionRate}%`,
   ].join('\n');
 
@@ -557,6 +587,8 @@ export async function POST(request: NextRequest) {
 
       if (data.startsWith('confirm_approve_')) {
         const txId = data.replace('confirm_approve_', '');
+        // Answer the callback query immediately so the button doesn't show a loading spinner
+        await tgCall('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: 'Processing approval...' });
         const { data: tx } = await supabase.from('transactions').select('*').eq('id', txId).single();
         if (!tx || tx.status !== 'pending') {
           await sendMessage(chatId, 'Transaction already processed.');
@@ -564,6 +596,23 @@ export async function POST(request: NextRequest) {
         }
 
         if (tx.type === 'deposit') {
+          // Ensure the wallet exists before crediting (adjust_main_balance raises if missing)
+          const { data: existingWallet } = await supabase
+            .from('wallets')
+            .select('id')
+            .eq('user_id', tx.user_id)
+            .maybeSingle();
+          if (!existingWallet) {
+            const { error: walletCreateError } = await supabase
+              .from('wallets')
+              .insert({ user_id: tx.user_id, main_balance: 0, play_balance: 0 });
+            if (walletCreateError) {
+              console.error('Wallet creation error:', walletCreateError);
+              await sendMessage(chatId, `⚠️ *Wallet setup failed*: ${walletCreateError.message}\n\nTransaction remains pending. Please retry.`, { parse_mode: 'Markdown' });
+              return NextResponse.json({ ok: true });
+            }
+          }
+
           const { error: balanceError } = await supabase.rpc('adjust_main_balance', { p_user_id: tx.user_id, p_amount: Number(tx.amount) });
           if (balanceError) {
             console.error('adjust_main_balance error:', balanceError);
@@ -573,6 +622,7 @@ export async function POST(request: NextRequest) {
           }
         }
 
+        // Mark transaction as completed AFTER balance is credited (correct order)
         await supabase.from('transactions').update({ status: 'completed' }).eq('id', txId);
 
         const bankName = tx.details?.bank_name || '-';

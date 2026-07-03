@@ -75,7 +75,7 @@ export default function RoomLobby({
 
           <button onClick={onUnregister}
             className="w-full bg-red-500/10 border border-red-500/20 text-red-400 font-black py-4 rounded-xl text-xs hover:bg-red-500/20 active:scale-[0.99] transition-all uppercase tracking-wider cursor-pointer shadow-md">
-            ❌ Cancel & Refund {(fee * selectedCards.length).toLocaleString()} {t('birr')}
+            ❌ Cancel & Refund {Number(fee * selectedCards.length).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {t('birr')}
           </button>
         </div>
       </div>
@@ -103,20 +103,20 @@ export default function RoomLobby({
       <div className="flex items-stretch gap-1.5 mb-4">
         <div className="bg-[#141f33] border border-[#233c66]/30 p-2.5 rounded-xl flex-1 text-center shadow-lg">
           <div className="text-[7.5px] text-gray-400 font-extrabold uppercase tracking-wider">WALLET</div>
-          <div className="text-sm font-black text-white mt-1">{totalBalance.toLocaleString()} {t('birr')}</div>
+          <div className="text-sm font-black text-white mt-1">{Number(totalBalance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {t('birr')}</div>
         </div>
         <div className="bg-[#141f33] border border-[#233c66]/30 p-2.5 rounded-xl flex-1 text-center shadow-lg">
           <div className="text-[7.5px] text-gray-400 font-extrabold uppercase tracking-wider">PRIZE</div>
           <div className="text-sm font-black text-gold mt-1">
             {(() => {
               const totalCards = Math.max(lobbyPlayerCount, room.players) - 1 + (selectedCards.length || 1);
-              return `${Math.round(fee * totalCards * (1 - commissionRate / 100)).toLocaleString()} ${t('birr')}`;
+              return `${Math.round(fee * totalCards * (1 - commissionRate / 100)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${t('birr')}`;
             })()}
           </div>
         </div>
         <div className="bg-[#141f33] border border-[#233c66]/30 p-2.5 rounded-xl flex-1 text-center shadow-lg">
           <div className="text-[7.5px] text-gray-400 font-extrabold uppercase tracking-wider">STAKE</div>
-          <div className="text-sm font-black text-amber-400 mt-1">{(fee * selectedCards.length).toLocaleString()} {t('birr')}</div>
+          <div className="text-sm font-black text-amber-400 mt-1">{Number(fee * selectedCards.length).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {t('birr')}</div>
         </div>
         <div className="bg-gradient-to-br from-[#ff5a00] to-amber-600 rounded-xl px-2.5 flex flex-col items-center justify-center font-black text-center shadow-lg shadow-[#ff5a00]/20 w-14 border border-white/10 select-none h-12 self-center shrink-0">
           <span className="text-[7px] text-white/80 uppercase font-bold tracking-tight">WAIT</span>
@@ -180,7 +180,7 @@ export default function RoomLobby({
           <div className="bg-red-500/10 border border-red-500/20 text-red-300 text-[11px] py-2 px-3 rounded-xl font-medium flex items-center justify-between font-sans shadow-md animate-fade-in">
             <span className="flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 bg-red-400 rounded-full animate-ping" />
-              Need {(fee * selectedCards.length).toLocaleString()} {t('birr')}
+              Need {Number(fee * selectedCards.length).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {t('birr')}
             </span>
             <button onClick={onDeposit} className="bg-amber-500 text-white text-[9.5px] font-extrabold px-3 py-1 rounded bg-[#ff5a00] hover:opacity-90 shadow-sm">
               Deposit
@@ -191,7 +191,7 @@ export default function RoomLobby({
           {selectedCards.length > 0 && isBalanceEligible ? (
             <button onClick={onPlay}
               className="flex-1 bg-gradient-to-r from-[#FEE800] to-amber-500 text-navy font-black py-3.5 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-gold/20 hover:scale-[1.01] active:scale-[0.99] transition-all uppercase tracking-widest animate-pulse cursor-pointer">
-              <Play size={10} fill="currentColor" /> Play {selectedCards.length} Cards ({(fee * selectedCards.length).toLocaleString()} {t('birr')})
+              <Play size={10} fill="currentColor" /> Play {selectedCards.length} Cards ({Number(fee * selectedCards.length).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {t('birr')})
             </button>
           ) : (
             <button disabled

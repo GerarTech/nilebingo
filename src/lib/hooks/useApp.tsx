@@ -154,12 +154,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Periodically refresh wallet when initialized to keep balance in sync
   const initializedRef = useRef(false);
+  const profileIdRef = useRef<string | undefined>(undefined);
   initializedRef.current = state.initialized;
+  profileIdRef.current = state.profile?.id;
   useEffect(() => {
-    if (!state.initialized) return;
+    if (!initializedRef.current) return;
     const fetchWallet = () => {
-      if (isValidUUID(state.profile?.id)) {
-        fetch(`/api/public/wallet?userId=${state.profile!.id}`)
+      const pid = profileIdRef.current;
+      if (isValidUUID(pid)) {
+        fetch(`/api/public/wallet?userId=${pid}`)
           .then(r => r.json())
           .then(data => {
             if (data.wallet) setState(prev => ({ ...prev, wallet: data.wallet }));
@@ -167,8 +170,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           .catch(() => {});
       }
     };
-    // Refresh every 5 seconds for near real-time balance updates
-    const interval = setInterval(fetchWallet, 5000);
+    // Refresh wallet every 30 seconds to keep balance in sync without surprising the user
+    const interval = setInterval(fetchWallet, 30000);
     // Also refresh when the page becomes visible (user switches back to the app)
     const onVisibility = () => { if (document.visibilityState === 'visible') fetchWallet(); };
     document.addEventListener('visibilitychange', onVisibility);
@@ -180,19 +183,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const updateBalance = useCallback(async (amount: number, type: 'play_balance' | 'main_balance') => {
-    setState(prev => {
-      if (!prev.wallet) return prev;
-      const currentVal = prev.wallet[type] || 0;
-      const newVal = Math.max(0, currentVal + amount);
-      return {
-        ...prev,
-        wallet: {
-          ...prev.wallet,
-          [type]: newVal
-        }
-      };
-    });
-
     const profile = profileRef.current;
     if (profile && isValidUUID(profile.id)) {
       try {

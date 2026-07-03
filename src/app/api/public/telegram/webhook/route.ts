@@ -11,6 +11,9 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key';
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+// Format monetary amount with 2 decimal places (e.g., 1.50 → "1.50")
+const fm = (n: number | string) => Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 // Cache for bot commands and messages
 let cachedCommands: Record<string, any> = {};
 let cachedMessages: Record<string, string> = {};
@@ -247,8 +250,11 @@ const EN = {
   deposit_amount_prompt: '💵 *Enter Amount*\n\nHow much would you like to deposit?\n\nMinimum: *{min} ETB*\nMaximum: *{max} ETB*\n\nPlease reply with the amount only (e.g., `200`).',
   deposit_txid_prompt: '📝 *Transaction Reference*\n\nSend your payment to the account below, then reply with the transaction/reference ID:\n\n🏦 *{bank_name}*\nAccount: `{account}`\nRecipient: {recipient}\nAmount: *{amount} ETB*\n\nOnce you\'ve sent the payment, type the transaction ID you received.',
   deposit_submitted: '⏳ *Deposit Submitted*\n\nYour deposit of *{amount} ETB* via *{bank}* has been received and is pending review.\n\n🆔 Reference: `{txid}`\n\nOur team will verify and approve it shortly. You\'ll receive a notification once credited! ✅',
-  withdraw_info: '💸 *Withdraw Funds*\n\nOnly your *Main Balance* can be withdrawn. Play balance is for gameplay only.\n\n📋 *Requirements:*\n• Play at least {required_games} games first\n• Minimum withdrawal: {min_amount} ETB\n\nTo request a withdrawal, please contact support with your amount and preferred method.',
+  withdraw_info: '💸 *Withdraw Funds*\n\nOnly your *Main Balance* can be withdrawn. Play balance is for gameplay only.\n\n📋 *Requirements:*\n• Play at least {required_games} games first\n• Minimum withdrawal: {min_amount} ETB\n\nReady to withdraw? Reply with the *amount* you\'d like to withdraw.',
   withdraw_required: '🚫 *Withdrawal Locked*\n\nYou need to play at least *{required} games* before you can withdraw.\n\n✅ Games played: *{played}*\n❌ Remaining: *{remaining}*\n\nKeep playing — you\'re almost there! 💪',
+  withdraw_amount_prompt: '💵 *Enter Amount*\n\nHow much would you like to withdraw?\n\nYour main balance: *{balance} ETB*\nMinimum withdrawal: *{min_amount} ETB*\n\nPlease reply with the amount only (e.g., `200`).',
+  withdraw_method_prompt: '📋 *Withdrawal Method*\n\nPlease enter your preferred withdrawal method and account details.\n\nExample: `Telebirr - 0912345678`\nOr: `CBE - 1000256789123 - John Doe`\n\nType your details below:',
+  withdraw_submitted: '⏳ *Withdrawal Request Submitted*\n\nYour withdrawal of *{amount} ETB* via *{method}* has been submitted for review.\n\n🆔 Reference: `{ref}`\n\nOur team will process it shortly. You\'ll receive a notification once approved! ✅',
   contact_info: '*📬 Contact Support*\n\nHave a question or need help?\n\n📧 Email: {support_email}\n💬 Telegram: {support_telegram}\n\nWe typically respond within 24 hours.',
   winning_patterns_info: '*🏆 Winning Patterns*\n\nComplete any of these to win:\n\n1️⃣ *Horizontal Row* — Mark all 5 numbers in any row\n2️⃣ *Vertical Column* — Mark all 5 numbers in any column\n\nWin detection is automatic — no need to shout BINGO! The game instantly checks after every draw.',
   language_menu: '🌍 *Select Language / ቋንቋ ምረጥ*',
@@ -291,8 +297,11 @@ const AM = {
   deposit_amount_prompt: '💵 *መጠን ያስገቡ*\n\nምን ያህል ማስገባት ይፈልጋሉ?\n\nዝቅተኛ: *{min} ETB*\nከፍተኛ: *{max} ETB*\n\nእባክዎ መጠኑን ብቻ ይፃፉ (ለምሳሌ `200`)።',
   deposit_txid_prompt: '📝 *የግብይት ማረጋገጫ*\n\nገንዘቡን ከታች ወደተመለከተው ሂሳብ ከላኩ በኋላ፣ የግብይት መለያ ቁጥሩን (Transaction ID) ይላኩ:\n\n🏦 *{bank_name}*\nሂሳብ: `{account}`\nተቀባይ: {recipient}\nመጠን: *{amount} ETB*\n\nገንዘቡን ከላኩ በኋላ የተቀበሉትን የግብይት መለያ ቁጥር ይላኩ።',
   deposit_submitted: '⏳ *ገንዘብ ማስገቢያ ተልኳል*\n\nየ *{amount} ETB* ገንዘብ ማስገቢያዎ በ*{bank}* በኩል ደርሷል እና በመገምገም ላይ ነው።\n\n🆔 ማመሳከሪያ: `{txid}`\n\nቡድናችን በቅርቡ ያረጋግጠዋል። ሲፀድቅ ማሳወቂያ ያገኛሉ! ✅',
-  withdraw_info: '💸 *ገንዘብ ማውጣት*\n\nየ*ዋና ቀሪ* ሂሳብዎ ውስጥ ያለው ገንዘብ ብቻ ነው ማውጣት የሚቻለው። የጨዋታ ቀሪ ለጨዋታ ብቻ ነው።\n\n📋 *መስፈርቶች:*\n• ቢያንስ {required_games} ጨዋታዎችን ይጫወቱ\n• ዝቅተኛ ማውጫ: {min_amount} ETB\n\nለማውጣት እባክዎ ድጋፍን ያግኙ።',
+  withdraw_info: '💸 *ገንዘብ ማውጣት*\n\nየ*ዋና ቀሪ* ሂሳብዎ ውስጥ ያለው ገንዘብ ብቻ ነው ማውጣት የሚቻለው። የጨዋታ ቀሪ ለጨዋታ ብቻ ነው።\n\n📋 *መስፈርቶች:*\n• ቢያንስ {required_games} ጨዋታዎችን ይጫወቱ\n• ዝቅተኛ ማውጫ: {min_amount} ETB\n\nለማውጣት እባክዎ የሚፈልጉትን *መጠን* ይፃፉ።',
   withdraw_required: '🚫 *ማውጣት አይቻልም*\n\nማውጣት ከመቻልዎ በፊት ቢያንስ *{required} ጨዋታዎችን* መጫወት ያስፈልጋል።\n\n✅ የተጫወቷቸው: *{played}*\n❌ የቀሩ: *{remaining}*\n\nመጫወትዎን ይቀጥሉ — ቅርብ ነዎት! 💪',
+  withdraw_amount_prompt: '💵 *መጠን ያስገቡ*\n\nምን ያህል ማውጣት ይፈልጋሉ?\n\nየእርስዎ ዋና ቀሪ: *{balance} ETB*\nዝቅተኛ ማውጫ: *{min_amount} ETB*\n\nእባክዎ መጠኑን ብቻ ይፃፉ (ለምሳሌ `200`)።',
+  withdraw_method_prompt: '📋 *የማውጫ ዘዴ*\n\nእባክዎ የሚፈልጉትን የማውጫ ዘዴ እና የሂሳብ ዝርዝሮችን ያስገቡ።\n\nለምሳሌ: `Telebirr - 0912345678`\nወይም: `CBE - 1000256789123 - John Doe`\n\nከታች ዝርዝሮችዎን ይፃፉ:',
+  withdraw_submitted: '⏳ *የማውጫ ጥያቄ ተልኳል*\n\nየ *{amount} ETB* ማውጣት በ*{method}* ተልኳል እና በመገምገም ላይ ነው።\n\n🆔 ማመሳከሪያ: `{ref}`\n\nቡድናችን በቅርቡ ያስኬደዋል። ሲፀድቅ ማሳወቂያ ያገኛሉ! ✅',
   contact_info: '*📬 ድጋፍ*\n\nጥያቄ ወይም እርዳታ ይፈልጋሉ?\n\n📧 ኢሜይል: support@nilebingo.com\n💬 ቴሌግራም: @nile_bingo_support',
   winning_patterns_info: '*🏆 የማሸነፊያ ዘዴዎች*\n\nከነዚህ ውስጥ አንዱን ሙሉ ያድርጉ እና ያሸንፉ:\n\n1️⃣ *አግዳሚ ረድፍ* — በማንኛውም ረድፍ 5 ቁጥሮች ሙሉ\n2️⃣ *አቀባዊ አምድ* — በማንኛውም አምድ 5 ቁጥሮች ሙሉ\n\nማሸነፍዎ በራስ-ሰር ይታወቃል — ቢንጎ ማለት አያስፈልግም!',
   language_menu: '🌍 *ቋንቋ ምረጥ / Select Language*',
@@ -526,11 +535,30 @@ async function handleAdminPending(chatId: number) {
 }
 
 async function executeApprove(chatId: number, tx: any, finalAmount: number) {
-  await supabase.from('transactions').update({ status: 'completed', amount: finalAmount }).eq('id', tx.id);
-
   if (tx.type === 'deposit') {
+    // Ensure the wallet exists before crediting (adjust_main_balance raises if missing)
+    const { data: existingWallet } = await supabase
+      .from('wallets')
+      .select('id')
+      .eq('user_id', tx.user_id)
+      .maybeSingle();
+    if (!existingWallet) {
+      const { error: walletCreateError } = await supabase
+        .from('wallets')
+        .insert({ user_id: tx.user_id, main_balance: 0, play_balance: 0 });
+      if (walletCreateError) {
+        console.error('Wallet creation error:', walletCreateError);
+        await sendMessage(chatId, `⚠️ *Wallet setup failed*: ${walletCreateError.message}\n\nTransaction remains pending. Please retry.`, { parse_mode: 'Markdown' });
+        return;
+      }
+    }
+
     const newMain = await supabase.rpc('adjust_main_balance', { p_user_id: tx.user_id, p_amount: finalAmount });
-    if (newMain.error) console.error('adjust_main_balance error:', newMain.error);
+    if (newMain.error) {
+      console.error('adjust_main_balance error:', newMain.error);
+      await sendMessage(chatId, `⚠️ *Balance credit failed*: ${newMain.error.message}\n\nTransaction remains pending. Please retry.`, { parse_mode: 'Markdown' });
+      return;
+    }
 
     const { data: prof } = await supabase.from('profiles').select('telegram_id, language, referred_by, referral_claimed, first_name').eq('id', tx.user_id).single();
     if (prof?.telegram_id) {
@@ -1135,7 +1163,7 @@ export async function POST(request: NextRequest) {
 
         if (txId_full) {
           const msgText = getText(lang, 'deposit_submitted')
-            .replace('{amount}', amount.toLocaleString())
+            .replace('{amount}', fm(amount))
             .replace('{bank}', bankName)
             .replace('{txid}', txId);
           await sendMessage(chatId, msgText, { parse_mode: 'Markdown', ...getMainKeyboard(lang) });
@@ -1176,6 +1204,99 @@ export async function POST(request: NextRequest) {
             const userName = userProfile.first_name || userProfile.username || 'Unknown';
             sendAdminDepositAlert(`⏳ *Manual Deposit Review*\n\n👤 *User:* ${userName}\n📝 *Raw:* \`${text}\`\n🏦 *Bank:* ${smsLabel}\n\nApprove: /approve_${tx.id.slice(0, 8)}\nReject: /reject_${tx.id.slice(0, 8)}`);
           }
+        }
+        return NextResponse.json({ ok: true });
+      }
+
+      // Withdraw amount handler
+      if (state === 'waiting_withdraw_amount') {
+        const amount = parseFloat(text.replace(/,/g, ''));
+        if (isNaN(amount) || amount <= 0) {
+          await sendMessage(chatId, '❌ Invalid amount. Please enter a valid number (e.g., `200`).', { parse_mode: 'Markdown' });
+          return NextResponse.json({ ok: true });
+        }
+
+        const mainBal = Number(stateData.mainBal) || 0;
+        const minAmount = Number(stateData.minAmount) || 50;
+
+        if (amount < minAmount) {
+          await sendMessage(chatId, `❌ Minimum withdrawal is *${minAmount} ETB*. Please enter a larger amount.`, { parse_mode: 'Markdown', reply_markup: { keyboard: [[{ text: 'Cancel ❌' }]], resize_keyboard: true, one_time_keyboard: false } });
+          return NextResponse.json({ ok: true });
+        }
+
+        if (amount > mainBal) {
+          await sendMessage(chatId, `❌ *Insufficient Balance*\n\nYour main balance is *${fm(mainBal)} ETB*.\nPlease enter an amount equal to or less than your balance.`, { parse_mode: 'Markdown', reply_markup: { keyboard: [[{ text: 'Cancel ❌' }]], resize_keyboard: true, one_time_keyboard: false } });
+          return NextResponse.json({ ok: true });
+        }
+
+        // Move to method input
+        await safeUpdateState(String(from.id), 'waiting_withdraw_method', { ...stateData, amount });
+
+        const methodPrompt = getText(lang, 'withdraw_method_prompt');
+        await sendMessage(chatId, methodPrompt, { parse_mode: 'Markdown', reply_markup: { keyboard: [[{ text: 'Cancel ❌' }]], resize_keyboard: true, one_time_keyboard: false } });
+        return NextResponse.json({ ok: true });
+      }
+
+      // Withdraw method handler
+      if (state === 'waiting_withdraw_method') {
+        const methodText = text.trim();
+        if (!methodText || methodText.length < 5) {
+          await sendMessage(chatId, '❌ Please enter a valid withdrawal method and account details.', { parse_mode: 'Markdown', reply_markup: { keyboard: [[{ text: 'Cancel ❌' }]], resize_keyboard: true, one_time_keyboard: false } });
+          return NextResponse.json({ ok: true });
+        }
+
+        const amount = Number(stateData.amount) || 0;
+
+        // Reset state
+        await safeUpdateState(String(from.id), 'idle');
+
+        // Create withdrawal transaction
+        const ref = `WTH-${Date.now()}`;
+        const { data: tx } = await supabase
+          .from('transactions')
+          .insert({
+            user_id: userProfile.id,
+            type: 'withdraw',
+            amount,
+            status: 'pending',
+            reference: ref,
+            details: { method: methodText },
+          })
+          .select()
+          .single();
+
+        if (tx) {
+          const submittedText = getText(lang, 'withdraw_submitted')
+            .replace('{amount}', fm(amount))
+            .replace('{method}', methodText)
+            .replace('{ref}', ref);
+
+          await sendMessage(chatId, submittedText, { parse_mode: 'Markdown', ...getMainKeyboard(lang) });
+
+          // Notify admin
+          const userName = userProfile.first_name || userProfile.username || 'Unknown';
+          const adminAlert = `⏳ *New Withdrawal Request*\n\n👤 *User:* ${userName}\n📞 *Phone:* ${userProfile.phone || 'N/A'}\n💰 *Amount:* ${fm(amount)} ETB\n📋 *Method:* ${methodText}\n🆔 *Ref:* \`${ref}\`\n\nApprove: /approve_${tx.id.slice(0, 8)}\nReject: /reject_${tx.id.slice(0, 8)}`;
+
+          // Send to admin bot (same pattern as deposit alert)
+          if (adminBotToken && adminChatId) {
+            try {
+              await fetch(`https://api.telegram.org/bot${adminBotToken}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chat_id: adminChatId, text: adminAlert, parse_mode: 'Markdown' }),
+                signal: AbortSignal.timeout(5000),
+              });
+            } catch (e) { /* ignore */ }
+          }
+          // Also notify via event system
+          try {
+            const { notifyEvent } = await import('@/lib/server/admin');
+            const plain = adminAlert.replace(/\*+/g, '');
+            const body = plain.indexOf('\n\n') !== -1 ? plain.substring(plain.indexOf('\n\n') + 2) : plain;
+            notifyEvent('withdraw_pending', body);
+          } catch (e) { /* ignore */ }
+        } else {
+          await sendMessage(chatId, '❌ Failed to submit withdrawal request. Please try again later.', { parse_mode: 'Markdown', ...getMainKeyboard(lang) });
         }
         return NextResponse.json({ ok: true });
       }
@@ -1308,9 +1429,9 @@ export async function POST(request: NextRequest) {
 
       let msgText = getMsg('balance_info', 'balance_info');
       msgText = msgText
-        .replace('{main}', mainBal.toLocaleString())
-        .replace('{play}', playBal.toLocaleString())
-        .replace('{total}', (mainBal + playBal).toLocaleString());
+        .replace('{main}', fm(mainBal))
+        .replace('{play}', fm(playBal))
+        .replace('{total}', fm(mainBal + playBal));
 
       await sendMessage(chatId, msgText, { parse_mode: 'Markdown' });
     } else if (matchesCommand(userCommands.deposit, plainCommands.deposit)) {
@@ -1376,13 +1497,17 @@ export async function POST(request: NextRequest) {
           .replace('{played}', String(playedCount))
           .replace('{remaining}', String(remaining));
         await sendMessage(chatId, lockMsg, { parse_mode: 'Markdown' });
+      } else if (mainBal < minAmount) {
+        await sendMessage(chatId, `❌ *Insufficient Balance*\n\nYour main balance (*${fm(mainBal)} ETB*) is below the minimum withdrawal amount (*${minAmount} ETB*).\n\nYou need at least *${minAmount} ETB* in your main balance to withdraw.`, { parse_mode: 'Markdown' });
       } else {
-        const withdrawText = getText(lang, 'withdraw_info')
-          .replace('{required_games}', String(reqGames))
+        // Set state to waiting for amount
+        await safeUpdateState(String(from.id), 'waiting_withdraw_amount', { playedCount, mainBal, playBal, minAmount, reqGames });
+
+        const promptText = getText(lang, 'withdraw_amount_prompt')
+          .replace('{balance}', fm(mainBal))
           .replace('{min_amount}', String(minAmount));
-        // Show actual balances so user knows what's withdrawable (matches webapp)
-        const balanceLine = `\n\n*Your Balances:*\n• Main (withdrawable): *${mainBal.toLocaleString()} ETB*\n• Play (gameplay only): *${playBal.toLocaleString()} ETB*`;
-        await sendMessage(chatId, withdrawText + balanceLine, { parse_mode: 'Markdown' });
+
+        await sendMessage(chatId, promptText, { parse_mode: 'Markdown', reply_markup: { keyboard: [[{ text: 'Cancel ❌' }]], resize_keyboard: true, one_time_keyboard: false } });
       }
     } else if (matchesCommand(userCommands.contact, plainCommands.contact)) {
       await sendMessage(chatId, getMsg('contact_info', 'contact_info'), { parse_mode: 'Markdown' });

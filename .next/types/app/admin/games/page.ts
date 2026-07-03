@@ -1,4 +1,4 @@
-// File: D:\HB Technologies\BINGO\nilebingo1\src\app\admin\games\page.tsx
+// File: d:\HB Technologies\BINGO\nilebingo1\src\app\admin\games\page.tsx
 import * as entry from '../../../../../src/app/admin/games/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 

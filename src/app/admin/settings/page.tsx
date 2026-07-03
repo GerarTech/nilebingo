@@ -137,6 +137,7 @@ export default function SettingsPage() {
   const [appLogoPng, setAppLogoPng] = useState<string | null>(null);
   const [colorScheme, setColorScheme] = useState('gold');
   const [welcomeImage, setWelcomeImage] = useState<string | null>(null);
+  const [botDescriptionImage, setBotDescriptionImage] = useState<string | null>(null);
   const [adminReferralEnabled, setAdminReferralEnabled] = useState(true);
   const [appointedWinners, setAppointedWinners] = useState<Record<string, {card_number: number, after_balls: number}>>({});
 
@@ -187,6 +188,9 @@ export default function SettingsPage() {
         if (config.welcomeImage) {
           setWelcomeImage(config.welcomeImage);
         }
+        if (config.botDescriptionImage) {
+          setBotDescriptionImage(config.botDescriptionImage);
+        }
         if (config.referralEnabled !== undefined) {
           setAdminReferralEnabled(config.referralEnabled !== false);
         }
@@ -232,6 +236,7 @@ export default function SettingsPage() {
       appLogoPng,
       colorScheme,
       welcomeImage,
+      botDescriptionImage,
       referralEnabled: adminReferralEnabled,
       withdraw_required_games: withdrawRequiredGames,
       withdraw_min_amount: withdrawMinAmount,
@@ -434,17 +439,54 @@ export default function SettingsPage() {
             <h3 className="text-xs font-semibold text-white mb-3">Editable Bot Message Content</h3>
             <p className="text-[9px] text-gray-500 mb-3">Edit the text content of bot responses. Use \\n for new lines.</p>
             <div className="space-y-3 max-h-[50vh] overflow-y-auto">
-              {Object.entries(messages).map(([key, value]) => (
-                <div key={key}>
-                  <label className="text-[10px] text-gray-500 block mb-1">{key}</label>
-                  <textarea
-                    value={value as string}
-                    onChange={(e) => updateMessage(key as keyof BotMessages, e.target.value)}
-                    rows={3}
-                    className="w-full bg-navy-light border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-gold/50 resize-y"
-                  />
-                </div>
-              ))}
+              {Object.entries(messages).map(([key, value]) => {
+                if (key === 'bot_description') {
+                  return (
+                    <div key={key} className="bg-navy-light p-3 rounded-lg border border-white/5">
+                      <label className="text-[10px] text-gray-500 block mb-1">{key}</label>
+                      <div className="mb-2">
+                        <p className="text-[8.5px] text-gray-500 mb-1.5">Bot Description Image (shown with the description)</p>
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            if (file.size > 500 * 1024) { alert('File too large. Max 500KB.'); return; }
+                            const reader = new FileReader();
+                            reader.onload = (ev) => setBotDescriptionImage(ev.target?.result as string);
+                            reader.readAsDataURL(file);
+                          }}
+                          className="w-full text-xs text-gray-400 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-gold file:text-navy file:cursor-pointer hover:file:bg-gold/90"
+                        />
+                        {botDescriptionImage && (
+                          <div className="mt-1.5 flex items-center gap-2">
+                            <img src={botDescriptionImage} alt="Description Preview" className="w-10 h-10 rounded-lg border border-white/10 object-contain bg-navy" />
+                            <button onClick={() => setBotDescriptionImage(null)} className="text-[10px] text-red-400 hover:text-red-300">Remove</button>
+                          </div>
+                        )}
+                      </div>
+                      <textarea
+                        value={value as string}
+                        onChange={(e) => updateMessage(key as keyof BotMessages, e.target.value)}
+                        rows={3}
+                        className="w-full bg-navy border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-gold/50 resize-y"
+                      />
+                    </div>
+                  );
+                }
+                return (
+                  <div key={key}>
+                    <label className="text-[10px] text-gray-500 block mb-1">{key}</label>
+                    <textarea
+                      value={value as string}
+                      onChange={(e) => updateMessage(key as keyof BotMessages, e.target.value)}
+                      rows={3}
+                      className="w-full bg-navy-light border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-gold/50 resize-y"
+                    />
+                  </div>
+                );
+              })}
             </div>
             <button onClick={handleSaveMessages} className="w-full mt-3 bg-gold text-navy font-bold py-2.5 rounded-lg text-xs flex items-center justify-center gap-2 cursor-pointer">
               <Save size={14} />

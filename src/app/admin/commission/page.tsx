@@ -75,7 +75,8 @@ export default function CommissionPage() {
       {/* Summary note */}
       {report && (
         <div className="glass rounded-xl p-4 text-xs text-gray-400">
-          Commission is calculated as <span className="text-white font-semibold">Total Bets − Total Wins</span>.
+          Commission is calculated per finished game: <span className="text-white font-semibold">(stake × players) − prize pool</span>.
+          Each game where at least 1 player joined contributes commission.
           The rate is configured in <span className="text-gold">Settings → Game Config → Commission</span>.
         </div>
       )}

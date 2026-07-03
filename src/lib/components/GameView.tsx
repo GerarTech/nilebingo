@@ -23,6 +23,7 @@ interface GameViewProps {
   isWatching: boolean;
   autoMark: boolean;
   autoWin: boolean;
+  userMarkedNumbers: number[];
   language: 'en' | 'am';
   livePlayerCount: number;
   recentCalled: { num: number; label: string }[];
@@ -50,14 +51,17 @@ interface GameViewProps {
 
 export default function GameView({
   profile, gameCard, playerCards, selectedCards, drawnNumbers,
-  gameId, selectedStake, inGame, isWatching, autoMark, autoWin,
-  language, livePlayerCount,   recentCalled, opponentWinner, showWinModal, showLossModal, showLeaveModal,
+  gameId, selectedStake, inGame, isWatching, autoMark, autoWin, userMarkedNumbers,
+  language, livePlayerCount, recentCalled, opponentWinner, showWinModal, showLossModal, showLeaveModal,
   winningCard, winningCells, commissionRate, prizePool, resultCountdown,
   t, onSetAutoMark, onSetAutoWin, onManualDraw,
   onBingo, onLeave, onLeaveAttempt, onForfeitExit, onCancelLeave,
   onSkipResult, onMarkNumber,
 }: GameViewProps) {
-  const isBingoReady = inGame && playerCards.some(c => checkWin(c, autoMark ? drawnNumbers : drawnNumbers));
+  // When autoMark is ON, the grid shows all drawn numbers (auto-marked).
+  // When autoMark is OFF, the grid only shows numbers the user has manually marked.
+  const markedNumbers = autoMark ? drawnNumbers : userMarkedNumbers;
+  const isBingoReady = inGame && playerCards.some(c => checkWin(c, markedNumbers));
 
   return (
     <>
@@ -133,7 +137,7 @@ export default function GameView({
         {/* Bingo Cards */}
         <div className="space-y-4 mb-4">
           {(playerCards.length > 0 ? playerCards : (gameCard.length > 0 ? [gameCard] : [])).map((card, cardIndex) => {
-            const drawnNumsToShow = autoMark ? drawnNumbers : drawnNumbers;
+            const drawnNumsToShow = markedNumbers;
             const cardWinningCells = getWinningCells(card, drawnNumsToShow);
             return (
               <div key={cardIndex} className="relative bg-gradient-to-b from-[#0b1624] to-[#050e18] border border-[#233c66]/30 p-3.5 rounded-2xl shadow-xl shadow-black/40">

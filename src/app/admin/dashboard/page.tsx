@@ -96,6 +96,9 @@ export default function DashboardPage() {
             </div>
             <div className="bg-navy rounded-lg p-3">
               <div className="text-[9px] text-gray-400 uppercase mb-1">Bot Description (preview)</div>
+              {branding.botDescriptionImage && (
+                <img src={branding.botDescriptionImage} alt="Bot Description" className="w-full max-h-32 object-contain rounded-lg mb-2 border border-white/10" />
+              )}
               <div className="text-[10px] text-gray-300 line-clamp-2">{(branding.bot_description || 'No description set').substring(0, 120)}</div>
             </div>
           </div>

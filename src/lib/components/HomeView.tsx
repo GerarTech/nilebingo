@@ -52,7 +52,7 @@ export default function HomeView({
           </span>
         </div>
         <button onClick={onGoToWallet} className="flex items-center gap-1 text-white font-extrabold text-[11px] px-3.5 py-2 rounded-xl shadow-md transition-all cursor-pointer" style={{ backgroundColor: themeColorDark, boxShadow: `0 4px 14px ${themeColor}44` }}>
-          💰 {walletBalance.toLocaleString()} {t('birr')}
+          💰 {Number(walletBalance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {t('birr')}
         </button>
       </div>
 
@@ -118,15 +118,15 @@ export default function HomeView({
         <div className="space-y-2">
           <div className="flex justify-between items-center text-xs">
             <span className="text-gray-400">Main Balance</span>
-            <span className="font-extrabold text-white">{(wallet?.main_balance || 0).toLocaleString()} {t('birr')}</span>
+            <span className="font-extrabold text-white">{Number(wallet?.main_balance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {t('birr')}</span>
           </div>
           <div className="flex justify-between items-center text-xs">
             <span className="text-gray-400">Play Balance</span>
-            <span className="font-extrabold text-white">{(wallet?.play_balance || 0).toLocaleString()} {t('birr')}</span>
+            <span className="font-extrabold text-white">{Number(wallet?.play_balance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {t('birr')}</span>
           </div>
           <div className="border-t border-dashed border-white/5 pt-1.5 flex justify-between items-center text-[13px] font-black">
             <span style={{ color: themeColor }}>Total</span>
-            <span style={{ color: themeColor }}>{walletBalance.toLocaleString()} {t('birr')}</span>
+            <span style={{ color: themeColor }}>{Number(walletBalance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {t('birr')}</span>
           </div>
         </div>
       </div>

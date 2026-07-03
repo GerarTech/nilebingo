@@ -165,10 +165,44 @@ export async function getDashboardStats() {
         totalDepositsApproved += amt;
       }
       if (t.type === 'withdraw' && t.status === 'completed') totalWithdrawals += amt;
-      if (t.type === 'bet') totalBets += amt;
-      if (t.type === 'win') totalWins += amt;
+      if (t.type === 'bet') { totalBets += amt; }
+      if (t.type === 'win') { totalWins += amt; }
       if (t.type === 'deposit' && t.status === 'pending') pendingDeposits++;
       if (t.type === 'withdraw' && t.status === 'pending') pendingWithdrawals++;
+    }
+  }
+
+  // Calculate actual commission from finished games (more accurate than bet-win diff)
+  let totalCommissionFromGames = 0;
+  const { data: finishedGames } = await supabase
+    .from('games')
+    .select('id, code, prize_pool, stake_id')
+    .eq('status', 'finished')
+    .not('prize_pool', 'eq', 0);
+
+  if (finishedGames) {
+    for (const g of finishedGames) {
+      if (!g.stake_id) continue;
+      const { count: pc } = await supabase
+        .from('game_players')
+        .select('id', { count: 'exact', head: true })
+        .eq('game_id', g.id)
+        .eq('is_watching', false);
+      if (!pc || pc === 0) continue;
+      const { data: sk } = await supabase
+        .from('stakes')
+        .select('amount')
+        .eq('id', g.stake_id)
+        .single();
+      const amt = Number(sk?.amount) || 0;
+      if (amt === 0) continue;
+      const { count: cc } = await supabase
+        .from('game_card_reservations')
+        .select('id', { count: 'exact', head: true })
+        .eq('game_code', g.code);
+      const totalCards = Math.max(pc, cc || 0);
+      const commission = (amt * totalCards) - Number(g.prize_pool || 0);
+      if (commission > 0) totalCommissionFromGames += commission;
     }
   }
 
@@ -183,10 +217,10 @@ export async function getDashboardStats() {
     totalWithdrawals,
     totalBets,
     totalWins,
-    totalCommissionEarned: Math.max(0, totalBets - totalWins),
+    totalCommissionEarned: totalCommissionFromGames,
     pendingDeposits,
     pendingWithdrawals,
-    revenue: totalBets - totalWins,
+    revenue: totalCommissionFromGames,
   };
 }
 
@@ -292,34 +326,92 @@ export async function getCommissionReport(options: {
   dateFrom?: string;
   dateTo?: string;
 }) {
-  let query = supabase
+  // Fetch all finished games with prize data
+  let gamesQuery = supabase
+    .from('games')
+    .select('id, code, prize_pool, stake_id, created_at')
+    .eq('status', 'finished');
+
+  if (options.dateFrom) gamesQuery = gamesQuery.gte('created_at', options.dateFrom);
+  if (options.dateTo) gamesQuery = gamesQuery.lte('created_at', options.dateTo + 'T23:59:59.999Z');
+
+  const { data: games } = await gamesQuery;
+
+  let totalBets = 0, totalWins = 0, totalCommission = 0;
+  let gameCount = 0;
+
+  // Also fetch transaction data for deposit/withdrawal info
+  let txQuery = supabase
     .from('transactions')
     .select('type, amount, status, created_at');
 
-  if (options.dateFrom) query = query.gte('created_at', options.dateFrom);
-  if (options.dateTo) query = query.lte('created_at', options.dateTo + 'T23:59:59.999Z');
+  if (options.dateFrom) txQuery = txQuery.gte('created_at', options.dateFrom);
+  if (options.dateTo) txQuery = txQuery.lte('created_at', options.dateTo + 'T23:59:59.999Z');
 
-  const { data } = await query;
-
-  let totalBets = 0, totalWins = 0;
+  const { data: txs } = await txQuery;
   let depositSum = 0, withdrawSum = 0;
-
-  if (data) {
-    for (const t of data) {
+  if (txs) {
+    for (const t of txs) {
       const amt = Number(t.amount) || 0;
-      if (t.type === 'bet') totalBets += amt;
-      if (t.type === 'win') totalWins += amt;
       if (t.type === 'deposit' && t.status === 'completed') depositSum += amt;
       if (t.type === 'withdraw' && t.status === 'completed') withdrawSum += amt;
+    }
+  }
+
+  // Calculate commission per finished game from real data
+  if (games) {
+    for (const game of games) {
+      // Count non-watching players
+      const { count: playerCount } = await supabase
+        .from('game_players')
+        .select('id', { count: 'exact', head: true })
+        .eq('game_id', game.id)
+        .eq('is_watching', false);
+
+      if (!playerCount || playerCount === 0) continue;
+
+      // Count card reservations (each player can have multiple cards)
+      const { count: cardCount } = await supabase
+        .from('game_card_reservations')
+        .select('id', { count: 'exact', head: true })
+        .eq('game_code', game.code);
+
+      // Use the larger of player count or card count (same logic as RPC)
+      const totalEntities = Math.max(playerCount, cardCount || 0);
+
+      // Resolve stake amount from the stakes table
+      let stakeAmt = 0;
+      if (game.stake_id) {
+        const { data: stake } = await supabase
+          .from('stakes')
+          .select('amount')
+          .eq('id', game.stake_id)
+          .single();
+        stakeAmt = Number(stake?.amount) || 0;
+      }
+
+      if (stakeAmt === 0) continue;
+
+      const prize = Number(game.prize_pool) || 0;
+      const entryTotal = stakeAmt * totalEntities;
+      const commission = entryTotal - prize;
+
+      if (commission < 0) continue; // skip malformed data
+
+      totalCommission += commission;
+      totalBets += entryTotal;
+      totalWins += prize;
+      gameCount++;
     }
   }
 
   return {
     totalBets,
     totalWins,
-    totalCommission: Math.max(0, totalBets - totalWins),
+    totalCommission,
     totalDeposits: depositSum,
     totalWithdrawals: withdrawSum,
+    gameCount,
   };
 }
 
@@ -648,14 +740,14 @@ export async function adjustBalance(userId: string, amount: number, type: 'main'
 }
 
 async function notifyUserBalanceChange(userId: string, amount: number, type: 'main' | 'play', newBalance: number, reason: string) {
-  const adminBotToken = process.env.ADMIN_BOT_TOKEN;
+  const userBotToken = process.env.TELEGRAM_BOT_TOKEN;
   const { data: profile } = await supabase
     .from('profiles')
     .select('telegram_id, first_name, language')
     .eq('id', userId)
     .maybeSingle();
 
-  if (!profile?.telegram_id || !adminBotToken) return;
+  if (!profile?.telegram_id || !userBotToken) return;
 
   const emoji = amount > 0 ? '✅' : '❌';
   const dirLabel = amount > 0 ? 'credited to' : 'deducted from';
@@ -669,7 +761,7 @@ async function notifyUserBalanceChange(userId: string, amount: number, type: 'ma
     `Use /balance to check your full wallet.`;
 
   try {
-    await fetch(`https://api.telegram.org/bot${adminBotToken}/sendMessage`, {
+    await fetch(`https://api.telegram.org/bot${userBotToken}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
