@@ -8,6 +8,7 @@ interface WinModalProps {
   stake: number;
   livePlayerCount: number;
   commissionRate: number;
+  prizePool: number;
   card: number[][];
   drawnNumbers: number[];
   winningCells: boolean[][];
@@ -20,15 +21,13 @@ interface WinModalProps {
 }
 
 export default function WinModal({
-  show, stake, livePlayerCount, commissionRate,
+  show, stake, livePlayerCount, commissionRate, prizePool,
   card, drawnNumbers, winningCells, cardNumber,
   playerName, countdown, onSkip, children, t,
 }: WinModalProps) {
   if (!show) return null;
 
-  const rawPrize = stake * livePlayerCount;
-  const commissionAmt = Math.round(rawPrize * (commissionRate / 100));
-  const singlePrize = rawPrize - commissionAmt;
+  const singlePrize = prizePool > 0 ? prizePool : Math.round(stake * livePlayerCount * (1 - commissionRate / 100));
 
   return (
     <div
@@ -57,7 +56,7 @@ export default function WinModal({
           </div>
         </div>
 
-        <div className="space-y-2.5">
+          <div className="space-y-2.5">
           <div className="flex items-center justify-between bg-[#141f33]/80 border border-amber-500 px-5 py-4 rounded-2xl shadow-lg relative overflow-hidden">
             <span className="font-extrabold text-[#FEE800] text-sm tracking-wide flex items-center gap-1.5">
               <span>👑</span> {playerName}
@@ -66,22 +65,13 @@ export default function WinModal({
               <span className="font-black text-amber-500 text-sm block">
                 +{singlePrize.toLocaleString()} {t('birr')}
               </span>
-              <span className="text-[9px] text-gray-400 block font-mono">
-                (House commission of {commissionRate}% deducted)
-              </span>
             </div>
-          </div>
-        </div>
-
-        <div className="text-center">
-          <div className="text-[10px] font-black tracking-widest text-[#a1a1aa] uppercase">
-            CARTELA NO: {cardNumber}
           </div>
         </div>
 
         {card.length > 0 && (
           <div className="bg-[#141f33]/40 border border-[#233c66]/20 p-4 rounded-3xl shadow-xl">
-            <BingoGrid card={card} drawnNumbers={drawnNumbers} winningCells={winningCells} compact={true} />
+            <BingoGrid card={card} drawnNumbers={drawnNumbers} compact={true} />
           </div>
         )}
       </div>

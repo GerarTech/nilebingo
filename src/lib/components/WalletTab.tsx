@@ -234,9 +234,7 @@ export default function WalletTab({
               </button>
             </div>
           </div>
-          <button onClick={onSimulateReferral} className="w-full bg-[#1c3052] hover:bg-[#253f66] text-amber-300 font-extrabold text-[11px] py-2.5 px-4 rounded-xl border border-amber-500/20 flex items-center justify-center gap-2 transition-all shadow-md active:scale-[0.98]">
-            <span>✨</span> Simulate Friend Join (+{referralBonus} Birr)
-          </button>
+         
         </div>
       )}
 

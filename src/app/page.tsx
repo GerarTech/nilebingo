@@ -119,6 +119,8 @@ function HomePage() {
   const [referralCount, setReferralCount] = useState<number>(0);
   const [copiedLink, setCopiedLink] = useState<boolean>(false);
   const [showRefToast, setShowRefToast] = useState<boolean>(false);
+  const [toastMessage, setToastMessage] = useState<string>('');
+  const [toastType, setToastType] = useState<'error' | 'success' | 'info'>('error');
   const [referralEnabled, setReferralEnabled] = useState<boolean>(true);
   const [referralBonus, setReferralBonus] = useState<number>(1);
   const [walletView, setWalletView] = useState<'main' | 'deposit' | 'withdraw' | 'transfer'>('main');
@@ -141,7 +143,7 @@ function HomePage() {
     const rand = () => { seed = (seed * 1664525 + 1013904223) & 0xffffffff; return (seed >>> 0) / 0xffffffff; };
     const allBalls = Array.from({ length: 75 }, (_, i) => i + 1);
     const seq: number[] = [];
-    if (targetCardNum && targetCardNum >= 1 && targetCardNum <= 100) {
+    if (targetCardNum && targetCardNum >= 1 && targetCardNum <= 200) {
       const targetCard = getSeededCard(targetCardNum, gId);
       const targetNumbers: number[] = [];
       targetCard.forEach(row => row.forEach(cell => { if (cell > 0) targetNumbers.push(cell); }));
@@ -193,7 +195,10 @@ function HomePage() {
 
   const addGameToHistory = useCallback((gId: string, stakeAmt: number, outcome: 'win' | 'loss') => {
     if (isWatching || !gId) return;
-        const actualPrize = outcome === 'win' ? Math.round(stakeAmt * livePlayerCount * (1 - commissionRate / 100)) : -stakeAmt;
+    // Calculate prize using entry fee × (other players + my cards) × (1 - commission)
+    const entryFee = selectedRoom?.entry || 10;
+    const numCards = Math.max(1, playerCards.length);
+    const actualPrize = outcome === 'win' ? Math.round(entryFee * (livePlayerCount - 1 + numCards) * (1 - commissionRate / 100)) : -stakeAmt;
     setStakeHistory(prev => {
       const exists = prev.some(item => item.gameId === gId && item.result === outcome);
       if (exists) return prev;
@@ -203,14 +208,14 @@ function HomePage() {
       return newHistory;
     });
     if (profile?.id) {
-            const pot = Math.round(stakeAmt * livePlayerCount * (1 - commissionRate / 100));
+      const pot = Math.round(entryFee * (livePlayerCount - 1 + numCards) * (1 - commissionRate / 100));
       fetch('/api/public/games/record', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: profile.id, stakeAmount: stakeAmt, prizePool: pot, outcome, drawnNumbers: drawnRef.current || [], roomName: selectedRoom?.name || 'Quick Lobby' })
       }).catch(() => {});
     }
-  }, [isWatching, profile?.id, selectedRoom, livePlayerCount, commissionRate]);
+  }, [isWatching, profile?.id, selectedRoom, livePlayerCount, commissionRate, playerCards]);
 
   // ============ CONFIG FETCH ============
   const fetchConfig = useCallback(() => {
@@ -351,7 +356,7 @@ function HomePage() {
 
     // Limit check on client side
     if (!isSelected && selectedCards.length >= 2) {
-      alert(t ? t('max_2_cards') : 'Maximum of 2 cards allowed');
+      showToast(t ? t('max_2_cards') : 'Maximum of 2 cards allowed', 'error');
       return;
     }
 
@@ -388,11 +393,12 @@ function HomePage() {
         setTakenCards(prevTaken);
 
         if (res.status === 409 || data.error?.includes('taken') || data.error?.includes('unique') || data.error?.includes('23505')) {
-          alert('This card was just taken by another player. Please choose a different one.');
+          showToast(t ? t('card_taken') : 'This card was just taken by another player. Please choose a different one.', 'error');
         } else if (res.status === 400 && data.error?.includes('Maximum')) {
-          alert('Maximum of 2 cards allowed');
+          showToast(t ? t('max_2_cards') : 'Maximum of 2 cards allowed', 'error');
         } else {
           console.error('Failed to toggle card:', data.error);
+          showToast(t ? t('something_went_wrong') : 'Something went wrong. Please try again.', 'error');
         }
         await refreshGameState(gameId);
         return;
@@ -421,13 +427,16 @@ function HomePage() {
     const activeGameId = gameId || generateDeterministicGameId(selectedRoom.id, Math.floor(Date.now() / 1000 / getRoomPeriod(selectedRoom.id)));
     const entryFee = selectedRoom.entry;
 
+    // Set stake to total amount paid (entry fee × number of cards)
+    const totalStake = isSpectateMode ? entryFee : entryFee * Math.max(1, selectedCards.length);
+
     let cardsToPlay: number[][][] = [];
     if (isSpectateMode) {
       const randomCard = generateCard(undefined, activeGameId); cardsToPlay = [randomCard];
-      setGameCard(randomCard); setPlayerCards([randomCard]); setSelectedStake(entryFee); setIsWatching(true);
+      setGameCard(randomCard); setPlayerCards([randomCard]); setSelectedStake(totalStake); setIsWatching(true);
     } else {
       cardsToPlay = selectedCards.map(num => getSeededCard(num, activeGameId));
-      setPlayerCards(cardsToPlay); setGameCard(cardsToPlay[0] || []); setSelectedStake(entryFee); setIsWatching(false);
+      setPlayerCards(cardsToPlay); setGameCard(cardsToPlay[0] || []); setSelectedStake(totalStake); setIsWatching(false);
     }
 
     setUserMarkedNumbers([0]); setGameId(activeGameId); setDrawnNumbers([]); drawnRef.current = [];
@@ -439,7 +448,7 @@ function HomePage() {
     for (let i = 0; i < activeGameId.length; i++) seed = (seed * 31 + activeGameId.charCodeAt(i)) & 0xffffffff;
     const vRand = () => { seed = (seed * 1664525 + 1013904223) & 0xffffffff; return (seed >>> 0) / 0xffffffff; };
     for (let i = 0; i < selectedRoom.players - (isSpectateMode ? 0 : 1); i++) {
-      const cardSeed = Math.floor(vRand() * 100) + 1;
+      const cardSeed = Math.floor(vRand() * 200) + 1;
       virtualCompetitors.push({ username: VIRTUAL_NAMES[i % VIRTUAL_NAMES.length] + ` (#${cardSeed})`, card: getSeededCard(cardSeed, activeGameId), markedCount: 0, neededToWin: 5, hasWon: false });
     }
     setOtherPlayers(virtualCompetitors);
@@ -574,36 +583,21 @@ function HomePage() {
           setUserMarkedNumbers(allMatches);
           triggerWin(appointedGrid, newDrawn);
           return;
-        } else {
-          setOtherPlayers(prev => {
-            const existing = prev.find(p => p.card.some((row, ri) => row.every((cell, ci) => cell === appointedGrid[ri]?.[ci])));
-            if (existing) {
-              setOpponentWinner(existing.username);
-              if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
-              addGameToHistory(gameId, selectedStake || 10, 'loss');
-            }
-            return prev;
-          });
         }
+        // Virtual players no longer trigger loss — game continues
       }
 
       if (!isWatching) {
         setOtherPlayers(prev => {
-          let someWinner = '';
           const updated = prev.map(p => {
             const markedMatrix = p.card.map(row => row.map(cell => cell === 0 || newDrawn.includes(cell)));
             let maxRowMarked = 0, maxColMarked = 0;
             markedMatrix.forEach(row => { const rowCount = row.filter(cell => cell).length; if (rowCount > maxRowMarked) maxRowMarked = rowCount; });
             for (let col = 0; col < 5; col++) { let colCount = 0; for (let row = 0; row < markedMatrix.length; row++) if (markedMatrix[row]?.[col]) colCount++; if (colCount > maxColMarked) maxColMarked = colCount; }
             const neededToWin = Math.min(Math.max(0, 5 - maxRowMarked), Math.max(0, 5 - maxColMarked));
-            if (neededToWin === 0 && !someWinner) someWinner = p.username;
             return { ...p, markedCount: Math.max(maxRowMarked, maxColMarked), neededToWin, hasWon: neededToWin === 0 };
           });
-          if (someWinner) {
-            setOpponentWinner(someWinner);
-            if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
-            addGameToHistory(gameId, selectedStake || 10, 'loss');
-          }
+          // Virtual players no longer trigger loss — game continues until real player wins or all balls drawn
           return updated;
         });
       }
@@ -675,7 +669,8 @@ function HomePage() {
     setWinningCells(getWinningCells(card, drawn));
     setShowWinModal(true);
     addGameToHistory(gameId, selectedStake || 10, 'win');
-    const stake = selectedStake || 10;
+    const entryFee = selectedRoom?.entry || 10;
+    const numCards = Math.max(1, playerCards.length);
     let playerCount = livePlayerCount;
     try {
       const { data: g } = await supabase.from('games').select('id, prize_pool').eq('code', gameId).maybeSingle();
@@ -684,7 +679,9 @@ function HomePage() {
         if (count && count > playerCount) playerCount = count;
       }
     } catch {}
-        const jackpot = Math.round(stake * playerCount * (1 - commissionRate / 100));
+    // Prize pool = entry fee × (other players + my cards) × (1 - commission)
+    // playerCount counts unique players; this player contributes numCards worth of entry fees
+    const jackpot = Math.round(entryFee * (playerCount - 1 + numCards) * (1 - commissionRate / 100));
     updateBalance(jackpot, 'main_balance');
 
     if (profile?.id) {
@@ -738,22 +735,34 @@ function HomePage() {
     }
   }, [gameId, profile?.id]);
 
-  const playWithCard = useCallback(() => {
+  const playWithCard = useCallback(async () => {
     if (selectedCards.length === 0) return;
     const fee = selectedRoom ? selectedRoom.entry : 10;
     const stakeAmount = fee * selectedCards.length;
     const totalBal = (wallet?.main_balance || 0) + (wallet?.play_balance || 0);
     if (totalBal < stakeAmount) return;
     const playBal = wallet?.play_balance || 0;
-    if (playBal >= stakeAmount) updateBalance(-stakeAmount, 'play_balance');
-    else { updateBalance(-playBal, 'play_balance'); updateBalance(-(stakeAmount - playBal), 'main_balance'); }
+    // Deduct from play balance first, then main balance if needed
+    // Both wallets can be used together to cover the stake
+    if (playBal >= stakeAmount) {
+      await updateBalance(-stakeAmount, 'play_balance');
+    } else {
+      // Use all play balance first, then remainder from main balance
+      await updateBalance(-playBal, 'play_balance');
+      await updateBalance(-(stakeAmount - playBal), 'main_balance');
+    }
+    // Refresh wallet from server to ensure accurate balance after both deductions
+    await refreshWallet();
     setIsRegistered(true);
-  }, [selectedCards, selectedRoom, wallet, updateBalance]);
+  }, [selectedCards, selectedRoom, wallet, updateBalance, refreshWallet]);
 
   const unregisterLobby = useCallback(async () => {
     if (isRegistered) {
       const fee = selectedRoom ? selectedRoom.entry : 10;
-      updateBalance(fee * selectedCards.length, 'play_balance');
+      const refundAmount = fee * selectedCards.length;
+      // Refund to play balance (gameplay wallet) since that's where game funds belong
+      await updateBalance(refundAmount, 'play_balance');
+      await refreshWallet();
       setIsRegistered(false);
     }
     const uid = profile?.id;
@@ -769,7 +778,7 @@ function HomePage() {
       }
     }
     setIsSpectatingReady(false); setTakenCards([]); setLobbyPlayerCount(0);
-  }, [isRegistered, selectedCards, selectedRoom, updateBalance, gameId, profile?.id]);
+  }, [isRegistered, selectedCards, selectedRoom, updateBalance, refreshWallet, gameId, profile?.id]);
 
   const leaveGame = useCallback(async () => {
     if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
@@ -817,7 +826,7 @@ function HomePage() {
       const checkAgainst = autoMark ? drawnRef.current : userMarkedNumbers;
       const wonCard = playerCards.find(c => checkWin(c, checkAgainst));
       if (wonCard) { triggerWin(wonCard, drawnRef.current); }
-      else { alert(language === 'en' ? 'Not a valid BINGO yet!' : 'ትክክለኛ ቢንጎ የለም!'); }
+      else { showToast(language === 'en' ? 'Not a valid BINGO yet!' : 'ትክክለኛ ቢንጎ የለም!', 'error'); }
     }
   }, [playerCards, autoMark, userMarkedNumbers, language]);
 
@@ -850,8 +859,17 @@ function HomePage() {
     setReferralCount(nextCount);
     if (typeof window !== 'undefined') localStorage.setItem('nile_bingo_referrals', nextCount.toString());
     updateBalance(referralBonus, 'play_balance');
+    setToastMessage(`${t('friend_registered') || 'Friend Registered!'} +${referralBonus} ${t('birr')}`);
+    setToastType('success');
     setShowRefToast(true); setTimeout(() => setShowRefToast(false), 3500);
-  }, [referralCount, updateBalance, referralBonus]);
+  }, [referralCount, updateBalance, referralBonus, t]);
+
+  const showToast = useCallback((message: string, type: 'error' | 'success' | 'info' = 'error') => {
+    setToastMessage(message);
+    setToastType(type);
+    setShowRefToast(true);
+    setTimeout(() => setShowRefToast(false), 3500);
+  }, []);
 
   const navigateToWallet = useCallback(() => { setWalletView('main'); setActiveTab('wallet'); }, [setActiveTab]);
 
@@ -882,10 +900,11 @@ function HomePage() {
             drawnNumbers={drawnNumbers} gameId={gameId} selectedStake={selectedStake || 10}
             inGame={inGame} isWatching={isWatching} autoMark={autoMark} autoWin={autoWin}
             language={language} livePlayerCount={livePlayerCount}
-            recentCalled={recentCalled} otherPlayers={otherPlayers} opponentWinner={opponentWinner}
+            recentCalled={recentCalled} opponentWinner={opponentWinner}
             showWinModal={showWinModal} showLossModal={opponentWinner !== null} showLeaveModal={showLeaveModal}
             winningCard={winningCard} winningCells={winningCells} commissionRate={commissionRate}
-            resultCountdown={resultCountdown} t={t}
+            prizePool={prizePool} resultCountdown={resultCountdown} t={t}
+            otherPlayers={otherPlayers}
             onSetAutoMark={setAutoMark} onSetAutoWin={setAutoWin}
             onManualDraw={manualDraw} onBingo={handleBingo} onLeave={leaveGame}
             onLeaveAttempt={handleLeaveAttempt}
@@ -971,15 +990,26 @@ function HomePage() {
       <TabBar activeTab={activeTab} onTabChange={handleTabChange} inGame={inGame} themeColor={getThemeColor()} />
 
       {showRefToast && (
-        <div className="fixed bottom-24 left-4 right-4 z-50 bg-[#162a45]/95 backdrop-blur border-2 border-emerald-500/40 text-emerald-300 py-3 px-4 rounded-2xl font-bold flex items-center justify-between text-xs shadow-2xl animate-bounce">
+        <div className={`fixed bottom-24 left-4 right-4 z-50 backdrop-blur border-2 py-3 px-4 rounded-2xl font-bold flex items-center justify-between text-xs shadow-2xl animate-bounce ${
+          toastType === 'success'
+            ? 'bg-[#162a45]/95 border-emerald-500/40 text-emerald-300'
+            : toastType === 'info'
+              ? 'bg-[#1a2b4b]/95 border-blue-500/40 text-blue-300'
+              : 'bg-[#2a1620]/95 border-red-500/40 text-red-300'
+        }`}>
           <div className="flex items-center gap-2.5">
-            <span className="text-base">🎉</span>
+            <span className="text-base">{toastType === 'success' ? '🎉' : toastType === 'info' ? 'ℹ️' : '⚠️'}</span>
             <div>
-              <p className="text-white font-black text-[12px]">Friend Registered!</p>
-              <p className="text-emerald-400 font-medium text-[10px]">+{referralBonus} Birr added to Play Balance</p>
+              <p className={`text-white font-black text-[12px] ${toastType === 'error' ? 'text-red-200' : ''}`}>{toastMessage}</p>
             </div>
           </div>
-          <span className="text-[10px] bg-emerald-500/10 text-emerald-300 px-2 py-0.5 rounded uppercase font-black tracking-wide border border-emerald-500/20">Earned</span>
+          <span className={`text-[10px] px-2 py-0.5 rounded uppercase font-black tracking-wide border ${
+            toastType === 'success'
+              ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20'
+              : toastType === 'info'
+                ? 'bg-blue-500/10 text-blue-300 border-blue-500/20'
+                : 'bg-red-500/10 text-red-300 border-red-500/20'
+          }`}>{toastType}</span>
         </div>
       )}
     </div>

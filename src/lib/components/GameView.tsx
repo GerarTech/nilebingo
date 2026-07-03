@@ -26,7 +26,6 @@ interface GameViewProps {
   language: 'en' | 'am';
   livePlayerCount: number;
   recentCalled: { num: number; label: string }[];
-  otherPlayers: { username: string; card: number[][]; markedCount: number; neededToWin: number; hasWon: boolean }[];
   opponentWinner: string | null;
   showWinModal: boolean;
   showLossModal: boolean;
@@ -34,6 +33,7 @@ interface GameViewProps {
   winningCard: number[][];
   winningCells: boolean[][];
   commissionRate: number;
+  prizePool: number;
   resultCountdown: number | null;
   t: (key: string) => string;
   onSetAutoMark: (v: boolean) => void;
@@ -51,9 +51,8 @@ interface GameViewProps {
 export default function GameView({
   profile, gameCard, playerCards, selectedCards, drawnNumbers,
   gameId, selectedStake, inGame, isWatching, autoMark, autoWin,
-  language, livePlayerCount, recentCalled,
-  otherPlayers, opponentWinner, showWinModal, showLossModal, showLeaveModal,
-  winningCard, winningCells, commissionRate, resultCountdown,
+  language, livePlayerCount,   recentCalled, opponentWinner, showWinModal, showLossModal, showLeaveModal,
+  winningCard, winningCells, commissionRate, prizePool, resultCountdown,
   t, onSetAutoMark, onSetAutoWin, onManualDraw,
   onBingo, onLeave, onLeaveAttempt, onForfeitExit, onCancelLeave,
   onSkipResult, onMarkNumber,
@@ -64,16 +63,21 @@ export default function GameView({
     <>
       <div className="px-3 pt-2 animate-fade-in pb-20">
         {/* Header */}
-        <div className="flex items-center justify-between mb-4 bg-black/35 p-3 rounded-2xl border border-white/5 font-sans">
-          <div className="flex items-center gap-2">
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#10b981] opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#10b981]"></span>
+        <div className="flex items-center justify-between mb-4 bg-gradient-to-r from-[#0a1628] to-[#0d1f36] p-3.5 rounded-2xl border border-gold/20 font-sans shadow-lg">
+          <div className="flex items-center gap-2.5">
+            <span className="relative flex h-3 w-3">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-gold opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-gold"></span>
             </span>
-            <span className="text-[11px] font-extrabold uppercase tracking-widest text-[#10b981]">ACTIVE BINGO PLAY</span>
+            <div className="flex flex-col">
+              <span className="text-[12px] font-black uppercase tracking-wider text-gold">LIVE GAME</span>
+              <span className="text-[8px] font-bold uppercase tracking-widest text-gray-400">Game #{gameId.substring(0, 6)}</span>
+            </div>
           </div>
-          <div className="text-[10px] text-gray-300 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-lg">
-            BET: <span className="text-gold font-bold">{selectedStake} ETB</span>
+          <div className="flex items-center gap-2">
+            <div className="text-[10px] text-gray-300 bg-gold/10 border border-gold/30 px-3 py-1.5 rounded-lg">
+              STAKE: <span className="text-gold font-black">{selectedStake} ETB</span>
+            </div>
           </div>
         </div>
 
@@ -111,7 +115,7 @@ export default function GameView({
                 )}
               </div>
               <div>
-                <div className="text-[8.5px] text-gray-500 font-bold uppercase tracking-wider">CAGE DRAW</div>
+                <div className="text-[8.5px] text-gray-500 font-bold uppercase tracking-wider">CURRENT BALL</div>
                 <div className="text-sm font-black text-white mt-0.5">
                   {recentCalled.length > 0 ? (
                     <span className="text-gold flex items-center gap-1.5 animate-pulse">
@@ -156,39 +160,6 @@ export default function GameView({
             );
           })}
         </div>
-
-        {/* Live Opponents */}
-        {otherPlayers.length > 0 && (
-          <div className="glass rounded-2xl p-3.5 mb-4 font-sans border border-white/5 bg-navy-card/30 relative">
-            <div className="flex items-center justify-between mb-3 px-0.5">
-              <span className="text-[9px] text-[#4ea075] font-black uppercase tracking-wider flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                Opponents Progress
-              </span>
-            </div>
-            <div className="grid grid-cols-5 gap-1.5">
-              {otherPlayers.map((p, idx) => (
-                <div key={idx} className={`relative overflow-hidden border rounded-2xl p-2 text-center transition-all ${p.neededToWin <= 1 ? 'bg-red-500/10 border-red-500/40 shadow-lg shadow-red-500/5' : p.neededToWin === 2 ? 'bg-gold/15 border-gold/40 shadow-lg shadow-gold/5' : 'bg-[#051a0e] border-white/5'}`}>
-                  {p.neededToWin <= 1 && (
-                    <div className="absolute top-0 right-0 bg-red-500 text-white text-[6px] font-black uppercase px-1 py-0.5 rounded-bl">HOT!</div>
-                  )}
-                  <div className="text-[9px] text-gray-300 font-bold truncate leading-none mb-1">{p.username}</div>
-                  <div className="flex gap-0.5 justify-center my-1.5">
-                    {Array.from({ length: 5 }).map((_, bIdx) => (
-                      <span key={bIdx} className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${bIdx < p.markedCount ? (p.neededToWin <= 1 ? 'bg-red-400 animate-pulse' : 'bg-gold') : 'bg-white/10'}`} />
-                    ))}
-                  </div>
-                  <div className={`text-[10px] font-extrabold leading-none ${p.neededToWin <= 1 ? 'text-red-400 animate-pulse' : p.neededToWin === 2 ? 'text-gold' : 'text-emerald-400'}`}>
-                    {p.markedCount}/5
-                  </div>
-                  <div className="text-[7.5px] text-gray-500 mt-1 uppercase tracking-wider font-bold">
-                    {p.neededToWin === 0 ? "BINGO!" : `NEED ${p.neededToWin}`}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* Recent Calls */}
         <div className="glass rounded-2xl p-3 mb-4 flex items-center justify-between gap-3 font-sans border border-white/5">
@@ -245,6 +216,7 @@ export default function GameView({
         stake={selectedStake}
         livePlayerCount={livePlayerCount}
         commissionRate={commissionRate}
+        prizePool={prizePool}
         card={winningCard}
         drawnNumbers={drawnNumbers}
         winningCells={winningCells}
@@ -261,6 +233,7 @@ export default function GameView({
         stake={selectedStake}
         livePlayerCount={livePlayerCount}
         commissionRate={commissionRate}
+        prizePool={prizePool}
         gameCards={playerCards.length > 0 ? playerCards : (gameCard.length > 0 ? [gameCard] : [])}
         cardNumbers={selectedCards}
         drawnNumbers={drawnNumbers}

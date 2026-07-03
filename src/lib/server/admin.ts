@@ -5,6 +5,114 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key';
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+// ---------------------------------------------------------------------------
+// Notification channel system
+// ---------------------------------------------------------------------------
+type NotifyEvent =
+  | 'deposit_pending'
+  | 'deposit_approved'
+  | 'deposit_rejected'
+  | 'withdraw_pending'
+  | 'withdraw_approved'
+  | 'withdraw_rejected'
+  | 'game_started'
+  | 'game_winner'
+  | 'game_winner_appointed'
+  | 'user_registered'
+  | 'balance_adjustment';
+
+interface NotifyChannel {
+  id: string;
+  label: string;
+  bot_token: string;
+  chat_ids: string[];
+  all_events: boolean;
+  events: string[];
+}
+
+let cachedChannels: NotifyChannel[] | null = null;
+let channelsCacheTime = 0;
+const CHANNELS_CACHE_TTL = 30000;
+
+async function getNotifyChannels(): Promise<NotifyChannel[]> {
+  const now = Date.now();
+  if (cachedChannels && (now - channelsCacheTime) < CHANNELS_CACHE_TTL) {
+    return cachedChannels;
+  }
+  try {
+    const { data } = await supabase
+      .from('bot_config')
+      .select('commands')
+      .eq('id', 'main')
+      .single();
+    cachedChannels = (data?.commands?.notification_channels as NotifyChannel[]) || [];
+    channelsCacheTime = now;
+    return cachedChannels;
+  } catch {
+    return [];
+  }
+}
+
+export function clearNotifyChannelsCache() {
+  cachedChannels = null;
+  channelsCacheTime = 0;
+}
+
+/** Send a message to all notification channels subscribed to a given event */
+export async function notifyEvent(event: NotifyEvent, text: string, parseMode = 'Markdown') {
+  const channels = await getNotifyChannels();
+  const envBotToken = process.env.ADMIN_BOT_TOKEN;
+  const envChatId = process.env.ADMIN_CHAT_ID;
+
+  for (const ch of channels) {
+    if (!ch.bot_token || !ch.chat_ids?.length) continue;
+    const subs = ch.all_events || ch.events?.includes(event) || ch.events?.includes('*');
+    if (!subs) continue;
+    for (const cid of ch.chat_ids) {
+      try {
+        await fetch(`https://api.telegram.org/bot${ch.bot_token}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chat_id: cid, text, parse_mode: parseMode }),
+          signal: AbortSignal.timeout(5000),
+        });
+      } catch (err) {
+        console.error(`notifyEvent channel ${ch.id} chat ${cid}:`, err);
+      }
+    }
+  }
+
+  // Fallback to env-configured admin
+  if (envBotToken && envChatId) {
+    try {
+      await fetch(`https://api.telegram.org/bot${envBotToken}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: envChatId, text, parse_mode: parseMode }),
+        signal: AbortSignal.timeout(5000),
+      });
+    } catch (err) {
+      console.error('notifyEvent env admin fallback:', err);
+    }
+  }
+}
+
+/** Send a direct message to a user via ADMIN_BOT_TOKEN */
+export async function notifyUser(telegramId: string | number, text: string, parseMode = 'Markdown') {
+  const botToken = process.env.ADMIN_BOT_TOKEN;
+  if (!botToken) return;
+  try {
+    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: String(telegramId), text, parse_mode: parseMode }),
+      signal: AbortSignal.timeout(5000),
+    });
+  } catch (err) {
+    console.error('notifyUser error:', err);
+  }
+}
+
 // Verify admin access
 export function verifyAdmin(password: string): boolean {
   const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
@@ -147,6 +255,10 @@ export async function getTransactions(options: {
   status?: string;
   limit?: number;
   offset?: number;
+  bankName?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  search?: string;
 }) {
   let query = supabase
     .from('transactions')
@@ -156,6 +268,14 @@ export async function getTransactions(options: {
 
   if (options.type) query = query.eq('type', options.type);
   if (options.status) query = query.eq('status', options.status);
+  if (options.bankName) query = query.ilike('details->>bank_name', `%${options.bankName}%`);
+  if (options.dateFrom) query = query.gte('created_at', options.dateFrom);
+  if (options.dateTo) query = query.lte('created_at', options.dateTo + 'T23:59:59.999Z');
+  if (options.search) {
+    query = query.or(
+      `reference.ilike.%${options.search}%,profiles.first_name.ilike.%${options.search}%,profiles.username.ilike.%${options.search}%`
+    );
+  }
   if (options.limit) query = query.limit(options.limit);
   if (options.offset) query = query.range(options.offset, options.offset + (options.limit || 50) - 1);
 
@@ -163,11 +283,46 @@ export async function getTransactions(options: {
   return { transactions: data || [], total: count || 0 };
 }
 
+export async function getCommissionReport(options: {
+  dateFrom?: string;
+  dateTo?: string;
+}) {
+  let query = supabase
+    .from('transactions')
+    .select('type, amount, status, created_at');
+
+  if (options.dateFrom) query = query.gte('created_at', options.dateFrom);
+  if (options.dateTo) query = query.lte('created_at', options.dateTo + 'T23:59:59.999Z');
+
+  const { data } = await query;
+
+  let totalBets = 0, totalWins = 0;
+  let depositSum = 0, withdrawSum = 0;
+
+  if (data) {
+    for (const t of data) {
+      const amt = Number(t.amount) || 0;
+      if (t.type === 'bet') totalBets += amt;
+      if (t.type === 'win') totalWins += amt;
+      if (t.type === 'deposit' && t.status === 'completed') depositSum += amt;
+      if (t.type === 'withdraw' && t.status === 'completed') withdrawSum += amt;
+    }
+  }
+
+  return {
+    totalBets,
+    totalWins,
+    totalCommission: Math.max(0, totalBets - totalWins),
+    totalDeposits: depositSum,
+    totalWithdrawals: withdrawSum,
+  };
+}
+
 // Approve transaction (deposit/withdraw)
 export async function approveTransaction(transactionId: string, adminId: string) {
   const { data: tx } = await supabase
     .from('transactions')
-    .select('*')
+    .select('*, profiles!inner(telegram_id, first_name, username)')
     .eq('id', transactionId)
     .single();
 
@@ -196,14 +351,43 @@ export async function approveTransaction(transactionId: string, adminId: string)
     });
   }
 
-  // Trigger real-time notification
-  await notifyAdminTransactionCompleted(transactionId);
+  // Notify user
+  const prof = tx.profiles as any || {};
+  const bankName = tx.details?.bank_name || '-';
+  const userRef = tx.reference || '-';
+  const amountStr = Number(tx.amount).toLocaleString();
+  const txLabel = tx.type === 'deposit' ? 'Deposit' : 'Withdrawal';
+
+  if (prof.telegram_id) {
+    notifyUser(prof.telegram_id,
+      `✅ *${txLabel} Approved!*\n\n💰 Amount: *${amountStr} ETB*\n🏦 Bank: *${bankName}*\n🆔 TX ID: \`${userRef}\`\n\nYour ${tx.type} has been approved and processed.`
+    ).catch(() => {});
+  }
+
+  // Route to subscribed channels
+  const eventName = tx.type === 'deposit' ? 'deposit_approved' : 'withdraw_approved';
+  const userName = prof.first_name || prof.username || 'Unknown';
+  const channelMsg =
+    `✅ *${txLabel.toUpperCase()} APPROVED*\n\n` +
+    `👤 *User:* ${userName}\n` +
+    `💰 *Amount:* ${amountStr} ETB\n` +
+    `🏦 *Bank:* ${bankName}\n` +
+    `🆔 *Reference:* \`${userRef}\`\n` +
+    `🆔 *Tx ID:* \`${tx.id.slice(0, 8)}...\``;
+
+  notifyEvent(eventName as any, channelMsg).catch(() => {});
 
   return { success: true };
 }
 
 // Reject transaction
 export async function rejectTransaction(transactionId: string) {
+  const { data: tx } = await supabase
+    .from('transactions')
+    .select('*, profiles!inner(telegram_id, first_name, username)')
+    .eq('id', transactionId)
+    .single();
+
   const { error } = await supabase
     .from('transactions')
     .update({ status: 'failed' })
@@ -211,8 +395,33 @@ export async function rejectTransaction(transactionId: string) {
 
   if (error) return { error: error.message };
 
-  // Trigger real-time notification
-  await notifyAdminTransactionCompleted(transactionId);
+  // Notify user
+  if (tx) {
+    const prof = tx.profiles as any || {};
+    const bankName = tx.details?.bank_name || '-';
+    const userRef = tx.reference || '-';
+    const amountStr = Number(tx.amount).toLocaleString();
+    const txLabel = tx.type === 'deposit' ? 'Deposit' : 'Withdrawal';
+
+    if (prof.telegram_id) {
+      notifyUser(prof.telegram_id,
+        `❌ *${txLabel} Rejected*\n\n💰 Amount: *${amountStr} ETB*\n🏦 Bank: *${bankName}*\n🆔 TX ID: \`${userRef}\`\n\nYour ${tx.type} has been rejected. Please contact support if you have questions.`
+      ).catch(() => {});
+    }
+
+    // Route to subscribed channels
+    const eventName = tx.type === 'deposit' ? 'deposit_rejected' : 'withdraw_rejected';
+    const userName = prof.first_name || prof.username || 'Unknown';
+    const channelMsg =
+      `❌ *${txLabel.toUpperCase()} REJECTED*\n\n` +
+      `👤 *User:* ${userName}\n` +
+      `💰 *Amount:* ${amountStr} ETB\n` +
+      `🏦 *Bank:* ${bankName}\n` +
+      `🆔 *Reference:* \`${userRef}\`\n` +
+      `🆔 *Tx ID:* \`${tx.id.slice(0, 8)}...\``;
+
+    notifyEvent(eventName as any, channelMsg).catch(() => {});
+  }
 
   return { success: true };
 }
@@ -515,16 +724,21 @@ export async function notifyAdminTransactionCompleted(transactionId: string) {
       statusIcon = '❌ FAILED/REJECTED';
     }
 
-    // 4. Construct message
+    // 4. Bank / Method
+    const bankName = tx.details?.bank_name || 'N/A';
+    const userRef = tx.reference || 'N/A';
+
+    // 5. Construct message
     const text = `💰 *TRANSACTION RECORDED / UPDATED*\n\n` +
                  `🏷️ *Type:* ${tx.type.toUpperCase()}\n` +
                  `💵 *Amount:* ${Number(tx.amount).toLocaleString()} ETB\n` +
-                 `🚦 *Status:* ${statusIcon}\n\n` +
+                 `🚦 *Status:* ${statusIcon}\n` +
+                 `🏦 *Bank:* ${bankName}\n` +
+                 `🔗 *Reference:* \`${userRef}\`\n\n` +
                  `👤 *User:* ${playerName}\n` +
                  `👤 *Username:* ${playerUsername}\n` +
                  `📞 *Phone:* ${playerPhone}\n` +
                  `🆔 *Tx ID:* \`${tx.id.slice(0, 8)}...\`\n` +
-                 `🔗 *Reference:* \`${tx.reference || 'N/A'}\`\n` +
                  `⏱️ *Date:* ${new Date(tx.created_at || Date.now()).toLocaleString()}`;
 
     // 5. Call Telegram API

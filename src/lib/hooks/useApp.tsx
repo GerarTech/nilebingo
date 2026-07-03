@@ -157,7 +157,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   initializedRef.current = state.initialized;
   useEffect(() => {
     if (!state.initialized) return;
-    const interval = setInterval(() => {
+    const fetchWallet = () => {
       if (isValidUUID(state.profile?.id)) {
         fetch(`/api/public/wallet?userId=${state.profile!.id}`)
           .then(r => r.json())
@@ -166,8 +166,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
           })
           .catch(() => {});
       }
-    }, 15000);
-    return () => clearInterval(interval);
+    };
+    // Refresh every 5 seconds for near real-time balance updates
+    const interval = setInterval(fetchWallet, 5000);
+    // Also refresh when the page becomes visible (user switches back to the app)
+    const onVisibility = () => { if (document.visibilityState === 'visible') fetchWallet(); };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => { clearInterval(interval); document.removeEventListener('visibilitychange', onVisibility); };
   }, [state.initialized, state.profile?.id]);
 
   const setCurrentGame = useCallback((gameId: string | null) => {

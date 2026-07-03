@@ -10,6 +10,7 @@ import {
   getUsers,
   getUserDetail,
   getTransactions,
+  getCommissionReport,
   approveTransaction,
   rejectTransaction,
   getGames,
@@ -67,7 +68,17 @@ export async function GET(request: NextRequest) {
         const status = searchParams.get('status') || undefined;
         const limit = parseInt(searchParams.get('limit') || '50');
         const offset = parseInt(searchParams.get('offset') || '0');
-        const result = await getTransactions({ type, status, limit, offset });
+        const bankName = searchParams.get('bankName') || undefined;
+        const dateFrom = searchParams.get('dateFrom') || undefined;
+        const dateTo = searchParams.get('dateTo') || undefined;
+        const search = searchParams.get('search') || undefined;
+        const result = await getTransactions({ type, status, limit, offset, bankName, dateFrom, dateTo, search });
+        return NextResponse.json(result);
+      }
+      case 'commission': {
+        const dateFrom = searchParams.get('dateFrom') || undefined;
+        const dateTo = searchParams.get('dateTo') || undefined;
+        const result = await getCommissionReport({ dateFrom, dateTo });
         return NextResponse.json(result);
       }
       case 'games': {

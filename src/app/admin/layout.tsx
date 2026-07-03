@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
-  LayoutDashboard, Users, Wallet, Gamepad2, Coins, Phone, Send, Settings, LogOut, Menu, X, PlusCircle
+  LayoutDashboard, Users, Wallet, Gamepad2, Coins, Phone, Send, Settings, LogOut, Menu, X, PlusCircle, DollarSign
 } from 'lucide-react';
 
 const navItems = [
@@ -14,6 +14,7 @@ const navItems = [
   { href: '/admin/bulk-deposit', label: 'Bulk Deposit', icon: PlusCircle },
   { href: '/admin/games', label: 'Games', icon: Gamepad2 },
   { href: '/admin/stakes', label: 'Stakes', icon: Coins },
+  { href: '/admin/commission', label: 'Commission', icon: DollarSign },
   { href: '/admin/contacts', label: 'Contacts', icon: Phone },
   { href: '/admin/broadcast', label: 'Broadcast', icon: Send },
   { href: '/admin/settings', label: 'Settings', icon: Settings },

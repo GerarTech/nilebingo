@@ -114,13 +114,6 @@ export default function ProfileTab({
         </div>
       </div>
 
-      <div className="bg-[#0b101c] border border-white/5 p-4 rounded-2xl text-center shadow-inner relative overflow-hidden">
-        <div className="absolute top-1 left-2 w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping" />
-        <div className="text-[10px] font-bold text-gray-300 flex items-center justify-center gap-1.5 font-sans">
-          <span>🔌</span> Telegram WebApp Connected
-        </div>
-        <p className="text-[9.5px] text-gray-500 mt-1">Nile Bingo Mini App</p>
-      </div>
     </div>
   );
 }

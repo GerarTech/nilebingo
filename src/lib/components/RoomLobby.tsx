@@ -40,7 +40,7 @@ export default function RoomLobby({
   onBack, onToggleCard, onPlay, onUnregister, onDeposit,
   commissionRate,
 }: RoomLobbyProps) {
-  const cards = Array.from({ length: 100 }, (_, i) => i + 1);
+  const cards = Array.from({ length: 200 }, (_, i) => i + 1);
   const fee = room.entry;
   const totalBalance = (wallet?.main_balance || 0) + (wallet?.play_balance || 0);
   const isBalanceEligible = selectedCards.length > 0 && totalBalance >= fee * selectedCards.length;
@@ -59,50 +59,7 @@ export default function RoomLobby({
             <p className="text-[10px] text-gray-400 mt-2">Game will start when countdown hits zero.</p>
           </div>
 
-          <div className="bg-gradient-to-r from-[#111c30] to-[#0d1627] border border-[#ff5a00]/20 rounded-2xl p-4 shadow-xl relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-24 h-24 bg-[radial-gradient(circle_at_center,rgba(254,232,0,0.05)_0%,transparent_70%)] pointer-events-none" />
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-[9px] text-[#ff7a22] font-black uppercase tracking-wider flex items-center gap-1">
-                  <span>🏆</span> ESTIMATED GAME PRIZE
-                </div>
-                <div className="flex items-baseline gap-1 mt-1">
-                  <span className="text-2xl font-black text-gold tracking-tight">
-                    {Math.round(fee * (1 + (Math.max(lobbyPlayerCount, room.players) - 1) * (1 - commissionRate / 100))).toLocaleString()}
-                  </span>
-                  <span className="text-xs font-bold text-gray-300">{t('birr')}</span>
-                </div>
-                <p className="text-[9px] text-gray-400 mt-1">
-                                    Commission of {commissionRate}% is deducted from the total prize pool.
-                </p>
-              </div>
-              <div className="text-right">
-                <span className="text-[8px] text-emerald-400 font-black uppercase block tracking-wider animate-pulse">● LIVE POOL</span>
-                <span className="text-xs font-bold text-white mt-1 block">
-                  {(Math.max(lobbyPlayerCount, room.players) * fee).toLocaleString()} ETB
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-[#141f33]/60 border border-[#233c66]/30 p-4 rounded-2xl relative overflow-hidden">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-[9px] text-emerald-400 font-extrabold uppercase tracking-wider flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                PLAYERS IN LOBBY
-              </span>
-              <span className="text-[8px] text-gray-400 font-bold uppercase">{lobbyPlayerCount} registered</span>
-            </div>
-            <div className="flex flex-wrap gap-2 justify-center">
-              {Array.from({ length: Math.max(lobbyPlayerCount, 1) }).map((_, i) => (
-                <span key={i} className="bg-[#0c1322] border border-[#233c66]/20 text-gray-300 text-[9px] font-extrabold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-sm animate-pulse">
-                  <span className="w-1 h-1 bg-emerald-400 rounded-full" />
-                  Player {i + 1}
-                </span>
-              ))}
-              {lobbyPlayerCount === 0 && <span className="text-[10px] text-gray-500 italic">Waiting for players...</span>}
-            </div>
-          </div>
+             
 
           <div className="bg-[#142036]/40 border border-[#233c66]/30 rounded-2xl p-4 shadow-xl">
             <div className="text-[10px] text-amber-400 font-black uppercase tracking-widest mb-3 text-center">🎴 YOUR CARDS</div>
@@ -148,10 +105,10 @@ export default function RoomLobby({
           <div className="text-[7.5px] text-gray-400 font-extrabold uppercase tracking-wider">WALLET</div>
           <div className="text-sm font-black text-white mt-1">{(wallet?.main_balance || 0).toLocaleString()} {t('birr')}</div>
         </div>
-         <div className="bg-[#141f33] border border-[#233c66]/30 p-2.5 rounded-xl flex-1 text-center shadow-lg">
+        <div className="bg-[#141f33] border border-[#233c66]/30 p-2.5 rounded-xl flex-1 text-center shadow-lg">
           <div className="text-[7.5px] text-gray-400 font-extrabold uppercase tracking-wider">PRIZE</div>
           <div className="text-sm font-black text-gold mt-1">
-                        {Math.round(fee * Math.max(lobbyPlayerCount, room.players) * (1 - commissionRate / 100)).toLocaleString()} {t('birr')}
+            {Math.round(fee * (Math.max(lobbyPlayerCount, room.players) - 1 + Math.max(1, selectedCards.length)) * (1 - commissionRate / 100)).toLocaleString()} {t('birr')}
           </div>
         </div>
         <div className="bg-[#141f33] border border-[#233c66]/30 p-2.5 rounded-xl flex-1 text-center shadow-lg">
@@ -161,15 +118,6 @@ export default function RoomLobby({
         <div className="bg-gradient-to-br from-[#ff5a00] to-amber-600 rounded-xl px-2.5 flex flex-col items-center justify-center font-black text-center shadow-lg shadow-[#ff5a00]/20 w-14 border border-white/10 select-none h-12 self-center shrink-0">
           <span className="text-[7px] text-white/80 uppercase font-bold tracking-tight">WAIT</span>
           <span className="text-base text-white font-black leading-none mt-0.5">{room.countdown}S</span>
-        </div>
-      </div>
-
-      {/* 🏆 PRIZE & PLAYERS */}
-      <div className="flex items-stretch gap-1.5 mb-4">
-       
-        <div className="bg-[#141f33] border border-[#233c66]/30 p-2.5 rounded-xl flex-1 text-center shadow-lg">
-          <div className="text-[7.5px] text-gray-400 font-extrabold uppercase tracking-wider">PLAYERS</div>
-          <div className="text-sm font-black text-emerald-400 mt-1">{lobbyPlayerCount || room.players}</div>
         </div>
       </div>
 

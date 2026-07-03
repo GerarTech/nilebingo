@@ -76,48 +76,53 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 4. Send notification to Admin Telegram Bot
-    const adminBotToken = process.env.ADMIN_BOT_TOKEN;
-    const adminChatId = process.env.ADMIN_CHAT_ID;
-    
-    if (adminBotToken && adminChatId && game) {
+    // 4. Send notification for wins only
+    if (game && isWin) {
       try {
-        // Fetch player profile info
         const { data: profile } = await supabase
           .from('profiles')
-          .select('first_name, username')
+          .select('first_name, username, phone')
           .eq('id', userId)
           .single();
 
-        const playerName = profile 
-          ? (profile.first_name || (profile.username ? `@${profile.username}` : 'Unknown Player'))
-          : 'Unknown Player';
+        const playerName = profile?.first_name || 'Player';
+        const identifier = profile?.username
+          ? `@${profile.username}`
+          : profile?.phone
+            ? profile.phone
+            : '';
 
-        const outcomeIcon = isWin ? '🏆 WIN' : '❌ LOSS';
-        const outcomeMsg = isWin 
-          ? `🏆 *Player WON the match!*` 
-          : `❌ *Player LOST the match.*`;
+        const { count: totalPlayers } = await supabase
+          .from('game_players')
+          .select('id', { count: 'exact', head: true })
+          .eq('game_id', game.id);
 
-        const text = `🎮 *BINGO GAME RECORDED (ID: #${code})*\n\n` +
-                     `👤 *Player:* ${playerName}\n` +
+        const text = `🏆 *BINGO WINNER*\n\n` +
+                     `🆔 Game: \`${game.id.slice(0, 8)}...\`\n` +
+                     `🎫 Code: \`${code}\`\n` +
+                     `👤 *Player:* ${playerName}${identifier ? ` (${identifier})` : ''}\n` +
                      `🏠 *Room:* ${roomName || 'Quick Lobby'}\n` +
+                     `👥 *Total Players:* ${totalPlayers || 1}\n` +
                      `💰 *Stake:* ${stakeAmount} ETB\n` +
-                     `📢 *Result:* ${outcomeIcon}\n` +
-                     `💰 *Prize Pool:* ${Number(prizePool).toLocaleString()} ETB\n` +
-                     `🔢 *Called Numbers:* ${Array.isArray(drawnNumbers) ? drawnNumbers.length : 0} calls\n` +
+                     `🏆 *Prize Pool:* ${Number(prizePool).toLocaleString()} ETB\n` +
+                     `🔢 *Called Numbers:* ${Array.isArray(drawnNumbers) ? drawnNumbers.length : 0}\n` +
                      `⏱️ *Date:* ${new Date().toLocaleString()}`;
 
-        await fetch(`https://api.telegram.org/bot${adminBotToken}/sendMessage`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chat_id: adminChatId,
-            text,
-            parse_mode: 'Markdown'
-          })
-        });
+        // Route through notification channels
+        const { notifyEvent } = await import('@/lib/server/admin');
+        notifyEvent('game_winner', text);
+
+        // Also send to env-configured admin as fallback
+        const adminBotToken = process.env.ADMIN_BOT_TOKEN;
+        const adminChatId = process.env.ADMIN_CHAT_ID;
+        if (adminBotToken && adminChatId) {
+          await fetch(`https://api.telegram.org/bot${adminBotToken}/sendMessage`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: adminChatId, text, parse_mode: 'Markdown' }),
+          });
+        }
       } catch (tgErr) {
-        console.error('Error sending Telegram admin notification:', tgErr);
+        console.error('Error sending game winner notification:', tgErr);
       }
     }
 

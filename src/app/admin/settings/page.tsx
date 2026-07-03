@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Save, RefreshCw, MessageSquare, Sliders, CreditCard, Trophy, Trash2 } from 'lucide-react';
+import { Save, RefreshCw, MessageSquare, Sliders, CreditCard, Trophy, Trash2, Bell } from 'lucide-react';
 
 interface BotCommands {
   admin_stats: string;
@@ -35,6 +35,7 @@ interface BotMessages {
   winning_patterns_info: string;
   how_to_play: string;
   bot_description: string;
+  invite: string;
 }
 
 interface BotBranding {
@@ -56,7 +57,7 @@ export default function SettingsPage() {
   const [adminChatId, setAdminChatId] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
   const [saved, setSaved] = useState(false);
-  const [activeTab, setActiveTab] = useState<'commands' | 'messages' | 'game_config' | 'branding' | 'gateways' | 'bias'>('commands');
+  const [activeTab, setActiveTab] = useState<'commands' | 'messages' | 'game_config' | 'branding' | 'gateways' | 'bias' | 'notifications'>('commands');
   const [commands, setCommands] = useState<BotCommands>({
     admin_stats: '/admin_stats',
     admin_users: '/admin_users',
@@ -88,6 +89,7 @@ export default function SettingsPage() {
     winning_patterns_info: '*Winning Patterns*\n\n1. Horizontal Line\n2. Vertical Line\n3. Diagonal Line\n4. Four Corners\n5. Blackout\n\nFirst to complete a pattern wins!',
     how_to_play: '*How to Play BINGO:*\n\n1. Choose your stake (10/20/50 ETB)\n2. Select your card (1-300)\n3. Numbers are drawn\n4. Mark matching numbers\n5. Complete a row/column/diagonal to win!\n\nGood luck!',
     bot_description: '🎮 Play Bingo Game Online (ቢንጎ ጨዋታ)\n\n🎉🔥 እንኳን ወደ Nile BINGO🔥🎱 በሰላም መጡ! 🔥🎉\n\n🎮 ከብዙ ተጫዋቾች ጋር በቀጥታ የቢንጎ ጨዋታ ይጫወቱ\n💰 ሽልማት ያሸንፉ እና የእርስዎን ገንዘብ ያስተዳድሩ\n⚡️ ፈጣን እና በብዙዎች የተወደደ የብዙ ተጫዋቾች ጨዋታ\n\n👉 አሁን ለመጀመር /start ይጫኑ!',
+    invite: '🎉 *Invite Friends & Earn!*\n\nHere\'s your exclusive invite link:\n{refLink}\n\n*How it works:*\n• Share your link with friends\n• They join and share their phone number\n• You instantly get *{refBonus} ETB* in your Play Wallet\n\nNo minimum deposit required — just invite and play! 🚀',
   });
   
   // Game config specific state
@@ -124,6 +126,9 @@ export default function SettingsPage() {
   const [banks, setBanks] = useState<{id: string; name: string; icon: string; account: string; recipient: string; max: string}[]>([]);
   const [newBank, setNewBank] = useState<{name: string; icon: string; account: string; recipient: string; max: string}>({name: '', icon: '🏦', account: '', recipient: '', max: '5000'});
   const [adminChatIds, setAdminChatIds] = useState<string>('');
+  const [notifChannels, setNotifChannels] = useState<{
+    id: string; label: string; bot_token: string; chat_ids: string; all_events: boolean; events: string[];
+  }[]>([]);
 
   // Branding specific state
   const [botName, setBotName] = useState('Nile BINGO');
@@ -197,6 +202,13 @@ export default function SettingsPage() {
         if (config.rules_text !== undefined) setRulesText(String(config.rules_text) || '');
         if (Array.isArray(config.banks)) setBanks(config.banks);
         if (Array.isArray(config.admin_chat_ids)) setAdminChatIds(config.admin_chat_ids.join(', '));
+        if (Array.isArray(config.notification_channels)) {
+          setNotifChannels(config.notification_channels.map((ch: any) => ({
+            id: ch.id, label: ch.label || '', bot_token: ch.bot_token || '',
+            chat_ids: Array.isArray(ch.chat_ids) ? ch.chat_ids.join(', ') : '',
+            all_events: ch.all_events || false, events: Array.isArray(ch.events) ? ch.events : [],
+          })));
+        }
       }
       if (msgs && typeof msgs === 'object') {
         setMessages(prev => ({ ...prev, ...msgs }));
@@ -231,6 +243,11 @@ export default function SettingsPage() {
       appointed_winners: appointedWinners,
       banks,
       admin_chat_ids: adminChatIds.split(/[\s,]+/).filter(Boolean),
+      notification_channels: notifChannels.map(ch => ({
+        id: ch.id, label: ch.label, bot_token: ch.bot_token,
+        chat_ids: ch.chat_ids.split(/[\s,]+/).filter(Boolean),
+        all_events: ch.all_events, events: ch.events,
+      })),
     };
   };
 
@@ -372,6 +389,13 @@ export default function SettingsPage() {
             <Trophy size={12} className="inline mr-1" />
             Biased Draw Engine
           </button>
+          <button
+            onClick={() => setActiveTab('notifications')}
+            className={`px-4 py-2 text-xs font-medium transition-all shrink-0 ${activeTab === 'notifications' ? 'text-gold border-b-2 border-gold font-bold' : 'text-gray-400 hover:text-white'}`}
+          >
+            <Bell size={12} className="inline mr-1" />
+            Notifications
+          </button>
         </div>
 
         {/* Commands Tab */}
@@ -469,74 +493,6 @@ export default function SettingsPage() {
                   placeholder="e.g. 123456789, 987654321"
                 />
                 <p className="text-[8.5px] text-gray-500">Only these Telegram chat IDs can access the admin bot. Add the numeric IDs separated by commas or spaces.</p>
-              </div>
-            </div>
-
-            {/* CBE Birr Settings */}
-            <div className="bg-navy-light p-3 rounded-lg border border-white/5 space-y-3">
-              <label className="text-xs text-white font-bold uppercase tracking-wider block">🏦 Commercial Bank of Ethiopia (CBE)</label>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-[10px] text-gray-400 block mb-0.5">Account Number</label>
-                  <input
-                    type="text"
-                    value={cbeAccount}
-                    onChange={(e) => setCbeAccount(e.target.value)}
-                    className="w-full bg-navy border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] text-gray-400 block mb-0.5">Recipient Name</label>
-                  <input
-                    type="text"
-                    value={cbeName}
-                    onChange={(e) => setCbeName(e.target.value)}
-                    className="w-full bg-navy border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="text-[10px] text-gray-400 block mb-0.5">Single Max Deposit Limit (ETB)</label>
-                <input
-                  type="number"
-                  value={cbeMax}
-                  onChange={(e) => setCbeMax(Math.max(0, parseInt(e.target.value, 10) || 0))}
-                  className="w-full bg-navy border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
-                />
-              </div>
-            </div>
-
-            {/* Telebirr Settings */}
-            <div className="bg-navy-light p-3 rounded-lg border border-white/5 space-y-3">
-              <label className="text-xs text-white font-bold uppercase tracking-wider block">📱 Telebirr Mobile Money</label>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-[10px] text-gray-400 block mb-0.5">Merchant Phone Number</label>
-                  <input
-                    type="text"
-                    value={telebirrNumber}
-                    onChange={(e) => setTelebirrNumber(e.target.value)}
-                    className="w-full bg-navy border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] text-gray-400 block mb-0.5">Recipient Name</label>
-                  <input
-                    type="text"
-                    value={telebirrName}
-                    onChange={(e) => setTelebirrName(e.target.value)}
-                    className="w-full bg-navy border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="text-[10px] text-gray-400 block mb-0.5">Single Max Deposit Limit (ETB)</label>
-                <input
-                  type="number"
-                  value={telebirrMax}
-                  onChange={(e) => setTelebirrMax(Math.max(0, parseInt(e.target.value, 10) || 0))}
-                  className="w-full bg-navy border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
-                />
               </div>
             </div>
 
@@ -876,6 +832,90 @@ export default function SettingsPage() {
           </div>
         )}
 
+        {/* Notifications Tab */}
+        {activeTab === 'notifications' && (
+          <div className="p-3 bg-navy rounded-xl space-y-4">
+            <h3 className="text-xs font-semibold text-white">Notification Channels</h3>
+            <p className="text-[9px] text-gray-500">
+              Route different event notifications to different Telegram bots / groups. Create one channel per department.
+              The <strong className="text-white">Super Admin</strong> env fallback (<code>ADMIN_CHAT_ID</code>) always receives everything.
+            </p>
+
+            {notifChannels.map((ch, idx) => (
+              <div key={ch.id} className="bg-navy-light p-3 rounded-lg border border-white/5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const copy = [...notifChannels];
+                        copy[idx] = { ...copy[idx], all_events: !copy[idx].all_events };
+                        setNotifChannels(copy);
+                      }}
+                      className={`w-8 h-4 rounded-full transition-colors relative select-none cursor-pointer ${ch.all_events ? 'bg-gold' : 'bg-gray-600'}`}
+                    >
+                      <div className={`w-3 h-3 bg-white rounded-full transition-transform absolute top-0.5 ${ch.all_events ? 'translate-x-4.5' : 'translate-x-0.5'}`} />
+                    </button>
+                    <span className={`text-[10px] font-bold ${ch.all_events ? 'text-gold' : 'text-gray-400'}`}>
+                      {ch.all_events ? 'All Events' : 'Select Events'}
+                    </span>
+                  </div>
+                  <button onClick={() => setNotifChannels(prev => prev.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-300 cursor-pointer">
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[9px] text-gray-400 block">Channel Label</label>
+                    <input type="text" value={ch.label} onChange={(e) => { const c = [...notifChannels]; c[idx] = { ...c[idx], label: e.target.value }; setNotifChannels(c); }}
+                      className="w-full bg-navy border border-white/10 rounded-lg px-2 py-1 text-[11px] text-white" placeholder="e.g. Finance Dept" />
+                  </div>
+                  <div>
+                    <label className="text-[9px] text-gray-400 block">Bot Token</label>
+                    <input type="text" value={ch.bot_token} onChange={(e) => { const c = [...notifChannels]; c[idx] = { ...c[idx], bot_token: e.target.value }; setNotifChannels(c); }}
+                      className="w-full bg-navy border border-white/10 rounded-lg px-2 py-1 text-[11px] text-white font-mono" placeholder="123:ABCdef..." />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="text-[9px] text-gray-400 block">Chat IDs (comma / space separated)</label>
+                    <input type="text" value={ch.chat_ids} onChange={(e) => { const c = [...notifChannels]; c[idx] = { ...c[idx], chat_ids: e.target.value }; setNotifChannels(c); }}
+                      className="w-full bg-navy border border-white/10 rounded-lg px-2 py-1 text-[11px] text-white" placeholder="e.g. 123456789, 987654321" />
+                  </div>
+                </div>
+                {!ch.all_events && (
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {['deposit_pending','deposit_approved','deposit_rejected','withdraw_pending','withdraw_approved','withdraw_rejected','game_started','game_winner','game_winner_appointed','user_registered','balance_adjustment'].map(ev => (
+                      <label key={ev} className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] cursor-pointer select-none transition-colors ${ch.events.includes(ev) ? 'bg-gold/20 text-gold border border-gold/30' : 'bg-navy text-gray-400 border border-white/10'}`}>
+                        <input type="checkbox" checked={ch.events.includes(ev)} onChange={() => {
+                          const c = [...notifChannels];
+                          if (c[idx].events.includes(ev)) c[idx].events = c[idx].events.filter((e: string) => e !== ev);
+                          else c[idx].events = [...c[idx].events, ev];
+                          setNotifChannels(c);
+                        }} className="hidden" />
+                        {ev.replace(/_/g, ' ')}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+
+            <button
+              onClick={() => setNotifChannels(prev => [...prev, {
+                id: 'ch_' + Date.now(), label: '', bot_token: '', chat_ids: '',
+                all_events: false, events: ['deposit_pending', 'deposit_approved', 'deposit_rejected', 'game_winner_appointed'],
+              }])}
+              className="w-full border border-dashed border-white/20 text-gray-400 hover:text-white hover:border-white/40 rounded-lg py-2 text-[11px] font-medium transition-all cursor-pointer"
+            >
+              + Add Notification Channel
+            </button>
+
+            <button onClick={() => saveConfig(getMergedConfig())} className="w-full bg-gold text-navy font-bold py-2.5 rounded-lg text-xs flex items-center justify-center gap-2 cursor-pointer transition-all">
+              <Save size={14} />
+              {saved ? 'Saved!' : 'Save Notification Channels'}
+            </button>
+          </div>
+        )}
+
         {/* Bias Tab */}
         {activeTab === 'bias' && (
           <div className="p-3 bg-navy rounded-xl space-y-4 text-left">
@@ -895,12 +935,12 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div>
-                  <label className="text-gray-400 block mb-0.5">Appointed Card No (1-100)</label>
+                  <label className="text-gray-400 block mb-0.5">Appointed Card No (1-200)</label>
                   <input
                     type="number"
                     id="appoint_card_num"
                     min="1"
-                    max="100"
+                    max="200"
                     placeholder="e.g. 58"
                     className="w-full bg-navy border border-white/10 rounded-md px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
                   />
@@ -927,7 +967,7 @@ export default function SettingsPage() {
                   const gId = gEl?.value?.trim();
                   const cNum = parseInt(cEl?.value, 10);
                   const aBalls = parseInt(bEl?.value, 10) || 20;
-                  if (gId && cNum >= 1 && cNum <= 100) {
+                  if (gId && cNum >= 1 && cNum <= 200) {
                     setAppointedWinners(prev => {
                       const updated = { ...prev, [gId]: { card_number: cNum, after_balls: aBalls } };
                       saveConfig({ ...getMergedConfig(), appointed_winners: updated });
@@ -937,7 +977,7 @@ export default function SettingsPage() {
                     if (cEl) cEl.value = '';
                     if (bEl) bEl.value = '20';
                   } else {
-                    alert("Please provide a valid Game Session ID and Card number between 1 and 100.");
+                    alert("Please provide a valid Game Session ID and Card number between 1 and 200.");
                   }
                 }}
                 className="w-full bg-gold text-navy font-bold py-2 rounded-lg text-xs cursor-pointer transition-all"

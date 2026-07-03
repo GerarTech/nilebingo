@@ -28,7 +28,7 @@ async function safeUpdateState(telegramId: string, state: string, data?: any) {
   }
 }
 
-async function createDraftDeposit(userId: string, amount: number) {
+async function createDraftDeposit(userId: string, amount: number, bankName?: string) {
   try {
     await supabase.from('transactions').insert({
       user_id: userId,
@@ -36,6 +36,7 @@ async function createDraftDeposit(userId: string, amount: number) {
       amount,
       status: 'pending',
       reference: '__DRAFT__',
+      details: bankName ? { bank_name: bankName } : {},
     });
   } catch (e) {
     console.error('createDraftDeposit failed:', e);
@@ -214,6 +215,7 @@ const EN = {
   admin_no_pending: 'No pending transactions at the moment.',
   admin_no_users: 'No users found yet.',
   admin_help: '*🔐 Admin Commands*\n\n/admin_stats — Dashboard statistics\n/admin_users — Recent 10 users\n/admin_pending — View pending transactions\n/approve_<tx_id> — Approve a transaction\n/reject_<tx_id> — Reject a transaction\n/broadcast <message> — Send message to all users\n/admin_help — Show this help',
+  invite: '🎉 *Invite Friends & Earn!*\n\nHere\'s your exclusive invite link:\n{refLink}\n\n*How it works:*\n• Share your link with friends\n• They join and share their phone number\n• You instantly get *{refBonus} ETB* in your Play Wallet\n\nNo minimum deposit required — just invite and play! 🚀',
 };
 
 const AM = {
@@ -248,6 +250,7 @@ const AM = {
   transactions_empty: '📒 *ግብይቶች*\n\nእስካሁን ምንም ግብይት የለም። መጫወት ይጀምሩ!',
   broadcast_usage: '📢 *መልእክት ማሰራጫ*\n\nአጠቃቀም: `/broadcast መልእክትዎ`\n\nለሁሉም ተመዝጋቢዎች መልእክት ይላኩ።',
   broadcast_done: '✅ መልእክት ለ{count} ተጠቃሚዎች ተልኳል።',
+  invite: '🎉 *Invite Friends & Earn!*\n\nHere\'s your exclusive invite link:\n{refLink}\n\n*How it works:*\n• Share your link with friends\n• They join and share their phone number\n• You instantly get *{refBonus} ETB* in your Play Wallet\n\nNo minimum deposit required — just invite and play! 🚀',
 };
 
 function getText(lang: 'en' | 'am', key: string): string {
@@ -670,7 +673,7 @@ export async function POST(request: NextRequest) {
           await answerCallbackQuery(callbackQuery.id, 'CBE selected');
           await safeUpdateState(String(from.id), 'waiting_deposit_txid', { bank_id: 'cbe', amount });
           const { data: cprof } = await supabase.from('profiles').select('id').eq('telegram_id', String(from.id)).maybeSingle();
-          if (cprof) await createDraftDeposit(cprof.id, amount);
+          if (cprof) await createDraftDeposit(cprof.id, amount, 'CBE');
           const bankName = commands.cbe_name || 'Nile Bingo';
           const account = commands.cbe_account || '1000256789123';
           const msgText = getText(lang, 'deposit_txid_prompt').replace('{bank_name}', bankName).replace('{account}', account).replace('{recipient}', bankName).replace('{amount}', String(amount));
@@ -682,7 +685,7 @@ export async function POST(request: NextRequest) {
           await answerCallbackQuery(callbackQuery.id, 'Telebirr selected');
           await safeUpdateState(String(from.id), 'waiting_deposit_txid', { bank_id: 'telebirr', amount });
           const { data: tprof } = await supabase.from('profiles').select('id').eq('telegram_id', String(from.id)).maybeSingle();
-          if (tprof) await createDraftDeposit(tprof.id, amount);
+          if (tprof) await createDraftDeposit(tprof.id, amount, 'Telebirr');
           const telebirrNumber = commands.telebirr_number || '0918281072';
           const telebirrName = commands.telebirr_name || 'Melkie';
           const msgText = getText(lang, 'deposit_txid_prompt').replace('{bank_name}', 'Telebirr').replace('{account}', telebirrNumber).replace('{recipient}', telebirrName).replace('{amount}', String(amount));
@@ -748,13 +751,12 @@ export async function POST(request: NextRequest) {
 
       await sendMessage(chatId, getText(lang, 'contact_received'));
 
-      if (adminChatId) {
+      {
         const name = firstName || 'Unknown';
         const user = username ? `@${username}` : 'N/A';
-        await sendMessage(adminChatId, 
-          `📱 *New User Contact Shared*\n\n👤 User: ${name}\n🆔 ID: ${telegramId}\n📞 Phone: ${phone}\n👤 Username: ${user}`,
-          { parse_mode: 'Markdown' }
-        );
+        const msg = `📱 *New User Contact Shared*\n\n👤 User: ${name}\n🆔 ID: ${telegramId}\n📞 Phone: ${phone}\n👤 Username: ${user}`;
+        // Route through notification channels
+        try { const { notifyEvent } = await import('@/lib/server/admin'); notifyEvent('user_registered', msg); } catch {}
       }
 
       await sendMessage(chatId, getText(lang, 'welcome'), {
@@ -990,19 +992,19 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ ok: true });
         }
 
+        // Look up bank details
+        const depositBankName = bank?.name || (bankId === 'cbe' ? 'CBE' : 'Telebirr');
+        const account = bank?.account || (bankId === 'cbe' ? (commands.cbe_account || '1000256789123') : (commands.telebirr_number || '0918281072'));
+        const recipient = bank?.recipient || (bankId === 'cbe' ? (commands.cbe_name || 'Nile Bingo') : (commands.telebirr_name || 'Melkie'));
+
         // Update state to waiting for tx ID
         await safeUpdateState(String(from.id), 'waiting_deposit_txid', { ...stateData, amount });
 
         // Create draft deposit for catch-all fallback
-        await createDraftDeposit(userProfile.id, amount);
-
-        // Look up bank details
-        const bankName = bank?.name || (bankId === 'cbe' ? 'CBE' : 'Telebirr');
-        const account = bank?.account || (bankId === 'cbe' ? (commands.cbe_account || '1000256789123') : (commands.telebirr_number || '0918281072'));
-        const recipient = bank?.recipient || (bankId === 'cbe' ? (commands.cbe_name || 'Nile Bingo') : (commands.telebirr_name || 'Melkie'));
+        await createDraftDeposit(userProfile.id, amount, depositBankName);
 
         const msgText = getText(lang, 'deposit_txid_prompt')
-          .replace('{bank_name}', bankName)
+          .replace('{bank_name}', depositBankName)
           .replace('{account}', account)
           .replace('{recipient}', recipient)
           .replace('{amount}', String(amount));
@@ -1054,8 +1056,8 @@ export async function POST(request: NextRequest) {
 
         let txId_full: string | null = null;
         if (draftTx) {
-          // Update draft with actual TX ID
-          await supabase.from('transactions').update({ reference: txId }).eq('id', draftTx.id);
+          // Update draft with actual TX ID and bank info
+          await supabase.from('transactions').update({ reference: txId, details: { bank_name: bankName } }).eq('id', draftTx.id);
           txId_full = draftTx.id;
         } else {
           // Normal path: insert new pending deposit
@@ -1066,7 +1068,8 @@ export async function POST(request: NextRequest) {
               type: 'deposit',
               amount,
               status: 'pending',
-              reference: txId
+              reference: txId,
+              details: { bank_name: bankName }
             })
             .select()
             .single();
@@ -1083,6 +1086,13 @@ export async function POST(request: NextRequest) {
           if (adminChatId) {
             await sendMessage(adminChatId, `⏳ *New Deposit Request*\n\n👤 User: ${userProfile.first_name || 'Unknown'}${userProfile.username ? ` (@${userProfile.username})` : ''}\n📞 Phone: ${userProfile.phone || 'N/A'}\n💰 Amount: *${amount} ETB*\n🏦 Bank: *${bankName}*\n🆔 TX ID: \`${txId}\`\n\nApprove: /approve_${txId_full.slice(0, 8)}\nReject: /reject_${txId_full.slice(0, 8)}`, { parse_mode: 'Markdown' });
           }
+          // Route to notification channels
+          try {
+            const { notifyEvent } = await import('@/lib/server/admin');
+            const userName = userProfile.first_name || userProfile.username || 'Unknown';
+            const channelMsg = `⏳ *NEW DEPOSIT REQUEST*\n\n👤 *User:* ${userName}\n📞 *Phone:* ${userProfile.phone || 'N/A'}\n💰 *Amount:* ${amount} ETB\n🏦 *Bank:* ${bankName}\n🆔 *TX ID:* \`${txId}\`\n🆔 *Tx ID:* \`${txId_full.slice(0, 8)}...\``;
+            notifyEvent('deposit_pending', channelMsg);
+          } catch (e) { /* ignore */ }
         }
         return NextResponse.json({ ok: true });
       }
@@ -1090,6 +1100,7 @@ export async function POST(request: NextRequest) {
       // Legacy SMS parse states (backward compat)
       if (state === 'waiting_deposit_cbe' || state === 'waiting_deposit_telebirr') {
         const method = state === 'waiting_deposit_cbe' ? 'cbe' : 'telebirr';
+        const smsBankName = method === 'cbe' ? 'CBE' : 'Telebirr';
         const parsed = parseDepositSMS(text, method);
 
         await safeUpdateState(String(from.id), 'idle');
@@ -1101,20 +1112,35 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ ok: true });
           }
 
-          const { data: tx } = await supabase.from('transactions').insert({ user_id: userProfile.id, type: 'deposit', amount: parsed.amount, status: 'pending', reference: parsed.txId }).select().single();
+          const { data: tx } = await supabase.from('transactions').insert({ user_id: userProfile.id, type: 'deposit', amount: parsed.amount, status: 'pending', reference: parsed.txId, details: { bank_name: smsBankName } }).select().single();
           if (tx) {
             await sendMessage(chatId, `⏳ *Deposit Submitted for Review*\n\nTransaction ID: \`${parsed.txId}\`\nAmount: *${parsed.amount.toLocaleString()} ETB*\n\nAn admin will verify and approve your deposit shortly.`, { parse_mode: 'Markdown', ...getMainKeyboard(lang) });
             if (adminChatId) {
-              await sendMessage(adminChatId, `⏳ *Pending Deposit (SMS Auto)*\n\n👤 ${userProfile.first_name || 'Unknown'}${userProfile.username ? ` (@${userProfile.username})` : ''}\n💰 *${parsed.amount} ETB*\n🆔 \`${parsed.txId}\`\n🏦 ${method.toUpperCase()}\n\n/approve_${tx.id.slice(0, 8)}`, { parse_mode: 'Markdown' });
+              await sendMessage(adminChatId, `⏳ *Pending Deposit (SMS Auto)*\n\n👤 ${userProfile.first_name || 'Unknown'}${userProfile.username ? ` (@${userProfile.username})` : ''}\n💰 *${parsed.amount} ETB*\n🆔 \`${parsed.txId}\`\n🏦 ${smsBankName}\n\n/approve_${tx.id.slice(0, 8)}`, { parse_mode: 'Markdown' });
             }
+            // Route to channels
+            try {
+              const { notifyEvent } = await import('@/lib/server/admin');
+              const userName = userProfile.first_name || userProfile.username || 'Unknown';
+              const channelMsg = `⏳ *NEW DEPOSIT REQUEST (SMS Auto)*\n\n👤 *User:* ${userName}\n💰 *Amount:* ${parsed.amount.toLocaleString()} ETB\n🏦 *Bank:* ${smsBankName}\n🆔 *TX ID:* \`${parsed.txId}\`\n🆔 *ID:* \`${tx.id.slice(0, 8)}...\``;
+              notifyEvent('deposit_pending', channelMsg);
+            } catch (e) { /* ignore */ }
           }
         } else {
-          const { data: tx } = await supabase.from('transactions').insert({ user_id: userProfile.id, type: 'deposit', amount: 0, status: 'pending', reference: text }).select().single();
+          const smsLabel = method === 'cbe' ? 'CBE' : 'Telebirr';
+          const { data: tx } = await supabase.from('transactions').insert({ user_id: userProfile.id, type: 'deposit', amount: 0, status: 'pending', reference: text, details: { bank_name: smsLabel } }).select().single();
           if (tx) {
             await sendMessage(chatId, `⏳ *Deposit Pending Review*\n\nWe couldn't auto-verify your SMS. An admin will review it manually.`, { parse_mode: 'Markdown', ...getMainKeyboard(lang) });
             if (adminChatId) {
-              await sendMessage(adminChatId, `⏳ *Manual Deposit*\n\n👤 ${userProfile.first_name || 'Unknown'}${userProfile.username ? ` (@${userProfile.username})` : ''}\n📝 \`${text}\`\n\n/approve_${tx.id.slice(0, 8)}`, { parse_mode: 'Markdown' });
+              await sendMessage(adminChatId, `⏳ *Manual Deposit*\n\n👤 ${userProfile.first_name || 'Unknown'}${userProfile.username ? ` (@${userProfile.username})` : ''}\n📝 \`${text}\`\n🏦 ${smsLabel}\n\n/approve_${tx.id.slice(0, 8)}`, { parse_mode: 'Markdown' });
             }
+            // Route to channels
+            try {
+              const { notifyEvent } = await import('@/lib/server/admin');
+              const userName = userProfile.first_name || userProfile.username || 'Unknown';
+              const channelMsg = `⏳ *MANUAL DEPOSIT REVIEW*\n\n👤 *User:* ${userName}\n📝 *Raw:* \`${text}\`\n🏦 *Bank:* ${smsLabel}\n🆔 *ID:* \`${tx.id.slice(0, 8)}...\``;
+              notifyEvent('deposit_pending', channelMsg);
+            } catch (e) { /* ignore */ }
           }
         }
         return NextResponse.json({ ok: true });
@@ -1370,7 +1396,10 @@ export async function POST(request: NextRequest) {
       const refBonus = commands.referral_bonus || 10;
       const refMinDep = commands.referral_min_deposit || 50;
 
-      const inviteMsg = `🎉 *Invite Friends & Earn!*\n\nHere's your exclusive invite link:\n${refLink}\n\n*How it works:*\n• Share your link with friends\n• They join and share their phone number\n• You instantly get *${refBonus} ETB* in your Play Wallet\n\nNo minimum deposit required — just invite and play! 🚀`;
+      const inviteMsg = getMsg('invite', 'invite')
+        .replace(/{refLink}/g, refLink)
+        .replace(/{refBonus}/g, String(refBonus))
+        .replace(/{refMinDep}/g, String(refMinDep));
 
       await sendMessage(chatId, inviteMsg, {
         parse_mode: 'Markdown',

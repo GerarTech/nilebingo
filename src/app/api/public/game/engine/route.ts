@@ -55,6 +55,11 @@ async function sendGameStats(botToken: string, gameId: string) {
     if (adminChatIdEnv) {
       await tgSend(botToken, adminChatIdEnv, statsMsg, 'Markdown');
     }
+    // Route to game_winner notification channels
+    try {
+      const { notifyEvent } = await import('@/lib/server/admin');
+      notifyEvent('game_winner', statsMsg);
+    } catch (e) { /* ignore */ }
   } catch (e) {
     console.error('sendGameStats error:', e);
   }
@@ -181,47 +186,68 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'No card found' }, { status: 400 });
       }
 
-      // Validate win: check if any row or column is fully marked
-      let hasRowWin = false;
-      let hasColWin = false;
+      // Validate win: check if any row, column, or diagonal is fully marked
+      let hasWin = false;
 
       // Check rows
       for (let row = 0; row < card.length; row++) {
-        let rowComplete = true;
+        let complete = true;
         for (let col = 0; col < card[row].length; col++) {
           const cell = card[row][col];
           if (cell === 0) continue; // Free space
           if (!drawnNumbers.includes(cell)) {
-            rowComplete = false;
+            complete = false;
             break;
           }
         }
-        if (rowComplete) {
-          hasRowWin = true;
-          break;
-        }
+        if (complete) { hasWin = true; break; }
       }
 
       // Check columns
-      if (!hasRowWin) {
+      if (!hasWin) {
         for (let col = 0; col < 5; col++) {
-          let colComplete = true;
+          let complete = true;
           for (let row = 0; row < card.length; row++) {
             const cell = card[row]?.[col];
             if (cell === 0) continue; // Free space
             if (cell === undefined || !drawnNumbers.includes(cell)) {
-              colComplete = false;
+              complete = false;
               break;
             }
           }
-          if (colComplete) {
-            hasColWin = true;
-            break;
-          }
+          if (complete) { hasWin = true; break; }
         }
       }
 
-      if (!hasRowWin && !hasColWin) {
+      // Check main diagonal (top-left to bottom-right)
+      if (!hasWin) {
+        let complete = true;
+        for (let i = 0; i < 5; i++) {
+          const cell = card[i]?.[i];
+          if (cell === 0) continue;
+          if (cell === undefined || !drawnNumbers.includes(cell)) {
+            complete = false;
+            break;
+          }
+        }
+        if (complete) hasWin = true;
+      }
+
+      // Check anti diagonal (top-right to bottom-left)
+      if (!hasWin) {
+        let complete = true;
+        for (let i = 0; i < 5; i++) {
+          const cell = card[i]?.[4 - i];
+          if (cell === 0) continue;
+          if (cell === undefined || !drawnNumbers.includes(cell)) {
+            complete = false;
+            break;
+          }
+        }
+        if (complete) hasWin = true;
+      }
+
+      if (!hasWin) {
         return NextResponse.json({ win: false, error: 'No winning pattern found' }, { status: 400 });
       }
 
@@ -480,6 +506,13 @@ export async function POST(request: NextRequest) {
           `🎮 *Game Started!*\n\nGame #${code}\nStake: ${(stakeAmount || 10).toLocaleString()} ETB\nCards: ${cardNumbers.length}\nPrize Pool: ${prizePool.toLocaleString()} ETB\n\nGood luck ${profile.first_name || 'Player'}! 🍀`,
         );
       }
+
+      // Notify game_ops / super admin channels
+      try {
+        const { notifyEvent } = await import('@/lib/server/admin');
+        const playerName = profile?.first_name || 'Player';
+        notifyEvent('game_started', `🎮 *GAME STARTED*\n\n🆔 Game: \`${code}\`\n👤 Player: ${playerName}\n🎫 Cards: ${cardNumbers.length}\n💰 Stake: ${(stakeAmount || 10).toLocaleString()} ETB\n🏆 Prize Pool: ${prizePool.toLocaleString()} ETB`);
+      } catch (e) { /* ignore */ }
 
       return NextResponse.json({
         success: true,

@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'yenedating_bot';
     const colorScheme = config.colorScheme || 'gold';
     const referralEnabled = config.referralEnabled !== false;
-    const referralBonus = typeof config.referralBonus === 'number' ? config.referralBonus : 1;
+    const referralBonus = typeof config.referral_bonus === 'number' ? config.referral_bonus : (typeof config.referralBonus === 'number' ? config.referralBonus : 10);
     const rulesText = config.rules_text || '';
     const withdrawMinAmount = typeof config.withdraw_min_amount === 'number' ? config.withdraw_min_amount : 50;
     const withdrawRequiredGames = typeof config.withdraw_required_games === 'number' ? config.withdraw_required_games : 5;

@@ -94,6 +94,13 @@ export async function POST(request: NextRequest) {
           signal: AbortSignal.timeout(10000),
         });
 
+        // Route to notification channels
+        try {
+          const { notifyEvent } = await import('@/lib/server/admin');
+          const channelMsg = `💸 *NEW WITHDRAWAL REQUEST*\n\n👤 *User:* ${userName}\n💰 *Amount:* ${withdrawAmount.toLocaleString()} ETB\n🏦 *Method:* ${methodLabel}\n📱 *Account:* ${accountNumber}\n👤 *Name:* ${accountName}\n🆔 *ID:* \`${txData.id.slice(0, 8)}...\``;
+          notifyEvent('withdraw_pending', channelMsg);
+        } catch (e) { /* ignore */ }
+
         if (userTelegramId) {
           await fetch(`https://api.telegram.org/bot${adminBotToken}/sendMessage`, {
             method: 'POST',

@@ -131,7 +131,7 @@ export const en = {
   // Rules
   how_to_play: 'How to Play',
   objective: 'Objective',
-  objective_desc: 'Get a complete row, column, or diagonal of 5 marked numbers on your 5×5 BINGO card before other players. Each card is unique and assigned from card numbers 1-100.',
+  objective_desc: 'Get a complete row, column, or diagonal of 5 marked numbers on your 5×5 BINGO card before other players. Each card is unique and assigned from card numbers 1-200.',
   gameplay: 'Gameplay',
   gameplay_desc: 'Numbers 1-75 are drawn one by one every 2 seconds. Your card auto-marks matching numbers. You can also tap numbers manually to mark them. Virtual opponents play alongside you — beat them all to win!',
   winning: 'Winning',

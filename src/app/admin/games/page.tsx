@@ -1,19 +1,30 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Eye, Users, Trophy } from 'lucide-react';
+import { Eye, Users, Trophy, RefreshCw } from 'lucide-react';
 
 export default function GamesPage() {
   const [games, setGames] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedGame, setSelectedGame] = useState<any>(null);
+  const [autoRefresh, setAutoRefresh] = useState(false);
 
-  useEffect(() => {
+  const loadGames = () => {
     fetch('/api/admin/data?action=games')
       .then(r => r.json())
       .then(d => { setGames(d); setLoading(false); })
       .catch(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadGames();
   }, []);
+
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const interval = setInterval(loadGames, 30000);
+    return () => clearInterval(interval);
+  }, [autoRefresh]);
 
   const loadGameDetail = async (gameId: string) => {
     const res = await fetch(`/api/admin/data?action=game&gameId=${gameId}`);
@@ -26,6 +37,19 @@ export default function GamesPage() {
   return (
     <div>
       <h1 className="text-xl font-bold text-white mb-4">Games</h1>
+
+      {/* Auto-refresh */}
+      <div className="flex items-center gap-2 mb-4">
+        <button
+          onClick={() => setAutoRefresh(!autoRefresh)}
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-medium transition-colors ${
+            autoRefresh ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'
+          }`}
+        >
+          <RefreshCw size={12} className={autoRefresh ? 'animate-spin' : ''} />
+          {autoRefresh ? 'Auto-refresh ON' : 'Auto-refresh'}
+        </button>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Games List */}

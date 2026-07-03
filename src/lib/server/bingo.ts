@@ -101,6 +101,14 @@ export function getWinningCells(card: number[][], drawnNumbers: number[]): boole
       for (let row = 0; row < rows; row++) winning[row][col] = true;
     }
   }
+  // Diagonal: top-left to bottom-right
+  if (marked.every((row, i) => row[i])) {
+    for (let i = 0; i < rows; i++) winning[i][i] = true;
+  }
+  // Diagonal: top-right to bottom-left
+  if (marked.every((row, i) => row[cols - 1 - i])) {
+    for (let i = 0; i < rows; i++) winning[i][cols - 1 - i] = true;
+  }
 
   return winning;
 }
@@ -116,6 +124,10 @@ export function checkWin(card: number[][], drawnNumbers: number[]): boolean {
   for (let col = 0; col < cols; col++) {
     if (marked.every(row => row[col])) return true;
   }
+  // Diagonal: top-left to bottom-right
+  if (marked.every((row, i) => row[i])) return true;
+  // Diagonal: top-right to bottom-left
+  if (marked.every((row, i) => row[cols - 1 - i])) return true;
   return false;
 }
 
