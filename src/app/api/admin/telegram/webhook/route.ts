@@ -394,7 +394,7 @@ export async function POST(request: NextRequest) {
         reply_markup: {
           keyboard: [
             [{ text: '📊 Stats' }, { text: '👥 Users' }, { text: '💰 Commission' }],
-            [{ text: '⏳ Pending' }, { text: '🎮 Matches' }],
+            [{ text: '⏳ Pending' }, { text: '🎮 Matches' }, { text: '🎯 Appoint' }],
             [{ text: '❓ Help' }],
           ],
           resize_keyboard: true,
@@ -420,6 +420,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true });
     }
     if (text === '🎮 Matches') {
+      await handleAdminGames(chatId);
+      return NextResponse.json({ ok: true });
+    }
+    if (text === '🎯 Appoint') {
+      await sendMessage(chatId, `🎯 *Appoint a Winner*\n\nUse the /appoint command to set a specific card to win a game.\n\n*Usage:*\n\`/appoint <gameId> <cardNumber> [afterBalls]\`\n\`/appoint_<gameId>_<cardNumber>_[afterBalls]\`\n\n*Active Games (click to appoint):*`, { parse_mode: 'Markdown' });
       await handleAdminGames(chatId);
       return NextResponse.json({ ok: true });
     }
@@ -553,12 +558,17 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ ok: true });
         }
 
-        await supabase.from('transactions').update({ status: 'completed' }).eq('id', txId);
-
         if (tx.type === 'deposit') {
-          const newMain = await supabase.rpc('adjust_main_balance', { p_user_id: tx.user_id, p_amount: Number(tx.amount) });
-          if (newMain.error) console.error('adjust_main_balance error:', newMain.error);
+          const { error: balanceError } = await supabase.rpc('adjust_main_balance', { p_user_id: tx.user_id, p_amount: Number(tx.amount) });
+          if (balanceError) {
+            console.error('adjust_main_balance error:', balanceError);
+            await sendMessage(chatId, `⚠️ *Balance credit failed*: ${balanceError.message}\n\nTransaction remains pending. Please check the wallet and retry.`, { parse_mode: 'Markdown' });
+            await sendMessage(chatId, `❌ Deposit approval aborted — wallet not credited.`);
+            return NextResponse.json({ ok: true });
+          }
         }
+
+        await supabase.from('transactions').update({ status: 'completed' }).eq('id', txId);
 
         const bankName = tx.details?.bank_name || '-';
         const userRef = tx.reference || '-';

@@ -364,7 +364,7 @@ export async function POST(request: NextRequest) {
       const code = 'BG-' + Math.floor(100000 + Math.random() * 900000);
 
       // Fetch commission rate from bot_config so the prize pool matches the admin setting
-      let commission = 10;
+      let commission = 15;
       try {
         const { data: configData } = await supabase.from('bot_config').select('commands').eq('id', 'main').single();
         const config = configData?.commands || {};

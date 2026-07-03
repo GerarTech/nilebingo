@@ -4,7 +4,7 @@ RETURNS NUMERIC AS $
 DECLARE
   v_game_id UUID;
   v_total_cards INTEGER;
-  v_commission NUMERIC := 10;
+  v_commission NUMERIC := 15;
   v_new_prize NUMERIC;
   v_player_count INTEGER;
 BEGIN
@@ -14,9 +14,9 @@ BEGIN
     RETURN NULL;
   END IF;
 
-  -- Read commission rate from bot_config (matches admin setting); default to 10 when unset
+  -- Read commission rate from bot_config (matches admin setting); default to 15 when unset
   BEGIN
-    SELECT COALESCE((commands->>'commission')::NUMERIC, 10) INTO v_commission
+    SELECT COALESCE((commands->>'commission')::NUMERIC, 15) INTO v_commission
     FROM bot_config WHERE id = 'main' LIMIT 1;
   EXCEPTION WHEN OTHERS THEN
     v_commission := 10;

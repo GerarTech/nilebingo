@@ -93,7 +93,7 @@ export default function SettingsPage() {
   });
   
   // Game config specific state
-  const [commission, setCommission] = useState<number>(10);
+  const [commission, setCommission] = useState<number>(15);
   const [roomsList, setRoomsList] = useState<GameRoom[]>([
     { id: 'bronze', name: 'Bronze Room', entry: 10, players: 10, maxPlayers: 100 },
     { id: 'silver', name: 'Silver Room', entry: 20, players: 12, maxPlayers: 100 },

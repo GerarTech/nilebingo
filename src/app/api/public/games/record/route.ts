@@ -9,7 +9,7 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { userId, stakeAmount, prizePool, outcome, drawnNumbers, roomName } = body;
+    const { code: providedCode, userId, stakeAmount, prizePool, outcome, drawnNumbers, roomName } = body;
 
     if (!userId) {
       return NextResponse.json({ error: 'userId is required' }, { status: 400 });
@@ -27,7 +27,6 @@ export async function POST(request: NextRequest) {
       if (stakeData && stakeData.length > 0) {
         stakeId = stakeData[0].id;
       } else {
-        // Insert new stake dynamically
         const { data: newStake } = await supabase
           .from('stakes')
           .insert({
@@ -45,39 +44,66 @@ export async function POST(request: NextRequest) {
       console.error('Error finding/creating stake record:', e);
     }
 
-    // 2. Insert into games table
-    const code = 'BG-' + Math.floor(100000 + Math.random() * 900000);
     const isWin = outcome === 'win';
-    
-    const { data: game, error: gameError } = await supabase
-      .from('games')
-      .insert({
-        stake_id: stakeId,
-        code,
-        status: 'finished',
-        drawn_numbers: Array.isArray(drawnNumbers) ? drawnNumbers : [],
-        current_number: Array.isArray(drawnNumbers) && drawnNumbers.length > 0 ? drawnNumbers[drawnNumbers.length - 1] : null,
-        prize_pool: Number(prizePool) || 0,
-        called_count: Array.isArray(drawnNumbers) ? drawnNumbers.length : 0,
-        winner_id: isWin ? userId : null,
-        created_at: new Date().toISOString()
-      })
-      .select()
-      .single();
 
-    if (gameError) {
-      throw gameError;
+    // 2. Use existing game if code is provided, otherwise create a new one
+    let game;
+    let code = providedCode;
+
+    if (providedCode) {
+      const { data: existing } = await supabase
+        .from('games')
+        .select('id')
+        .eq('code', providedCode)
+        .maybeSingle();
+
+      if (existing) {
+        const { data: updated, error: updateError } = await supabase
+          .from('games')
+          .update({
+            status: 'finished',
+            drawn_numbers: Array.isArray(drawnNumbers) ? drawnNumbers : [],
+            current_number: Array.isArray(drawnNumbers) && drawnNumbers.length > 0 ? drawnNumbers[drawnNumbers.length - 1] : null,
+            prize_pool: Number(prizePool) || 0,
+            called_count: Array.isArray(drawnNumbers) ? drawnNumbers.length : 0,
+            winner_id: isWin ? userId : null,
+          })
+          .eq('id', existing.id)
+          .select()
+          .single();
+        game = updated;
+      } else {
+        code = providedCode;
+      }
     }
 
-    // 3. Insert user into game_players table
-    if (game) {
-      await supabase.from('game_players').insert({
-        game_id: game.id,
-        user_id: userId
-      });
+    if (!game) {
+      if (!code) {
+        code = 'BG-' + Math.floor(100000 + Math.random() * 900000);
+      }
+      const { data: created, error: createError } = await supabase
+        .from('games')
+        .insert({
+          stake_id: stakeId,
+          code,
+          status: 'finished',
+          drawn_numbers: Array.isArray(drawnNumbers) ? drawnNumbers : [],
+          current_number: Array.isArray(drawnNumbers) && drawnNumbers.length > 0 ? drawnNumbers[drawnNumbers.length - 1] : null,
+          prize_pool: Number(prizePool) || 0,
+          called_count: Array.isArray(drawnNumbers) ? drawnNumbers.length : 0,
+          winner_id: isWin ? userId : null,
+          created_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+
+      if (createError) {
+        throw createError;
+      }
+      game = created;
     }
 
-    // 4. Send notification for wins only
+    // 3. Send notification for wins only
     if (game && isWin) {
       try {
         const { data: profile } = await supabase
@@ -99,7 +125,7 @@ export async function POST(request: NextRequest) {
           .eq('game_id', game.id);
 
         const totalPlayersCount = totalPlayers || 1;
-        const commissionWon = Math.round((Number(stakeAmount) * totalPlayersCount) - Number(prizePool));
+        const commissionWon = Math.max(0, Math.round((Number(stakeAmount) * totalPlayersCount) - Number(prizePool)));
 
         const text = `🏆 *BINGO WINNER*\n\n` +
                      `🎫 Game: \`${code}\`\n` +
@@ -112,7 +138,6 @@ export async function POST(request: NextRequest) {
                      `🔢 *Called Numbers:* ${Array.isArray(drawnNumbers) ? drawnNumbers.length : 0}\n` +
                      `⏱️ *Date:* ${new Date().toLocaleString()}`;
 
-        // Route through notification channels (notifyEvent already falls back to env vars)
         const { notifyEvent } = await import('@/lib/server/admin');
         notifyEvent('game_winner', text);
       } catch (tgErr) {

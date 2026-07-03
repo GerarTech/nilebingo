@@ -87,7 +87,7 @@ function HomePage() {
   const [lobbyPlayerCount, setLobbyPlayerCount] = useState<number>(0);
 
   const [selectedRoom, setSelectedRoom] = useState<RoomConfig | null>(null);
-  const [commissionRate, setCommissionRate] = useState<number>(10);
+  const [commissionRate, setCommissionRate] = useState<number>(15);
   const [appName, setAppName] = useState<string>('Nile BINGO');
   const [appLogo, setAppLogo] = useState<string>('🎰');
   const [appLogoPng, setAppLogoPng] = useState<string | null>(null);
@@ -96,12 +96,12 @@ function HomePage() {
   const [rulesText, setRulesText] = useState<string>('');
 
   const [rooms, setRooms] = useState<RoomConfig[]>([
-    { id: 'bronze', name: 'Bronze Room', entry: 10, players: 10, maxPlayers: 100, winAmount: 90, status: 'starting_soon', countdown: 30 },
-    { id: 'silver', name: 'Silver Room', entry: 20, players: 12, maxPlayers: 100, winAmount: 216, status: 'starting_soon', countdown: 23 },
-    { id: 'gold', name: 'Gold Room', entry: 50, players: 15, maxPlayers: 100, winAmount: 675, status: 'starting_soon', countdown: 40 },
-    { id: 'diamond', name: 'Diamond Room', entry: 100, players: 20, maxPlayers: 100, winAmount: 1800, status: 'starting_soon', countdown: 58 },
-    { id: 'premium', name: 'Premium Room', entry: 200, players: 5, maxPlayers: 100, winAmount: 900, status: 'starting_soon', countdown: 15 },
-    { id: 'vip', name: 'VIP Room', entry: 500, players: 2, maxPlayers: 100, winAmount: 900, status: 'starting_soon', countdown: 95 },
+    { id: 'bronze', name: 'Bronze Room', entry: 10, players: 10, maxPlayers: 100, winAmount: 85, status: 'starting_soon', countdown: 30 },
+    { id: 'silver', name: 'Silver Room', entry: 20, players: 12, maxPlayers: 100, winAmount: 204, status: 'starting_soon', countdown: 23 },
+    { id: 'gold', name: 'Gold Room', entry: 50, players: 15, maxPlayers: 100, winAmount: 638, status: 'starting_soon', countdown: 40 },
+    { id: 'diamond', name: 'Diamond Room', entry: 100, players: 20, maxPlayers: 100, winAmount: 1700, status: 'starting_soon', countdown: 58 },
+    { id: 'premium', name: 'Premium Room', entry: 200, players: 5, maxPlayers: 100, winAmount: 850, status: 'starting_soon', countdown: 15 },
+    { id: 'vip', name: 'VIP Room', entry: 500, players: 2, maxPlayers: 100, winAmount: 850, status: 'starting_soon', countdown: 95 },
   ]);
 
   const [dbLeaderboard, setDbLeaderboard] = useState<any[]>([]);
@@ -132,7 +132,7 @@ function HomePage() {
   const isRegisteredRef = useRef(false);
   const isSpectatingReadyRef = useRef(false);
   const inGameRef = useRef(false);
-  const commissionRateRef = useRef(10);
+  const commissionRateRef = useRef(15);
   const startGameplayRef = useRef<any>(null);
   const tickReadyRef = useRef(false);
 
@@ -195,10 +195,11 @@ function HomePage() {
 
   const addGameToHistory = useCallback((gId: string, stakeAmt: number, outcome: 'win' | 'loss') => {
     if (isWatching || !gId) return;
-    // Calculate prize using entry fee × (other players + my cards) × (1 - commission)
+    // Calculate prize using entry fee × total cards in game × (1 - commission)
     const entryFee = selectedRoom?.entry || 10;
     const numCards = Math.max(1, playerCards.length);
-    const actualPrize = outcome === 'win' ? Math.round(entryFee * (livePlayerCount - 1 + numCards) * (1 - commissionRate / 100)) : -stakeAmt;
+    const totalCards = livePlayerCount - 1 + numCards;
+    const actualPrize = outcome === 'win' ? Math.round(entryFee * totalCards * (1 - commissionRate / 100)) : -stakeAmt;
     setStakeHistory(prev => {
       const exists = prev.some(item => item.gameId === gId && item.result === outcome);
       if (exists) return prev;
@@ -208,11 +209,11 @@ function HomePage() {
       return newHistory;
     });
     if (profile?.id) {
-      const pot = Math.round(entryFee * (livePlayerCount - 1 + numCards) * (1 - commissionRate / 100));
+      const pot = Math.round(entryFee * totalCards * (1 - commissionRate / 100));
       fetch('/api/public/games/record', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: profile.id, stakeAmount: stakeAmt, prizePool: pot, outcome, drawnNumbers: drawnRef.current || [], roomName: selectedRoom?.name || 'Quick Lobby' })
+        body: JSON.stringify({ code: gId, userId: profile.id, stakeAmount: stakeAmt, prizePool: pot, outcome, drawnNumbers: drawnRef.current || [], roomName: selectedRoom?.name || 'Quick Lobby' })
       }).catch(() => {});
     }
   }, [isWatching, profile?.id, selectedRoom, livePlayerCount, commissionRate, playerCards]);
@@ -222,6 +223,7 @@ function HomePage() {
     fetch('/api/public/config', { cache: 'no-store' }).then(r => r.json()).then(data => {
       if (!data) return;
       if (typeof data.commission === 'number') setCommissionRate(data.commission);
+      else setCommissionRate(15);
       if (data.appName) setAppName(data.appName);
       if (data.appLogo) setAppLogo(data.appLogo);
       if (data.appLogoPng) setAppLogoPng(data.appLogoPng);
@@ -236,7 +238,7 @@ function HomePage() {
         setRooms(data.rooms.map((room: any, i: number) => ({
           id: room.id || `room_${i}`, name: room.name || 'Room', entry: Number(room.entry) || 10,
           players: Number(room.players) || 10, maxPlayers: Number(room.maxPlayers) || 100,
-          winAmount: Math.round((Number(room.entry) * Number(room.players)) * (1 - (data.commission ?? 10) / 100)),
+          winAmount: Math.round((Number(room.entry) * Number(room.players)) * (1 - (data.commission ?? 15) / 100)),
           status: 'starting_soon' as const, countdown: 15 + i * 7
         })));
       }
@@ -524,11 +526,13 @@ function HomePage() {
           const newGameId = generateDeterministicGameId(sr.id, newCycle);
           setGameId(prevId => {
             if (prevId !== newGameId) {
-              // Clear card selections when game ID changes (new game cycle)
+              // Clear all game-cycle state when game ID changes (new game cycle)
               setSelectedCards([]);
               setPreviewCard([]);
               setTakenCards([]);
               setLobbyPlayerCount(0);
+              setIsRegistered(false);
+              setIsSpectatingReady(false);
               return newGameId;
             }
             return prevId;
@@ -560,7 +564,7 @@ function HomePage() {
       setDrawnNumbers(newDrawn);
       setRecentCalled(prev => [{ num, label: `${getColumnLabel(num)}-${num}` }, ...prev].slice(0, 10));
 
-      if ((autoMark || autoWin) && !isWatching && playerCards.length > 0) {
+      if (autoWin && !isWatching && playerCards.length > 0) {
         const wonCard = playerCards.find(c => checkWin(c, newDrawn));
         if (wonCard) {
           if (autoWin && !autoMark) {
@@ -679,9 +683,9 @@ function HomePage() {
         if (count && count > playerCount) playerCount = count;
       }
     } catch {}
-    // Prize pool = entry fee × (other players + my cards) × (1 - commission)
-    // playerCount counts unique players; this player contributes numCards worth of entry fees
-    const jackpot = Math.round(entryFee * (playerCount - 1 + numCards) * (1 - commissionRate / 100));
+    // Prize pool = entry fee × total cards in game × (1 - commission)
+    const totalCards = playerCount - 1 + numCards;
+    const jackpot = Math.round(entryFee * totalCards * (1 - commissionRate / 100));
     updateBalance(jackpot, 'main_balance');
 
     if (profile?.id) {
@@ -715,7 +719,15 @@ function HomePage() {
     const remaining = period - elapsed;
     const targetCycle = elapsed === 0 ? Math.floor(currentSec / period) : Math.floor((currentSec + remaining) / period);
     const nextGameId = generateDeterministicGameId(room.id, targetCycle);
-    setSelectedRoom(room); setSelectedStake(room.entry); setSelectedCards([]); setPreviewCard([]); setGameId(nextGameId);
+    setSelectedRoom(room);
+    setSelectedStake(room.entry);
+    setSelectedCards([]);
+    setPreviewCard([]);
+    setTakenCards([]);
+    setLobbyPlayerCount(0);
+    setIsRegistered(false);
+    setIsSpectatingReady(false);
+    setGameId(nextGameId);
   }, []);
 
   // ============ PLAY / REGISTER / LEAVE ============
@@ -797,8 +809,8 @@ function HomePage() {
     }
     setInGame(false); setIsWatching(false); setGameCard([]); setDrawnNumbers([]);
     drawnRef.current = []; setSelectedStake(null); setSelectedCards([]); setRecentCalled([]);
-    setGameId(''); setShowWinModal(false); setWinningCard([]); setWinningCells([]);
-    setOtherPlayers([]); setOpponentWinner(null); setSelectedRoom(null);
+    setShowWinModal(false); setWinningCard([]); setWinningCells([]);
+    setOtherPlayers([]); setOpponentWinner(null);
     setTakenCards([]); setLobbyPlayerCount(0);
     if (realtimeChannelRef.current) { supabase.removeChannel(realtimeChannelRef.current); realtimeChannelRef.current = null; }
   }, [inGame, isWatching, gameId, showWinModal, opponentWinner, selectedStake, addGameToHistory, profile?.id]);
@@ -809,7 +821,7 @@ function HomePage() {
   }, [isWatching, leaveGame]);
 
   // ============ MANUAL DRAW ============
-  const manualDraw = useCallback(() => {
+   const manualDraw = useCallback(() => {
     const currentDrawn = drawnRef.current;
     if (currentDrawn.length >= 75) return;
     const rem = Array.from({ length: 75 }, (_, i) => i + 1).filter(n => !currentDrawn.includes(n));
@@ -817,8 +829,8 @@ function HomePage() {
     const newDrawn = [...currentDrawn, num];
     drawnRef.current = newDrawn; setDrawnNumbers(newDrawn);
     setRecentCalled(prev => [{ num, label: `${getColumnLabel(num)}-${num}` }, ...prev].slice(0, 10));
-    if (gameCard.length > 0 && !isWatching && checkWin(gameCard, newDrawn)) triggerWin(gameCard, newDrawn);
-  }, [language, gameCard, isWatching]);
+    if (autoWin && gameCard.length > 0 && !isWatching && checkWin(gameCard, newDrawn)) triggerWin(gameCard, newDrawn);
+  }, [autoWin, language, gameCard, isWatching]);
 
   // ============ BINGO CLAIM ============
   const handleBingo = useCallback(() => {

@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
     const config = data?.commands || {};
     
     // Provide sensible fallbacks for commission, rooms, and branding
-    const commission = typeof config.commission === 'number' ? config.commission : 10;
+    const commission = typeof config.commission === 'number' ? config.commission : 15;
     const appName = config.appName || 'Nile BINGO';
     const appLogo = config.appLogo || '🎰';
     const appLogoPng = config.appLogoPng || null;
@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Error fetching public config:', error);
     return NextResponse.json({ 
-      commission: 10, 
+      commission: 15,
       appName: 'Nile BINGO',
       appLogo: '🎰',
       appLogoPng: null,

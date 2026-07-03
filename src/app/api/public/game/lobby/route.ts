@@ -263,6 +263,18 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'gameId, userId, and stakeAmount are required' }, { status: 400 });
       }
 
+      // Reject registration for an already-finished game cycle
+      const { data: existingFinished } = await supabase
+        .from('games')
+        .select('id')
+        .eq('code', gameId)
+        .eq('status', 'finished')
+        .maybeSingle();
+
+      if (existingFinished) {
+        return NextResponse.json({ error: 'This game cycle has already finished. Please wait for the next round.' }, { status: 409 });
+      }
+
       let stakeId: string | null = null;
       const { data: stakeData } = await supabase
         .from('stakes')
