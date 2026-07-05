@@ -195,12 +195,13 @@ function HomePage() {
 
   const addGameToHistory = useCallback((gId: string, stakeAmt: number, outcome: 'win' | 'loss') => {
     if (isWatching || !gId) return;
-    // Calculate prize using entry fee × total cards in game × (1 - commission)
-    const entryFee = selectedRoom?.entry || 10;
-    const numCards = Math.max(1, playerCards.length);
-    const totalCards = livePlayerCount - 1 + numCards;
+    // Calculate prize using stake × total reserved cards (your selected cards + already-betted cards) × (1 - commission)
+    const stakeValue = stakeAmt || selectedStake || selectedRoom?.entry || 10;
+    const myCards = Math.max(1, (selectedCards && selectedCards.length) || playerCards.length);
+    const alreadyBetted = (takenCards && takenCards.length) || 0;
+    const totalCards = alreadyBetted + myCards;
     const effComm = selectedRoom?.commission ?? commissionRate;
-    const actualPrize = outcome === 'win' ? entryFee * totalCards * (1 - effComm / 100) : -stakeAmt;
+    const actualPrize = outcome === 'win' ? stakeValue * totalCards * (1 - effComm / 100) : -stakeAmt;
     setStakeHistory(prev => {
       const exists = prev.some(item => item.gameId === gId && item.result === outcome);
       if (exists) return prev;
@@ -210,11 +211,17 @@ function HomePage() {
       return newHistory;
     });
     if (profile?.id) {
-      const pot = entryFee * totalCards * (1 - effComm / 100);
+      const pot = stakeValue * totalCards * (1 - effComm / 100);
       fetch('/api/public/games/record', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: gId, userId: profile.id, stakeAmount: stakeAmt, prizePool: pot, outcome, drawnNumbers: drawnRef.current || [], roomName: selectedRoom?.name || 'Quick Lobby' })
+        body: JSON.stringify({ code: gId, userId: profile.id, stakeAmount: stakeAmt, outcome, drawnNumbers: drawnRef.current || [], roomName: selectedRoom?.name || 'Quick Lobby' })
+      }).catch(() => {});
+
+      // Trigger a fast server-side prize update so the authoritative pool reflects latest reservations/bets
+      fetch('/api/public/games/update-prize', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: gId, stakeAmount: stakeAmt })
       }).catch(() => {});
     }
   }, [isWatching, profile?.id, selectedRoom, livePlayerCount, commissionRate, playerCards]);

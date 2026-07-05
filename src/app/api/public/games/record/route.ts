@@ -64,14 +64,22 @@ export async function POST(request: NextRequest) {
             status: 'finished',
             drawn_numbers: Array.isArray(drawnNumbers) ? drawnNumbers : [],
             current_number: Array.isArray(drawnNumbers) && drawnNumbers.length > 0 ? drawnNumbers[drawnNumbers.length - 1] : null,
-            prize_pool: Number(prizePool) || 0,
             called_count: Array.isArray(drawnNumbers) ? drawnNumbers.length : 0,
             winner_id: isWin ? userId : null,
           })
           .eq('id', existing.id)
           .select()
           .single();
-        game = updated;
+
+        // Compute authoritative prize pool server-side using DB function (updates games.prize_pool)
+        try {
+          await supabase.rpc('update_game_prize_pool', { p_game_code: code, p_stake_amt: Number(stakeAmount) || 0 });
+          const { data: fresh } = await supabase.from('games').select('*').eq('id', existing.id).single();
+          game = fresh;
+        } catch (rpcErr) {
+          console.error('Error updating prize pool via RPC:', rpcErr);
+          game = updated;
+        }
       } else {
         code = providedCode;
       }
@@ -89,7 +97,6 @@ export async function POST(request: NextRequest) {
           status: 'finished',
           drawn_numbers: Array.isArray(drawnNumbers) ? drawnNumbers : [],
           current_number: Array.isArray(drawnNumbers) && drawnNumbers.length > 0 ? drawnNumbers[drawnNumbers.length - 1] : null,
-          prize_pool: Number(prizePool) || 0,
           called_count: Array.isArray(drawnNumbers) ? drawnNumbers.length : 0,
           winner_id: isWin ? userId : null,
           created_at: new Date().toISOString()
@@ -100,7 +107,16 @@ export async function POST(request: NextRequest) {
       if (createError) {
         throw createError;
       }
-      game = created;
+
+      // Compute authoritative prize pool server-side using DB function (updates games.prize_pool)
+      try {
+        await supabase.rpc('update_game_prize_pool', { p_game_code: code, p_stake_amt: Number(stakeAmount) || 0 });
+        const { data: fresh } = await supabase.from('games').select('*').eq('code', code).single();
+        game = fresh;
+      } catch (rpcErr) {
+        console.error('Error updating prize pool via RPC (create):', rpcErr);
+        game = created;
+      }
     }
 
     // 3. Send notification for wins only
@@ -126,18 +142,19 @@ export async function POST(request: NextRequest) {
         const totalPlayers = totalPlayersData?.length || 0;
 
         const totalPlayersCount = totalPlayers || 1;
-        const commissionWon = Math.max(0, (Number(stakeAmount) * totalPlayersCount) - Number(prizePool));
+        const poolVal = Number(game?.prize_pool ?? prizePool ?? 0);
+        const commissionWon = Math.max(0, (Number(stakeAmount) * totalPlayersCount) - poolVal);
 
         const text = `🏆 *BINGO WINNER*\n\n` +
-                     `🎫 Game: \`${code}\`\n` +
-                     `👤 *Player:* ${playerName}${identifier ? ` (${identifier})` : ''}\n` +
-                     `🏠 *Room:* ${roomName || 'Quick Lobby'}\n` +
-                     `👥 *Total Players:* ${totalPlayersCount}\n` +
-                     `💰 *Stake:* ${stakeAmount} ETB\n` +
-                     `🏆 *Prize Pool:* ${Number(prizePool).toLocaleString()} ETB\n` +
-                     `💵 *Commission Won:* ${commissionWon.toLocaleString()} ETB\n` +
-                     `🔢 *Called Numbers:* ${Array.isArray(drawnNumbers) ? drawnNumbers.length : 0}\n` +
-                     `⏱️ *Date:* ${new Date().toLocaleString()}`;
+               `🎫 Game: \`${code}\`\n` +
+               `👤 *Player:* ${playerName}${identifier ? ` (${identifier})` : ''}\n` +
+               `🏠 *Room:* ${roomName || 'Quick Lobby'}\n` +
+               `👥 *Total Players:* ${totalPlayersCount}\n` +
+               `💰 *Stake:* ${stakeAmount} ETB\n` +
+               `🏆 *Prize Pool:* ${poolVal.toLocaleString()} ETB\n` +
+               `💵 *Commission Won:* ${commissionWon.toLocaleString()} ETB\n` +
+               `🔢 *Called Numbers:* ${Array.isArray(drawnNumbers) ? drawnNumbers.length : 0}\n` +
+               `⏱️ *Date:* ${new Date().toLocaleString()}`;
 
         const { notifyEvent } = await import('@/lib/server/admin');
         notifyEvent('game_winner', text);

@@ -184,6 +184,19 @@ export async function POST(request: NextRequest) {
           console.error('Failed to delete reservation:', delError);
           return NextResponse.json({ error: 'Failed to toggle card off' }, { status: 500 });
         }
+        // Recompute prize pool after reservation removed
+        try {
+          // determine stake amount for this game
+          const { data: g } = await supabase.from('games').select('stake_id').eq('code', gameId).maybeSingle();
+          let stakeAmt = 0;
+          if (g?.stake_id) {
+            const { data: s } = await supabase.from('stakes').select('amount').eq('id', g.stake_id).maybeSingle();
+            stakeAmt = Number(s?.amount) || 0;
+          }
+          await supabase.rpc('update_game_prize_pool', { p_game_code: gameId, p_stake_amt: stakeAmt });
+        } catch (e) {
+          console.warn('Prize pool update after delete failed:', e);
+        }
       } else {
         // Limit to max 2 selected cards
         const { data: userCurrent } = await supabase
@@ -213,6 +226,18 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'This card was just taken by another player. Please choose a different one.' }, { status: 409 });
           }
           return NextResponse.json({ error: 'Failed to reserve card' }, { status: 500 });
+        }
+        // Recompute prize pool after reservation inserted
+        try {
+          const { data: g } = await supabase.from('games').select('stake_id').eq('code', gameId).maybeSingle();
+          let stakeAmt = 0;
+          if (g?.stake_id) {
+            const { data: s } = await supabase.from('stakes').select('amount').eq('id', g.stake_id).maybeSingle();
+            stakeAmt = Number(s?.amount) || 0;
+          }
+          await supabase.rpc('update_game_prize_pool', { p_game_code: gameId, p_stake_amt: stakeAmt });
+        } catch (e) {
+          console.warn('Prize pool update after insert failed:', e);
         }
       }
 
