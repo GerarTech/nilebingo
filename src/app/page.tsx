@@ -337,7 +337,7 @@ function HomePage() {
               gameId: h.gameCode,
               stake: h.stake,
               result: h.result,
-              prize: h.winAmount,
+              prize: h.result === 'win' ? h.winAmount - h.stake : h.winAmount,
               timestamp: h.createdAt,
             }));
             const merged = [...serverEntries];

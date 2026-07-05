@@ -19,12 +19,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ leaderboard: [] });
     }
 
-    const aggregator: Record<string, number> = {};
+    const earningsMap: Record<string, number> = {};
+    const winsCountMap: Record<string, number> = {};
     for (const w of wins) {
-      aggregator[w.user_id] = (aggregator[w.user_id] || 0) + Number(w.win_amount);
+      earningsMap[w.user_id] = (earningsMap[w.user_id] || 0) + Number(w.win_amount);
+      winsCountMap[w.user_id] = (winsCountMap[w.user_id] || 0) + 1;
     }
 
-    const userIds = Object.keys(aggregator);
+    const userIds = Object.keys(earningsMap);
     const { data: profiles } = await supabase
       .from('profiles')
       .select('id, username, first_name, photo_url')
@@ -36,7 +38,8 @@ export async function GET(request: NextRequest) {
       .map(id => ({
         id,
         username: profileMap.get(id)?.first_name || profileMap.get(id)?.username || 'Anonymous',
-        earnings: aggregator[id],
+        earnings: earningsMap[id],
+        totalWins: winsCountMap[id],
         avatar: profileMap.get(id)?.photo_url || '👤',
         isUser: id === currentUserId,
       }))

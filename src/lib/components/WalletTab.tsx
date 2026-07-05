@@ -257,20 +257,6 @@ export default function WalletTab({
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-2 mb-4">
-        {[
-          { view: 'deposit' as const, icon: ArrowDownToLine, label: t?.('deposit') || 'Deposit', color: 'bg-green-600/20 text-green-400 border-green-500/30' },
-          { view: 'withdraw' as const, icon: ArrowUpFromLine, label: t?.('withdraw') || 'Withdraw', color: 'bg-red-600/20 text-red-400 border-red-500/30' },
-          { view: 'transfer' as const, icon: ArrowLeftRight, label: t?.('transfer') || 'Transfer', color: 'bg-blue-600/20 text-blue-400 border-blue-500/30' },
-          { view: 'transactions' as const, icon: History, label: t?.('transactions') || 'History', color: 'bg-purple-600/20 text-purple-400 border-purple-500/30' },
-        ].map(({ view, icon: Icon, label, color }) => (
-          <button key={view} onClick={() => onSetWalletView(view)}
-            className={`flex flex-col items-center gap-1.5 py-3.5 rounded-xl border text-xs font-black uppercase ${color}`}>
-            <Icon size={18} /> {label}
-          </button>
-        ))}
-      </div>
-
       {referralEnabled && (
         <div className="bg-gradient-to-b from-[#142036] to-[#0d1624] border border-[#233c66]/50 rounded-2xl p-4.5 mb-5 shadow-xl relative overflow-hidden">
           <div className="absolute top-0 right-0 bg-gold/10 text-gold text-[8px] font-black tracking-widest px-2 py-0.5 rounded-bl uppercase">Active Program</div>
@@ -288,10 +274,7 @@ export default function WalletTab({
                   {copiedLink ? <Check size={16} /> : <Copy size={16} />}
                 </button>
               </div>
-              <button onClick={onSimulateReferral}
-                className="w-full rounded-xl border border-gold/30 bg-gold/10 px-3 py-2 text-[11px] font-black uppercase tracking-wider text-gold hover:bg-gold/20">
-                Claim Referral Bonus
-              </button>
+            
             </>
           )}
         </div>
