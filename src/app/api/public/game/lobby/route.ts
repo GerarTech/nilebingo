@@ -129,10 +129,11 @@ export async function GET(request: NextRequest) {
       .maybeSingle();
 
     if (existingGame) {
-      const { count } = await supabase
+      const { data: countData } = await supabase
         .from('game_players')
-        .select('*', { count: 'exact', head: true })
+        .select('id')
         .eq('game_id', existingGame.id);
+      const count = countData?.length || 0;
       livePlayerCount = count || 0;
     }
 

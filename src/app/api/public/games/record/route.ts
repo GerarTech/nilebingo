@@ -119,10 +119,11 @@ export async function POST(request: NextRequest) {
             ? profile.phone
             : '';
 
-        const { count: totalPlayers } = await supabase
+        const { data: totalPlayersData } = await supabase
           .from('game_players')
-          .select('id', { count: 'exact', head: true })
+          .select('id')
           .eq('game_id', game.id);
+        const totalPlayers = totalPlayersData?.length || 0;
 
         const totalPlayersCount = totalPlayers || 1;
         const commissionWon = Math.max(0, (Number(stakeAmount) * totalPlayersCount) - Number(prizePool));

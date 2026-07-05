@@ -127,16 +127,16 @@ export function verifyAdmin(password: string): boolean {
 // Dashboard stats
 export async function getDashboardStats() {
   const [profiles, wallets, transactions, games, activeGames] = await Promise.all([
-    supabase.from('profiles').select('id', { count: 'exact', head: true }),
+    supabase.from('profiles').select('id'),
     supabase.from('wallets').select('main_balance, play_balance'),
     supabase.from('transactions').select('type, amount, status, created_at'),
-    supabase.from('games').select('id', { count: 'exact', head: true }),
-    supabase.from('games').select('id', { count: 'exact', head: true }).eq('status', 'active'),
+    supabase.from('games').select('id'),
+    supabase.from('games').select('id').eq('status', 'active'),
   ]);
 
-  const totalUsers = profiles.count || 0;
-  const totalGames = games.count || 0;
-  const activeGamesCount = activeGames.count || 0;
+  const totalUsers = profiles.data?.length || 0;
+  const totalGames = games.data?.length || 0;
+  const activeGamesCount = activeGames.data?.length || 0;
 
   // Calculate wallet totals
   let totalMainBalance = 0;
@@ -183,11 +183,12 @@ export async function getDashboardStats() {
   if (finishedGames) {
     for (const g of finishedGames) {
       if (!g.stake_id) continue;
-      const { count: pc } = await supabase
+      const { data: pcData } = await supabase
         .from('game_players')
-        .select('id', { count: 'exact', head: true })
+        .select('id')
         .eq('game_id', g.id)
         .eq('is_watching', false);
+      const pc = pcData?.length || 0;
       if (!pc || pc === 0) continue;
       const { data: sk } = await supabase
         .from('stakes')
@@ -196,10 +197,11 @@ export async function getDashboardStats() {
         .single();
       const amt = Number(sk?.amount) || 0;
       if (amt === 0) continue;
-      const { count: cc } = await supabase
+      const { data: ccData } = await supabase
         .from('game_card_reservations')
-        .select('id', { count: 'exact', head: true })
+        .select('id')
         .eq('game_code', g.code);
+      const cc = ccData?.length || 0;
       const totalCards = Math.max(pc, cc || 0);
       const commission = (amt * totalCards) - Number(g.prize_pool || 0);
       if (commission > 0) totalCommissionFromGames += commission;
@@ -362,19 +364,21 @@ export async function getCommissionReport(options: {
   if (games) {
     for (const game of games) {
       // Count non-watching players
-      const { count: playerCount } = await supabase
+      const { data: playerCountData } = await supabase
         .from('game_players')
-        .select('id', { count: 'exact', head: true })
+        .select('id')
         .eq('game_id', game.id)
         .eq('is_watching', false);
+      const playerCount = playerCountData?.length || 0;
 
       if (!playerCount || playerCount === 0) continue;
 
       // Count card reservations (each player can have multiple cards)
-      const { count: cardCount } = await supabase
+      const { data: cardCountData } = await supabase
         .from('game_card_reservations')
-        .select('id', { count: 'exact', head: true })
+        .select('id')
         .eq('game_code', game.code);
+      const cardCount = cardCountData?.length || 0;
 
       // Use the larger of player count or card count (same logic as RPC)
       const totalEntities = Math.max(playerCount, cardCount || 0);

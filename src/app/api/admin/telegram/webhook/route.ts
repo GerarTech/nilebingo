@@ -95,9 +95,12 @@ async function getBotCommands(): Promise<Record<string, string>> {
 // Admin command handlers
 async function handleAdminStats(chatId: number) {
   try {
-    const { count: profileCount } = await supabase.from('profiles').select('*', { count: 'exact', head: true });
-    const { count: gameCount } = await supabase.from('games').select('*', { count: 'exact', head: true });
-    const { count: activeCount } = await supabase.from('games').select('*', { count: 'exact', head: true }).eq('status', 'active');
+    const { data: profileCountData } = await supabase.from('profiles').select('id');
+    const profileCount = profileCountData?.length || 0;
+    const { data: gameCountData } = await supabase.from('games').select('id');
+    const gameCount = gameCountData?.length || 0;
+    const { data: activeCountData } = await supabase.from('games').select('id').eq('status', 'active');
+    const activeCount = activeCountData?.length || 0;
     const { data: transactions } = await supabase.from('transactions').select('type, amount, status');
 
     let totalDeposits = 0, totalWithdrawals = 0, totalBets = 0, totalWins = 0;
@@ -198,11 +201,12 @@ async function handleAdminGames(chatId: number) {
       for (const lg of liveGames) {
         const prize = Number(lg.prize_pool || 0).toLocaleString();
         // Count players separately
-        const { count: pCount } = await supabase
+        const { data: pCountData } = await supabase
           .from('game_players')
-          .select('*', { count: 'exact', head: true })
+          .select('id')
           .eq('game_id', lg.id)
           .eq('is_watching', false);
+        const pCount = pCountData?.length || 0;
         msg += `• \`${lg.code}\` | Prize: *${prize} ETB* | Players: ${pCount ?? 0}\n  Appoint: \`/appoint_${lg.code}_25\`\n\n`;
       }
     } else {
@@ -256,11 +260,12 @@ async function handleAdminCommission(chatId: number) {
       for (const game of games) {
         const isToday = new Date(game.created_at) >= todayStart;
 
-        const { count: playerCount } = await supabase
+        const { data: playerCountData } = await supabase
           .from('game_players')
-          .select('*', { count: 'exact', head: true })
+          .select('id')
           .eq('game_id', game.id)
           .eq('is_watching', false);
+        const playerCount = playerCountData?.length || 0;
 
         if (!playerCount || playerCount === 0) continue;
 

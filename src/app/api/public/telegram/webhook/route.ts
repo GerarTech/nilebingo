@@ -535,9 +535,9 @@ function isCommandText(text: string, userCommands: any, plainCommands: any): boo
 
 // Admin command handlers
 async function handleAdminStats(chatId: number) {
-  const { data: profiles } = await supabase.from('profiles').select('id', { count: 'exact', head: true });
-  const { data: games } = await supabase.from('games').select('id', { count: 'exact', head: true });
-  const { data: activeGames } = await supabase.from('games').select('id', { count: 'exact', head: true }).eq('status', 'active');
+  const { data: profiles } = await supabase.from('profiles').select('id');
+  const { data: games } = await supabase.from('games').select('id');
+  const { data: activeGames } = await supabase.from('games').select('id').eq('status', 'active');
   const { data: transactions } = await supabase.from('transactions').select('type, amount, status');
 
   let totalDeposits = 0, totalWithdrawals = 0, totalBets = 0, totalWins = 0;
@@ -1604,12 +1604,12 @@ export async function POST(request: NextRequest) {
       }
 
       if (withdrawProfile) {
-        const { count } = await supabase
+        const { data: countData } = await supabase
           .from('game_players')
-          .select('id', { count: 'exact', head: true })
+          .select('id')
           .eq('user_id', withdrawProfile.id)
           .eq('is_watching', false);
-        playedCount = count || 0;
+        playedCount = countData?.length || 0;
 
         // Fetch actual wallet balance (same source as webapp)
         const { data: wall } = await supabase
@@ -1732,11 +1732,12 @@ export async function POST(request: NextRequest) {
     } else if (matchesCommand(userCommands.stats, plainCommands.stats)) {
       let playedCount = 0, totalWins = 0, totalSpent = 0;
       if (userProfile) {
-        const { count: gpCount } = await supabase
+        const { data: gpCountData } = await supabase
           .from('game_players')
-          .select('id', { count: 'exact', head: true })
+          .select('id')
           .eq('user_id', userProfile.id)
           .eq('is_watching', false);
+        const gpCount = gpCountData?.length || 0;
         playedCount = gpCount || 0;
         const { data: txs } = await supabase
           .from('transactions')

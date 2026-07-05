@@ -50,11 +50,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Count games played from game_players table (same logic as bot)
-    const { count: gamesPlayed } = await supabase
+    const { data: gamesPlayedData } = await supabase
       .from('game_players')
-      .select('id', { count: 'exact', head: true })
+      .select('id')
       .eq('user_id', userId)
       .eq('is_watching', false);
+    const gamesPlayed = gamesPlayedData?.length || 0;
 
     if ((gamesPlayed || 0) < requiredGames) {
       return NextResponse.json({ error: 'You must play at least ' + requiredGames + ' games before withdrawing. Completed: ' + (gamesPlayed || 0) }, { status: 400 });
