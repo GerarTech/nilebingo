@@ -60,6 +60,17 @@ let cachedCommands: Record<string, string> = {};
 let commandsCacheTime = 0;
 const COMMANDS_CACHE_TTL = 30000;
 
+const COMMAND_DEFAULTS: Record<string, string> = {
+  admin_stats: '/admin_stats',
+  admin_users: '/admin_users',
+  admin_commission: '/admin_commission',
+  admin_pending: '/admin_pending',
+  admin_games: '/admin_games',
+  admin_help: '/admin_help',
+  admin_approve: '/approve_',
+  admin_reject: '/reject_',
+};
+
 async function getBotCommands(): Promise<Record<string, string>> {
   const now = Date.now();
   if (cachedCommands && (now - commandsCacheTime) < COMMANDS_CACHE_TTL) {
@@ -73,78 +84,69 @@ async function getBotCommands(): Promise<Record<string, string>> {
       .eq('id', 'main')
       .single();
     
-    cachedCommands = data?.commands || {
-      admin_stats: '/admin_stats',
-      admin_users: '/admin_users',
-      admin_commission: '/admin_commission',
-      admin_pending: '/admin_pending',
-      admin_games: '/admin_games',
-      admin_help: '/admin_help',
-      admin_approve: '/approve_',
-      admin_reject: '/reject_',
-    };
+    cachedCommands = { ...COMMAND_DEFAULTS, ...(data?.commands || {}) };
     commandsCacheTime = now;
     return cachedCommands;
   } catch {
-    return {
-      admin_stats: '/admin_stats',
-      admin_users: '/admin_users',
-      admin_commission: '/admin_commission',
-      admin_pending: '/admin_pending',
-      admin_games: '/admin_games',
-      admin_help: '/admin_help',
-      admin_approve: '/approve_',
-      admin_reject: '/reject_',
-    };
+    return { ...COMMAND_DEFAULTS };
   }
 }
 
 // Admin command handlers
 async function handleAdminStats(chatId: number) {
-  const { data: profiles } = await supabase.from('profiles').select('id', { count: 'exact', head: true });
-  const { data: games } = await supabase.from('games').select('id', { count: 'exact', head: true });
-  const { data: activeGames } = await supabase.from('games').select('id', { count: 'exact', head: true }).eq('status', 'active');
-  const { data: transactions } = await supabase.from('transactions').select('type, amount, status');
+  try {
+    const { count: profileCount } = await supabase.from('profiles').select('*', { count: 'exact', head: true });
+    const { count: gameCount } = await supabase.from('games').select('*', { count: 'exact', head: true });
+    const { count: activeCount } = await supabase.from('games').select('*', { count: 'exact', head: true }).eq('status', 'active');
+    const { data: transactions } = await supabase.from('transactions').select('type, amount, status');
 
-  let totalDeposits = 0, totalWithdrawals = 0, totalBets = 0, totalWins = 0;
-  let pendingDep = 0, pendingWit = 0;
-  if (transactions) {
-    for (const t of transactions) {
-      const amt = Number(t.amount) || 0;
-      if (t.type === 'deposit' && t.status === 'completed') totalDeposits += amt;
-      if (t.type === 'withdraw' && t.status === 'completed') totalWithdrawals += amt;
-      if (t.type === 'bet') totalBets += amt;
-      if (t.type === 'win') totalWins += amt;
-      if (t.type === 'deposit' && t.status === 'pending') pendingDep++;
-      if (t.type === 'withdraw' && t.status === 'pending') pendingWit++;
+    let totalDeposits = 0, totalWithdrawals = 0, totalBets = 0, totalWins = 0;
+    let pendingDep = 0, pendingWit = 0;
+    if (transactions) {
+      for (const t of transactions) {
+        const amt = Number(t.amount) || 0;
+        if (t.type === 'deposit' && t.status === 'completed') totalDeposits += amt;
+        if (t.type === 'withdraw' && t.status === 'completed') totalWithdrawals += amt;
+        if (t.type === 'bet') totalBets += amt;
+        if (t.type === 'win') totalWins += amt;
+        if (t.type === 'deposit' && t.status === 'pending') pendingDep++;
+        if (t.type === 'withdraw' && t.status === 'pending') pendingWit++;
+      }
     }
+
+    const msg = `*📊 Admin Dashboard*\n\n👥 Users: ${profileCount ?? 0}\n🎮 Games: ${gameCount ?? 0}\n🟢 Active: ${activeCount ?? 0}\n💰 Deposits: ${totalDeposits.toLocaleString()} ETB\n💸 Withdrawals: ${totalWithdrawals.toLocaleString()} ETB\n📈 Revenue: ${(totalBets - totalWins).toLocaleString()} ETB\n⏳ Pending Deposits: ${pendingDep}\n⏳ Pending Withdrawals: ${pendingWit}`;
+
+    await sendMessage(chatId, msg, { parse_mode: 'Markdown' });
+  } catch (e: any) {
+    await sendMessage(chatId, `❌ Error loading stats: ${e.message || 'Unknown'}`);
   }
-
-  const msg = `*📊 Admin Dashboard*\n\n👥 Users: ${profiles?.length || 0}\n🎮 Games: ${games?.length || 0}\n🟢 Active: ${activeGames?.length || 0}\n💰 Deposits: ${totalDeposits.toLocaleString()} ETB\n💸 Withdrawals: ${totalWithdrawals.toLocaleString()} ETB\n📈 Revenue: ${(totalBets - totalWins).toLocaleString()} ETB\n⏳ Pending Deposits: ${pendingDep}\n⏳ Pending Withdrawals: ${pendingWit}`;
-
-  await sendMessage(chatId, msg, { parse_mode: 'Markdown' });
 }
 
 async function handleAdminUsers(chatId: number) {
-  const { data: users } = await supabase
-    .from('profiles')
-    .select('first_name, username, telegram_id, phone, created_at')
-    .order('created_at', { ascending: false })
-    .limit(10);
+  try {
+    const { data: users } = await supabase
+      .from('profiles')
+      .select('first_name, username, telegram_id, phone, created_at')
+      .order('created_at', { ascending: false })
+      .limit(10);
 
-  if (!users || users.length === 0) {
-    await sendMessage(chatId, 'No users found.');
-    return;
+    if (!users || users.length === 0) {
+      await sendMessage(chatId, 'No users found.');
+      return;
+    }
+
+    const list = users.map((u: any, i: number) => 
+      `${i + 1}. ${u.first_name || 'Unknown'}${u.username ? ` (@${u.username})` : ''}\n   ID: ${u.telegram_id}${u.phone ? ` | 📞 ${u.phone}` : ''}`
+    ).join('\n');
+
+    await sendMessage(chatId, `*👥 Recent Users*\n\n${list}`, { parse_mode: 'Markdown' });
+  } catch (e: any) {
+    await sendMessage(chatId, `❌ Error loading users: ${e.message || 'Unknown'}`);
   }
-
-  const list = users.map((u: any, i: number) => 
-    `${i + 1}. ${u.first_name || 'Unknown'}${u.username ? ` (@${u.username})` : ''}\n   ID: ${u.telegram_id}${u.phone ? ` | 📞 ${u.phone}` : ''}`
-  ).join('\n');
-
-  await sendMessage(chatId, `*👥 Recent Users*\n\n${list}`, { parse_mode: 'Markdown' });
 }
 
 async function handleAdminPending(chatId: number) {
+  const commands = await getBotCommands();
   const { data: txs } = await supabase
     .from('transactions')
     .select('*, profiles!inner(first_name, username, phone, telegram_id)')
@@ -157,6 +159,8 @@ async function handleAdminPending(chatId: number) {
     return;
   }
 
+  const approvePrefix = commands.admin_approve || '/approve_';
+  const rejectPrefix = commands.admin_reject || '/reject_';
   const list = txs.map((tx: any) => {
     const prof = tx.profiles || {};
     const name = prof.first_name || prof.username || 'Unknown';
@@ -164,134 +168,148 @@ async function handleAdminPending(chatId: number) {
     const userLink = prof.username ? `@${prof.username}` : `#${String(prof.telegram_id).slice(-4)}`;
     const bankName = tx.details?.bank_name || '-';
     const userRef = tx.reference || '-';
-    return `• *${tx.type.toUpperCase()}* | ${Number(tx.amount).toLocaleString()} ETB\n  👤 ${name} (${userLink}) ${phone}\n  🏦 ${bankName} | 🆔 \`${userRef}\`\n  🆔 \`${tx.id.slice(0, 8)}...\` | /approve_${tx.id.slice(0, 8)} | /reject_${tx.id.slice(0, 8)}`;
+    return `• *${tx.type.toUpperCase()}* | ${Number(tx.amount).toLocaleString()} ETB\n  👤 ${name} (${userLink}) ${phone}\n  🏦 ${bankName} | 🆔 \`${userRef}\`\n  🆔 \`${tx.id.slice(0, 8)}...\` | ${approvePrefix}${tx.id.slice(0, 8)} | ${rejectPrefix}${tx.id.slice(0, 8)}`;
   }).join('\n\n');
 
   await sendMessage(chatId, `*⏳ Pending Transactions*\n\n${list}`, { parse_mode: 'Markdown' });
 }
 
 async function handleAdminGames(chatId: number) {
-  // 1. Fetch live games
-  const { data: liveGames } = await supabase
-    .from('games')
-    .select('*, game_players(*, profiles(first_name, username))')
-    .eq('status', 'active')
-    .order('created_at', { ascending: false });
+  try {
+    // 1. Fetch live games (simple select, no nested joins)
+    const { data: liveGames } = await supabase
+      .from('games')
+      .select('id, code, prize_pool, status, created_at')
+      .eq('status', 'active')
+      .order('created_at', { ascending: false });
 
-  // 2. Fetch recent completed games
-  const { data: completedGames } = await supabase
-    .from('games')
-    .select('*, winner:profiles(first_name, username)')
-    .eq('status', 'finished')
-    .order('created_at', { ascending: false })
-    .limit(10);
+    // 2. Fetch recent completed games (simple select)
+    const { data: completedGames } = await supabase
+      .from('games')
+      .select('id, code, prize_pool, status, winner_id, created_at')
+      .eq('status', 'finished')
+      .order('created_at', { ascending: false })
+      .limit(10);
 
-  let msg = `*🎮 Nile BINGO Matches Board*\n\n`;
+    let msg = `*🎮 Nile BINGO Matches Board*\n\n`;
 
-  if (liveGames && liveGames.length > 0) {
-    msg += `*🟢 LIVE ACTIVE GAMES (Spectate & Appoint)*\n`;
-    for (const lg of liveGames) {
-      const prize = Number(lg.prize_pool || 0).toLocaleString();
-      const playersList = lg.game_players?.map((gp: any) => gp.profiles?.first_name || 'Player').join(', ') || 'None';
-      msg += `• Game ID: \`${lg.code}\`\n  Prize Pool: *${prize} ETB*\n  Players: ${playersList}\n  Appoint Winner: \`/appoint_${lg.code}_25\`\n\n`;
+    if (liveGames && liveGames.length > 0) {
+      msg += `*🟢 LIVE ACTIVE GAMES*\n`;
+      for (const lg of liveGames) {
+        const prize = Number(lg.prize_pool || 0).toLocaleString();
+        // Count players separately
+        const { count: pCount } = await supabase
+          .from('game_players')
+          .select('*', { count: 'exact', head: true })
+          .eq('game_id', lg.id)
+          .eq('is_watching', false);
+        msg += `• \`${lg.code}\` | Prize: *${prize} ETB* | Players: ${pCount ?? 0}\n  Appoint: \`/appoint_${lg.code}_25\`\n\n`;
+      }
+    } else {
+      msg += `*🟢 LIVE ACTIVE GAMES*\n_No live games currently playing._\n\n`;
     }
-  } else {
-    msg += `*🟢 LIVE ACTIVE GAMES*\n_No live games currently playing._\n\n`;
-  }
 
-  if (completedGames && completedGames.length > 0) {
-    msg += `*🏆 RECENT COMPLETED MATCHES*\n`;
-    const list = completedGames.map((g: any, i: number) => {
-      const winnerName = g.winner?.first_name || 'Virtual Player';
-      const winnerUser = g.winner?.username ? ` (@${g.winner.username})` : '';
-      const prize = Number(g.prize_pool || 0).toLocaleString();
-      return `${i + 1}. Game ID: \`${g.code}\`\n   Prize Pool: *${prize} ETB*\n   Winner: *${winnerName}${winnerUser}*`;
-    }).join('\n\n');
-    msg += list;
-  } else {
-    msg += `*🏆 RECENT COMPLETED MATCHES*\n_No recently completed matches._`;
-  }
+    if (completedGames && completedGames.length > 0) {
+      msg += `*🏆 RECENT COMPLETED MATCHES*\n`;
+      for (let i = 0; i < completedGames.length; i++) {
+        const g = completedGames[i];
+        let winnerName = 'Virtual Player';
+        if (g.winner_id) {
+          const { data: wp } = await supabase
+            .from('profiles')
+            .select('first_name, username')
+            .eq('id', g.winner_id)
+            .maybeSingle();
+          if (wp) {
+            winnerName = wp.first_name || 'Player';
+            if (wp.username) winnerName += ` (@${wp.username})`;
+          }
+        }
+        const prize = Number(g.prize_pool || 0).toLocaleString();
+        msg += `${i + 1}. \`${g.code}\` | *${prize} ETB* | ${winnerName}\n`;
+      }
+    } else {
+      msg += `*🏆 RECENT COMPLETED MATCHES*\n_No recently completed matches._`;
+    }
 
-  await sendMessage(chatId, msg, { parse_mode: 'Markdown' });
+    await sendMessage(chatId, msg, { parse_mode: 'Markdown' });
+  } catch (e: any) {
+    await sendMessage(chatId, `❌ Error loading games: ${e.message || 'Unknown'}`);
+  }
 }
 
 async function handleAdminCommission(chatId: number) {
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-
-  // Fetch all finished games
-  const { data: games } = await supabase
-    .from('games')
-    .select('id, code, prize_pool, stake_id, created_at')
-    .eq('status', 'finished');
-
-  let totalCommission = 0, todayCommission = 0;
-  let totalBets = 0, todayBets = 0;
-  let gameCount = 0;
-
-  if (games) {
-    for (const game of games) {
-      const isToday = new Date(game.created_at) >= todayStart;
-
-      const { count: playerCount } = await supabase
-        .from('game_players')
-        .select('id', { count: 'exact', head: true })
-        .eq('game_id', game.id)
-        .eq('is_watching', false);
-
-      if (!playerCount || playerCount === 0) continue;
-
-      const { count: cardCount } = await supabase
-        .from('game_card_reservations')
-        .select('id', { count: 'exact', head: true })
-        .eq('game_code', game.code);
-
-      const totalEntities = Math.max(playerCount, cardCount || 0);
-
-      let stakeAmt = 0;
-      if (game.stake_id) {
-        const { data: stake } = await supabase
-          .from('stakes')
-          .select('amount')
-          .eq('id', game.stake_id)
-          .single();
-        stakeAmt = Number(stake?.amount) || 0;
-      }
-
-      if (stakeAmt === 0) continue;
-
-      const prize = Number(game.prize_pool) || 0;
-      const entryTotal = stakeAmt * totalEntities;
-      const commission = entryTotal - prize;
-
-      if (commission < 0) continue;
-
-      totalCommission += commission;
-      totalBets += entryTotal;
-      if (isToday) { todayCommission += commission; todayBets += entryTotal; }
-      gameCount++;
-    }
-  }
-
-  // Get configured commission rate
-  let commissionRate = 10;
   try {
-    const { data } = await supabase.from('bot_config').select('commands').eq('id', 'main').single();
-    if (data?.commands?.commission) commissionRate = Number(data.commands.commission);
-  } catch {}
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
 
-  const msg = [
-    `💰 *COMMISSION REPORT*`,
-    ``,
-    `📊 *Total Commission:* ${totalCommission.toLocaleString()} ETB`,
-    `📅 *Today:* ${todayCommission.toLocaleString()} ETB`,
-    ``,
-    `📈 Total Entry Fees: ${totalBets.toLocaleString()} ETB`,
-    `🎮 Games Counted: ${gameCount}`,
-    `🔢 Rate: ${commissionRate}%`,
-  ].join('\n');
+    const { data: games } = await supabase
+      .from('games')
+      .select('id, code, prize_pool, stake_id, created_at')
+      .eq('status', 'finished');
 
-  await sendMessage(chatId, msg, { parse_mode: 'Markdown' });
+    let totalCommission = 0, todayCommission = 0;
+    let totalBets = 0, todayBets = 0;
+    let gameCount = 0;
+
+    if (games) {
+      for (const game of games) {
+        const isToday = new Date(game.created_at) >= todayStart;
+
+        const { count: playerCount } = await supabase
+          .from('game_players')
+          .select('*', { count: 'exact', head: true })
+          .eq('game_id', game.id)
+          .eq('is_watching', false);
+
+        if (!playerCount || playerCount === 0) continue;
+
+        let stakeAmt = 0;
+        if (game.stake_id) {
+          const { data: stake } = await supabase
+            .from('stakes')
+            .select('amount')
+            .eq('id', game.stake_id)
+            .maybeSingle();
+          stakeAmt = Number(stake?.amount) || 0;
+        }
+
+        if (stakeAmt === 0) continue;
+
+        const prize = Number(game.prize_pool) || 0;
+        const entryTotal = stakeAmt * playerCount;
+        const commission = entryTotal - prize;
+
+        if (commission < 0) continue;
+
+        totalCommission += commission;
+        totalBets += entryTotal;
+        if (isToday) { todayCommission += commission; todayBets += entryTotal; }
+        gameCount++;
+      }
+    }
+
+    let commissionRate = 10;
+    try {
+      const { data } = await supabase.from('bot_config').select('commands').eq('id', 'main').single();
+      if (data?.commands?.commission) commissionRate = Number(data.commands.commission);
+    } catch {}
+
+    const msg = [
+      `💰 *COMMISSION REPORT*`,
+      ``,
+      `📊 *Total Commission:* ${totalCommission.toLocaleString()} ETB`,
+      `📅 *Today:* ${todayCommission.toLocaleString()} ETB`,
+      ``,
+      `📈 Total Entry Fees: ${totalBets.toLocaleString()} ETB`,
+      `🎮 Games Counted: ${gameCount}`,
+      `🔢 Rate: ${commissionRate}%`,
+    ].join('\n');
+
+    await sendMessage(chatId, msg, { parse_mode: 'Markdown' });
+  } catch (e: any) {
+    await sendMessage(chatId, `❌ Error loading commission: ${e.message || 'Unknown'}`);
+  }
 }
 
 async function handleAdminApprove(chatId: number, txId: string) {

@@ -179,19 +179,27 @@ async function sendPhoto(chatId: string | number, photoDataUrl: string, caption:
 
 /** Send a deposit-pending alert to admin bot and notification channels */
 async function sendAdminDepositAlert(text: string) {
+  let finalText = text;
+  try {
+    const cmds = await getBotCommands();
+    const approveCmd = cmds.admin_approve || '/approve_';
+    const rejectCmd = cmds.admin_reject || '/reject_';
+    finalText = text.replace(/\/approve_/g, approveCmd).replace(/\/reject_/g, rejectCmd);
+  } catch (e) { /* ignore */ }
+
   if (adminBotToken && adminChatId) {
     try {
       await fetch(`https://api.telegram.org/bot${adminBotToken}/sendMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: adminChatId, text, parse_mode: 'Markdown' }),
+        body: JSON.stringify({ chat_id: adminChatId, text: finalText, parse_mode: 'Markdown' }),
         signal: AbortSignal.timeout(5000),
       });
     } catch (e) { /* ignore */ }
   }
   try {
     const { notifyEvent } = await import('@/lib/server/admin');
-    const plain = text.replace(/\*+/g, '');
+    const plain = finalText.replace(/\*+/g, '');
     const body = plain.indexOf('\n\n') !== -1 ? plain.substring(plain.indexOf('\n\n') + 2) : plain;
     notifyEvent('deposit_pending', body);
   } catch (e) { /* ignore */ }

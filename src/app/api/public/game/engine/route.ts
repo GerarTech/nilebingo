@@ -154,7 +154,7 @@ export async function POST(request: NextRequest) {
       // Look up game by code (gameId from client is the code, not UUID)
       const { data: gameByCode } = await supabase
         .from('games')
-        .select('id, status, prize_pool, code, winner_id')
+        .select('id, status, prize_pool, code, winner_id, stake_id, commission')
         .eq('code', gameId)
         .maybeSingle();
 
@@ -274,14 +274,26 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ win: false, error: 'No winning pattern found' }, { status: 400 });
       }
 
-      // Count players
-      const { count: playerCount } = await supabase
-        .from('game_players')
-        .select('id', { count: 'exact', head: true })
-        .eq('game_id', gameByCode.id)
-        .eq('is_watching', false);
-
-      const winAmount = Number(gameByCode.prize_pool) || 0;
+      // Calculate win amount server-side using actual cards × stake × (1 - commission)
+      let winAmount = Number(gameByCode.prize_pool) || 0;
+      if (winAmount <= 0) {
+        const { data: stakeRow } = await supabase
+          .from('stakes')
+          .select('amount')
+          .eq('id', gameByCode.stake_id)
+          .maybeSingle();
+        const perCardStake = Number(stakeRow?.amount) || 10;
+        const { count: cardCount } = await supabase
+          .from('game_card_reservations')
+          .select('id', { count: 'exact', head: true })
+          .eq('game_code', gameByCode.code)
+          .gt('card_number', 0);
+        const totalCards = Math.max(cardCount || 1, 1);
+        const commission = gameByCode.commission !== null
+          ? Number(gameByCode.commission)
+          : (await supabase.from('bot_config').select('commands').eq('id', 'main').single()).data?.commands?.commission || 15;
+        winAmount = perCardStake * totalCards * (1 - Number(commission) / 100);
+      }
 
       const { data: profile } = await supabase.from('profiles').select('telegram_id, first_name').eq('id', userId).single();
 

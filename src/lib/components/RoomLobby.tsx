@@ -48,9 +48,6 @@ export default function RoomLobby({
   if (isRegistered) {
     const totalLivePlayers = Math.max(lobbyPlayerCount, room.players);
     const prizePool = fee * totalLivePlayers * (1 - commissionRate / 100);
-    const playersInPrize = totalLivePlayers;
-    const totalStake = fee * totalLivePlayers;
-    const commissionAmount = totalStake - prizePool;
 
     return (
       <div className="px-4 pt-4 animate-fade-in pb-24 font-sans bg-[#0c1322] min-h-screen text-white">
@@ -75,6 +72,7 @@ export default function RoomLobby({
                 <span className="text-xs">🏆</span>
               </div>
               <span className="text-[10px] text-[#2ecc71] font-black uppercase tracking-widest">Prize Pool</span>
+              <span className="ml-auto text-[9px] text-gray-500 font-bold">🆔 {gameId}</span>
             </div>
 
             <div className="text-center mb-4">
@@ -84,31 +82,11 @@ export default function RoomLobby({
               <div className="text-[9px] text-gray-500 mt-0.5">estimated prize for winner</div>
             </div>
 
-            <div className="grid grid-cols-3 gap-2">
-              <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-2.5 text-center">
+            <div className="text-center">
+              <div className="inline-block bg-white/[0.03] border border-white/[0.06] rounded-xl px-6 py-2.5 text-center">
                 <div className="text-[8px] text-gray-500 uppercase font-bold tracking-wider">Stake</div>
-                <div className="text-xs font-extrabold text-white mt-1">{Number(fee).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                <div className="text-xs font-extrabold text-white mt-1">{Number(fee).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {t('birr')}</div>
               </div>
-              <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-2.5 text-center">
-                <div className="text-[8px] text-gray-500 uppercase font-bold tracking-wider">Players</div>
-                <div className="text-xs font-extrabold text-[#2ecc71] mt-1">{playersInPrize}</div>
-              </div>
-              <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-2.5 text-center">
-                <div className="text-[8px] text-gray-500 uppercase font-bold tracking-wider">Comm.</div>
-                <div className="text-xs font-extrabold text-amber-400 mt-1">{commissionRate}%</div>
-              </div>
-            </div>
-
-            <div className="mt-3 flex items-center justify-center gap-4 text-[9px] text-gray-500">
-              <span className="flex items-center gap-1">
-                <span className="text-white/60">Total in pot:</span>
-                <span className="font-bold text-white">{totalStake.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {t('birr')}</span>
-              </span>
-              <span className="text-white/10">|</span>
-              <span className="flex items-center gap-1">
-                <span className="text-white/60">Fee:</span>
-                <span className="font-bold text-amber-400">{commissionAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {t('birr')}</span>
-              </span>
             </div>
           </div>
 
@@ -145,15 +123,7 @@ export default function RoomLobby({
             <span>🎴</span> GAME ID: {gameId}
           </div>
         </div>
-        <div className="flex items-center gap-1.5">
-          <div className="flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md">
-            <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
-            <span className="text-[8px] font-extrabold uppercase text-emerald-400">Live</span>
-          </div>
-          <div className="bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md">
-            <span className="text-[8px] font-extrabold text-amber-400">{Math.max(lobbyPlayerCount, 0)} players</span>
-          </div>
-        </div>
+       
       </div>
 
       <div className="flex items-stretch gap-1.5 mb-4">

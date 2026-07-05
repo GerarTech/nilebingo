@@ -51,8 +51,8 @@ export default function HomeView({
             {appLogoPng ? <img src={appLogoPng} alt="Logo" className="h-7 w-7 object-contain inline-block" /> : appLogo} {appName}
           </span>
         </div>
-        <button onClick={onGoToWallet} className="flex items-center gap-1 text-white font-extrabold text-[11px] px-3.5 py-2 rounded-xl shadow-md transition-all cursor-pointer" style={{ backgroundColor: themeColorDark, boxShadow: `0 4px 14px ${themeColor}44` }}>
-          💰 {Number(walletBalance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {t('birr')}
+        <button onClick={onGoToWallet} className="flex items-center gap-1 text-white font-extrabold text-[11px] px-3.5 py-2 rounded-xl shadow-md transition-all cursor-pointer whitespace-nowrap" style={{ backgroundColor: themeColorDark, boxShadow: `0 4px 14px ${themeColor}44` }}>
+          💰 {Number(walletBalance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ETB
         </button>
       </div>
 
@@ -81,11 +81,8 @@ export default function HomeView({
               {room.name && (
                 <span className="text-[9px] font-black uppercase tracking-widest text-gray-300 block mb-1">{room.name}</span>
               )}
-              <span className="absolute -top-1.5 -right-1.5 text-white text-[7.5px] font-black px-1.5 py-0.5 rounded-full shadow-md select-none uppercase tracking-tighter" style={{ backgroundColor: themeColor, boxShadow: `0 2px 8px ${themeColor}55` }}>
+              <span className="absolute -top-1.5 -right-1.5 text-navy text-[7.5px] font-black px-1.5 py-0.5 rounded-full shadow-md select-none uppercase tracking-tighter" style={{ backgroundColor: themeColor, boxShadow: `0 2px 8px ${themeColor}55` }}>
                 {room.countdown}S
-              </span>
-              <span className="absolute -top-1.5 -left-1.5 text-white text-[7.5px] font-black px-1.5 py-0.5 rounded-full shadow-md select-none uppercase tracking-tighter" style={{ backgroundColor: '#10b981', boxShadow: '0 2px 8px rgba(16,185,129,0.55)' }}>
-                {room.players}
               </span>
               <span className="text-xl font-black text-white block">{room.entry}</span>
               <span className="text-[10px] text-gray-400 font-extrabold uppercase mt-1 tracking-wider block">{t('birr')}</span>

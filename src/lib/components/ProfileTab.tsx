@@ -7,7 +7,7 @@ import type { Profile, Wallet } from '../types';
 interface ProfileTabProps {
   profile: Profile | null;
   wallet: Wallet | null;
-  stakeHistory: { result: 'win' | 'loss'; stake: number }[];
+  stakeHistory: { result: 'win' | 'loss'; stake: number; prize?: number }[];
   t: (key: string) => string;
   language: string;
   onSetLanguage: (lang: 'en' | 'am') => void;
@@ -26,7 +26,7 @@ export default function ProfileTab({
   const winsCount = stakeHistory.filter(h => h.result === 'win').length;
   const userTotalEarnings = stakeHistory
     .filter(h => h.result === 'win')
-    .reduce((sum, h) => sum + h.stake * 20, 0);
+    .reduce((sum, h: any) => sum + (h.prize || 0), 0);
 
   return (
     <div className="px-4 pt-4 animate-fade-in pb-20">
