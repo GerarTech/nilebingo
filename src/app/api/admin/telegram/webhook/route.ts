@@ -71,6 +71,24 @@ const COMMAND_DEFAULTS: Record<string, string> = {
   admin_reject: '/reject_',
 };
 
+function normalizeCommandText(text: string): string {
+  return (text || '').trim().replace(/\s+/g, ' ');
+}
+
+function stripBotSuffix(text: string): string {
+  return text.replace(/(@\w+)$/i, '');
+}
+
+function isExactCommand(text: string, command: string): boolean {
+  const normalized = stripBotSuffix(normalizeCommandText(text));
+  return normalized === command || normalized === `${command}@`;
+}
+
+function startsWithCommand(text: string, command: string): boolean {
+  const normalized = stripBotSuffix(normalizeCommandText(text));
+  return normalized === command || normalized.startsWith(`${command} `) || normalized.startsWith(command);
+}
+
 async function getBotCommands(): Promise<Record<string, string>> {
   const now = Date.now();
   if (cachedCommands && (now - commandsCacheTime) < COMMANDS_CACHE_TTL) {
@@ -420,7 +438,9 @@ export async function POST(request: NextRequest) {
     const callbackQuery = body.callback_query;
     const chatId = message?.chat?.id || callbackQuery?.message?.chat?.id;
     const from = body.message?.from || body.callback_query?.from;
-    const text = body.message?.text || '';
+    const rawText = body.message?.text || '';
+    const text = normalizeCommandText(rawText);
+    const commandText = stripBotSuffix(text);
 
     if (!chatId) {
       return NextResponse.json({ ok: true });
@@ -446,7 +466,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Handle /start command
-    if (text === '/start') {
+    if (isExactCommand(commandText, '/start')) {
       await registerAdminBotCommands();
       await sendMessage(chatId, '🔐 Admin Bot Ready\n\nUse the menu below or type /admin_help for commands:', {
         reply_markup: {
@@ -495,44 +515,44 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true });
     }
     
-    if (text === commands.admin_stats) {
+    if (isExactCommand(commandText, commands.admin_stats)) {
       await handleAdminStats(chatId);
       return NextResponse.json({ ok: true });
     }
-    if (text === commands.admin_users) {
+    if (isExactCommand(commandText, commands.admin_users)) {
       await handleAdminUsers(chatId);
       return NextResponse.json({ ok: true });
     }
-    if (text === commands.admin_pending) {
+    if (isExactCommand(commandText, commands.admin_pending)) {
       await handleAdminPending(chatId);
       return NextResponse.json({ ok: true });
     }
-    if (text === (commands.admin_games || '/admin_games')) {
+    if (isExactCommand(commandText, commands.admin_games || '/admin_games')) {
       await handleAdminGames(chatId);
       return NextResponse.json({ ok: true });
     }
-    if (text === (commands.admin_commission || '/admin_commission')) {
+    if (isExactCommand(commandText, commands.admin_commission || '/admin_commission')) {
       await handleAdminCommission(chatId);
       return NextResponse.json({ ok: true });
     }
-    if (text === commands.admin_help) {
+    if (isExactCommand(commandText, commands.admin_help)) {
       await sendMessage(chatId, `*🔐 Admin Bot Commands*\n\n${commands.admin_stats || '/admin_stats'} - Dashboard stats\n${commands.admin_users || '/admin_users'} - Recent users\n${commands.admin_commission || '/admin_commission'} - Commission report\n${commands.admin_pending || '/admin_pending'} - Pending transactions\n${commands.admin_games || '/admin_games'} - Matches & winners\n/appoint_<gameId>_<cardNum> - Assign winner card\n${commands.admin_approve}<tx_id> - Approve transaction\n${commands.admin_reject}<tx_id> - Reject transaction\n${commands.admin_help || '/admin_help'} - This help`, { parse_mode: 'Markdown' });
       return NextResponse.json({ ok: true });
     }
-    if (text.startsWith('/appoint')) {
+    if (startsWithCommand(commandText, '/appoint')) {
       let gameId = '';
       let cardNumber = 0;
       let afterBalls = 20;
 
-      if (text.startsWith('/appoint_')) {
-        const parts = text.split('_');
+      if (commandText.startsWith('/appoint_')) {
+        const parts = commandText.split('_');
         if (parts.length >= 3) {
           gameId = parts[1];
           cardNumber = Number(parts[2]);
           afterBalls = parts.length >= 4 ? Number(parts[3]) || 20 : 20;
         }
       } else {
-        const parts = text.split(' ');
+        const parts = commandText.split(' ');
         if (parts.length >= 3) {
           gameId = parts[1];
           cardNumber = Number(parts[2]);
@@ -570,8 +590,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    if (text.startsWith(commands.admin_approve)) {
-      const shortId = text.replace(commands.admin_approve, '');
+    if (startsWithCommand(commandText, commands.admin_approve)) {
+      const shortId = commandText.replace(commands.admin_approve, '');
       const { data: txs } = await supabase
         .from('transactions')
         .select('id')
@@ -586,8 +606,8 @@ export async function POST(request: NextRequest) {
       }
       return NextResponse.json({ ok: true });
     }
-    if (text.startsWith(commands.admin_reject)) {
-      const shortId = text.replace(commands.admin_reject, '');
+    if (startsWithCommand(commandText, commands.admin_reject)) {
+      const shortId = commandText.replace(commands.admin_reject, '');
       const { data: txs } = await supabase
         .from('transactions')
         .select('id')
