@@ -155,12 +155,33 @@ export async function POST(request: NextRequest) {
       // Look up game by code (gameId from client is the code, not UUID)
       const { data: gameByCode } = await supabase
         .from('games')
-        .select('id, status, prize_pool, code, winner_id, stake_id, commission')
+        .select('id, status, prize_pool, code, winner_id, stake_id')
         .eq('code', gameId)
         .maybeSingle();
 
       if (!gameByCode) {
         return NextResponse.json({ error: 'Game not found' }, { status: 404 });
+      }
+
+      // Fetch commission: prefer games.commission (if column exists), fall back to bot_config
+      let effectiveCommission: number | null = null;
+      try {
+        const { data: commRow } = await supabase
+          .from('games')
+          .select('commission')
+          .eq('id', gameByCode.id)
+          .maybeSingle();
+        if (commRow && typeof (commRow as any).commission === 'number') {
+          effectiveCommission = (commRow as any).commission;
+        }
+      } catch {}
+      if (effectiveCommission === null) {
+        try {
+          const { data: cfg } = await supabase.from('bot_config').select('commands').eq('id', 'main').single();
+          effectiveCommission = cfg?.commands?.commission ?? 15;
+        } catch {
+          effectiveCommission = 15;
+        }
       }
 
       // If game already finished, return the winner
@@ -291,10 +312,7 @@ export async function POST(request: NextRequest) {
           .gt('card_number', 0);
         const cardCount = cardCountData?.length || 0;
         const totalCards = Math.max(cardCount || 1, 1);
-        const commission = gameByCode.commission !== null
-          ? Number(gameByCode.commission)
-          : (await supabase.from('bot_config').select('commands').eq('id', 'main').single()).data?.commands?.commission || 15;
-        winAmount = perCardStake * totalCards * (1 - Number(commission) / 100);
+        winAmount = perCardStake * totalCards * (1 - effectiveCommission / 100);
       }
 
       const { data: profile } = await supabase.from('profiles').select('telegram_id, first_name').eq('id', userId).single();

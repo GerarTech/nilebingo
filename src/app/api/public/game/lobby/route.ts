@@ -393,15 +393,13 @@ export async function POST(request: NextRequest) {
           }, { onConflict: 'game_id,user_id' });
       }
 
-      // Try updating prize pool with room-specific commission
+      // Update prize pool — commission is already stored on the game row (if set), so don't pass
+      // it as a separate RPC param. The new RPC reads from games.commission; the old RPC reads
+      // from bot_config. Skipping p_commission avoids parameter mismatch errors.
       try {
-        const rpcParams: any = { p_game_code: gameId, p_stake_amt: stakeAmount };
-        if (roomCommission !== null) {
-          rpcParams.p_commission = roomCommission;
-        }
-        await supabase.rpc('update_game_prize_pool', rpcParams);
+        await supabase.rpc('update_game_prize_pool', { p_game_code: gameId, p_stake_amt: stakeAmount });
       } catch (poolErr) {
-        console.warn('Prize pool update failed (probably safe if already updated):', poolErr);
+        console.warn('Prize pool update failed:', poolErr);
       }
 
       return NextResponse.json({ success: true, dbGameId });
