@@ -524,10 +524,10 @@ function HomePage() {
     setOtherPlayers(virtualCompetitors);
     setShowCardPicker(false); setInGame(true);
     // Pre-set prize pool from local estimate so the display doesn't flash 0
-    // Use actual reserved card count (from DB polling) for consistency with waiting screen
+    // Use same formula as waiting screen: fee * totalCards * (1 - commission/100)
     const effComm = selectedRoom.commission ?? commissionRate;
-    const totalCardsEstimate = Math.max(reservedCardCount, selectedCards.length, lobbyPlayerCount * 2, selectedRoom.players * 2, 2);
-    setPrizePool(prev => prev > 0 ? prev : entryFee * totalCardsEstimate * (1 - effComm / 100));
+    const totalCards = Math.max(reservedCardCount, selectedCards.length, 1);
+    setPrizePool(entryFee * totalCards * (1 - effComm / 100));
 
     const sequence = getDeterministicDrawSequence(activeGameId, appointedCard?.cardNumber);
     setDeterministicSequence(sequence);
@@ -535,26 +535,23 @@ function HomePage() {
     setIsRegistered(false); setIsSpectatingReady(false);
 
     // Perform game registration and statistics fetching asynchronously in the background
+    // Prize pool uses same formula as waiting screen: fee * totalCards * (1 - commission/100)
     (async () => {
       try {
         await registerLiveGame(activeGameId, entryFee, isSpectateMode, cardsToPlay);
+        // Always query actual card reservation count for consistent prize calculation
+        const { count: actualCardCount } = await supabase.from('game_card_reservations').select('*', { count: 'exact', head: true }).eq('game_code', activeGameId).gt('card_number', 0);
+        const totalCards = Math.max(actualCardCount || 0, selectedCardsRef.current.length || 1, 1);
         const { data: existingGame } = await supabase.from('games').select('id, prize_pool').eq('code', activeGameId).maybeSingle();
         if (existingGame) {
           const { count } = await supabase.from('game_players').select('*', { count: 'exact', head: true }).eq('game_id', existingGame.id);
           setLivePlayerCount(count || 1);
-          setPrizePool(Number(existingGame.prize_pool) || entryFee * Math.max(count || 1, 1) * (1 - effComm / 100));
+          setPrizePool(Number(existingGame.prize_pool) || entryFee * totalCards * (1 - effComm / 100));
         } else {
           const { data: reservations } = await supabase.from('game_card_reservations').select('user_id, card_number').eq('game_code', activeGameId);
-          if (reservations) {
-            const totalPlayerCount = new Set(reservations.map(r => r.user_id)).size || 1;
-            const activeCards = reservations.filter((r: any) => r.card_number > 0).length;
-            const totalCardCount = Math.max(activeCards, totalPlayerCount, 1);
-            setLivePlayerCount(totalPlayerCount);
-            setPrizePool(entryFee * totalCardCount * (1 - effComm / 100));
-          } else {
-            setLivePlayerCount(selectedRoom.players);
-            setPrizePool(entryFee * Math.max(selectedRoom.players, 1) * (1 - effComm / 100));
-          }
+          const totalPlayerCount = reservations ? new Set(reservations.map(r => r.user_id)).size : 0;
+          setLivePlayerCount(Math.max(totalPlayerCount || 0, selectedCardsRef.current.length || 1, 1));
+          setPrizePool(entryFee * totalCards * (1 - effComm / 100));
         }
       } catch (err) {
         console.warn('Background registration or stats fetch failed:', err);
@@ -687,20 +684,10 @@ function HomePage() {
           let allMatches = [0];
           playerCards.forEach(card => { card.forEach(row => { row.forEach(n => { if (newDrawn.includes(n)) allMatches.push(n); }); }); });
           setUserMarkedNumbers(allMatches);
-          triggerWin(appointedGrid, newDrawn);
+          triggerWin(appointedGrid, newDrawn, true);
           return;
         }
         // Virtual players no longer trigger loss — game continues
-      }
-
-      // Check server for game completion by another player on every draw for instant cross-device detection
-      if (!winInProgressRef.current && !opponentWinnerRef.current) {
-        void supabase.from('games').select('status, winner_id').eq('code', gameId).maybeSingle().then(({ data }) => {
-          if (data && data.status === 'finished' && data.winner_id && data.winner_id !== profile?.id) {
-            if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
-            setOpponentWinner(data.winner_id);
-          }
-        });
       }
 
       if (!isWatching) {
@@ -734,23 +721,41 @@ function HomePage() {
     if (!inGame || !gameId) return;
     const poll = setInterval(async () => {
       try {
-        const { data: g } = await supabase.from('games').select('id, prize_pool, status, winner_id, stake_id').eq('code', gameId).maybeSingle();
-        if (g) {
+        const { data: gamesData } = await supabase.from('games').select('id, prize_pool, status, winner_id, stake_id').eq('code', gameId);
+        const gamesList = gamesData || [];
+        if (gamesList.length > 0) {
+          const g = gamesList[0];
           const { count } = await supabase.from('game_players').select('*', { count: 'exact', head: true }).eq('game_id', g.id).eq('is_watching', false);
           if (count !== null && count !== liveCountRef.current) { liveCountRef.current = count; setLivePlayerCount(count); }
-          // Use total card reservations for accurate prize pool fallback (matching waiting-screen logic)
+          // Use same prize formula as waiting screen: fee * totalCards * (1 - commission/100)
           const { count: cardCount } = await supabase.from('game_card_reservations').select('*', { count: 'exact', head: true }).eq('game_code', gameId).gt('card_number', 0);
-          const totalCards = Math.max(cardCount || 0, count || 1, 1);
+          const totalCards = Math.max(cardCount || 0, selectedCardsRef.current.length || 1, 1);
           setPrizePool(Number(g.prize_pool) || (selectedRoomRef.current?.entry || 10) * totalCards * (1 - (commissionRateRef.current || 15) / 100));
-          if (g.status === 'finished' && g.winner_id && !opponentWinnerRef.current) {
-            if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
-            setOpponentWinner(g.winner_id === profile?.id ? null : 'Another player');
-          }
         }
       } catch {}
     }, 1000);
     return () => clearInterval(poll);
   }, [inGame, gameId, profile?.id]);
+
+  // ============ CROSS-DEVICE DETECTION POLL (uses service-role API for reliability) ============
+  useEffect(() => {
+    if (!inGame || !gameId || opponentWinner) return;
+    const poll = setInterval(async () => {
+      if (opponentWinnerRef.current) {
+        clearInterval(poll);
+        return;
+      }
+      try {
+        const res = await fetch(`/api/public/game/status?gameCode=${gameId}`);
+        const data = await res.json();
+        if (data.finished && data.winner_id && data.winner_id !== profile?.id) {
+          if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+          setOpponentWinner(data.winner_name || 'Opponent');
+        }
+      } catch {}
+    }, 1000);
+    return () => clearInterval(poll);
+  }, [inGame, gameId, opponentWinner, profile?.id]);
 
   // ============ GAME STATUS REALTIME (cross-device game-end detection) ============
   useEffect(() => {
@@ -761,11 +766,16 @@ function HomePage() {
     const channel = supabase.channel(`game-status-${gameId}`)
       .on('postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'games', filter: `code=eq.${gameId}` },
-        (payload) => {
+        async (payload) => {
           const record = payload.new as any;
           if (record.status === 'finished' && record.winner_id && record.winner_id !== profile?.id) {
             if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
-            setOpponentWinner('Another player');
+            try {
+              const { data: winnerProfile } = await supabase.from('profiles').select('first_name, username').eq('id', record.winner_id).maybeSingle();
+              setOpponentWinner(winnerProfile?.first_name || winnerProfile?.username || 'Another player');
+            } catch {
+              setOpponentWinner('Another player');
+            }
           }
         })
       .subscribe();
@@ -838,13 +848,14 @@ function HomePage() {
   }, [autoWin, inGame, isWatching, playerCards, drawnNumbers]);
 
   // ============ TRIGGER WIN (with re-entrancy guard) ============
-  const triggerWin = useCallback(async (card: number[][], drawn: number[]) => {
+  const triggerWin = useCallback(async (card: number[][], drawn: number[], isAppointed?: boolean) => {
     if (winInProgressRef.current) return;
     winInProgressRef.current = true;
     try {
       if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
       setWinningCard(card);
-      setWinningCells(getWinningCells(card, drawn));
+      // For appointed wins, mark all drawn numbers as winning cells (pattern may not exist yet)
+      setWinningCells(isAppointed ? card.map(row => row.map(n => n === 0 || drawn.includes(n))) : getWinningCells(card, drawn));
       setShowWinModal(true);
 
       if (profile?.id) {
@@ -852,20 +863,21 @@ function HomePage() {
           const res = await fetch('/api/public/game/engine', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'validate_win', gameId, userId: profile.id, drawnNumbers: drawn }),
+            body: JSON.stringify({ action: 'validate_win', gameId, userId: profile.id, drawnNumbers: drawn, isAppointed: !!isAppointed }),
           });
           const data = await res.json();
           if (data.success) {
             const cardCount = selectedCardsRef.current.length || 1;
             const totalUserStake = (selectedStake || 10) * cardCount;
-            const isProfit = data.winAmount > totalUserStake;
-            addGameToHistory(gameId, selectedStake || 10, isProfit ? 'win' : 'loss', data.winAmount);
+            // Store net profit (win minus stake) so history shows what was actually added to wallet
+            const netWin = data.winAmount - totalUserStake;
+            addGameToHistory(gameId, selectedStake || 10, netWin >= 0 ? 'win' : 'loss', netWin);
           } else if (data.error === 'Game already finished') {
             if (data.winner_id === profile.id) {
               addGameToHistory(gameId, selectedStake || 10, 'win');
             } else {
               setShowWinModal(false);
-              setOpponentWinner(data.winner_name || null);
+              setOpponentWinner(data.winner_name || 'Opponent');
               if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
             }
           }
@@ -1068,12 +1080,16 @@ function HomePage() {
     if (resultCountdown === null) return;
     if (resultCountdown <= 0) {
       if (showWinModal) setShowWinModal(false);
-      if (opponentWinner) setOpponentWinner(null);
+      if (opponentWinner) {
+        // Record loss before resetting state so addGameToHistory runs with opponentWinner still set
+        addGameToHistory(gameId, selectedStake || 10, 'loss');
+        setOpponentWinner(null);
+      }
       leaveGame(); return;
     }
     const timer = setTimeout(() => setResultCountdown(prev => (prev !== null ? prev - 1 : null)), 1000);
     return () => clearTimeout(timer);
-  }, [resultCountdown, showWinModal, opponentWinner, leaveGame]);
+  }, [resultCountdown, showWinModal, opponentWinner, leaveGame, addGameToHistory, gameId, selectedStake]);
 
   // ============ REFERRAL ============
   useEffect(() => {

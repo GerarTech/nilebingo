@@ -212,9 +212,6 @@ export default function GameView({
         livePlayerCount={livePlayerCount}
         commissionRate={commissionRate}
         prizePool={prizePool}
-        card={winningCard}
-        drawnNumbers={drawnNumbers}
-        winningCells={winningCells}
         cardNumber={selectedCards[0] || 0}
         playerName={profile?.first_name || profile?.username || 'You'}
         countdown={resultCountdown}
@@ -228,6 +225,7 @@ export default function GameView({
         stake={selectedStake}
         livePlayerCount={livePlayerCount}
         commissionRate={commissionRate}
+        prizePool={prizePool}
         gameCards={playerCards.length > 0 ? playerCards : (gameCard.length > 0 ? [gameCard] : [])}
         cardNumbers={selectedCards}
         drawnNumbers={drawnNumbers}

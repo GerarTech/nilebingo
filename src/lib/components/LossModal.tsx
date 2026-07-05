@@ -8,6 +8,7 @@ interface LossModalProps {
   stake: number;
   livePlayerCount: number;
   commissionRate: number;
+  prizePool: number;
   gameCards: number[][][];
   cardNumbers: number[];
   drawnNumbers: number[];
@@ -17,12 +18,12 @@ interface LossModalProps {
 }
 
 export default function LossModal({
-  show, opponentName, stake, livePlayerCount, commissionRate,
+  show, opponentName, stake, livePlayerCount, commissionRate, prizePool,
   gameCards, cardNumbers, drawnNumbers, countdown, onSkip, t,
 }: LossModalProps) {
   if (!show) return null;
 
-  const singlePrize = stake * livePlayerCount * (1 - commissionRate / 100);
+  const winAmount = prizePool || stake * livePlayerCount * (1 - commissionRate / 100);
 
   return (
     <div
@@ -55,7 +56,7 @@ export default function LossModal({
               <span>👑</span> {opponentName}
             </span>
             <span className="font-black text-amber-500 text-sm">
-              +{singlePrize.toLocaleString()} {t('birr')}
+              +{winAmount.toLocaleString()} {t('birr')}
             </span>
           </div>
           <div className="flex items-center justify-between bg-[#141f33]/80 border border-white/5 opacity-50 px-5 py-4 rounded-2xl shadow-lg">

@@ -1,6 +1,5 @@
 'use client';
 
-import BingoGrid from './BingoGrid';
 import type { ReactNode } from 'react';
 
 interface WinModalProps {
@@ -9,9 +8,6 @@ interface WinModalProps {
   livePlayerCount: number;
   commissionRate: number;
   prizePool: number;
-  card: number[][];
-  drawnNumbers: number[];
-  winningCells: boolean[][];
   cardNumber: number;
   playerName: string;
   countdown: number | null;
@@ -22,8 +18,7 @@ interface WinModalProps {
 
 export default function WinModal({
   show, stake, livePlayerCount, commissionRate, prizePool,
-  card, drawnNumbers, winningCells, cardNumber,
-  playerName, countdown, onSkip, children, t,
+  cardNumber, playerName, countdown, onSkip, children, t,
 }: WinModalProps) {
   if (!show) return null;
 
@@ -69,9 +64,10 @@ export default function WinModal({
           </div>
         </div>
 
-        {card.length > 0 && (
-          <div className="bg-[#141f33]/40 border border-[#233c66]/20 p-4 rounded-3xl shadow-xl">
-            <BingoGrid card={card} drawnNumbers={drawnNumbers} compact={true} />
+        {cardNumber > 0 && (
+          <div className="bg-[#141f33]/40 border border-[#233c66]/20 p-4 rounded-3xl shadow-xl text-center">
+            <div className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-1">Winning Card</div>
+            <div className="text-3xl font-black text-[#FEE800]">#{cardNumber}</div>
           </div>
         )}
       </div>

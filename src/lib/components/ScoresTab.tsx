@@ -19,11 +19,13 @@ interface ScoresTabProps {
   t: (key: string) => string;
 }
 
-export default function ScoresTab({ profile, wallet, dbLeaderboard, t }: ScoresTabProps) {
-  const userTotalEarnings = wallet?.main_balance ?? 0;
+export default function ScoresTab({ profile, dbLeaderboard, t }: ScoresTabProps) {
+  // Derive total wins from server leaderboard (sum of game_history.win_amount > 0)
+  const userEntry = dbLeaderboard.find(p => p.id === profile?.id);
+  const userTotalWins = userEntry?.earnings ?? 0;
 
   const activeDbLeaderboard = dbLeaderboard.length > 0 ? dbLeaderboard : [
-    { id: 'user', username: profile?.first_name || 'You', earnings: userTotalEarnings, avatar: profile?.photo_url || '👑', isUser: true },
+    { id: 'user', username: profile?.first_name || 'You', earnings: userTotalWins, avatar: profile?.photo_url || '👑', isUser: true },
   ];
 
   const listToUse = [...activeDbLeaderboard];
@@ -32,7 +34,7 @@ export default function ScoresTab({ profile, wallet, dbLeaderboard, t }: ScoresT
     listToUse.push({
       id: profile?.id || 'user',
       username: profile?.first_name || 'You',
-      earnings: Number(wallet?.main_balance) || 0,
+      earnings: userTotalWins,
       avatar: profile?.photo_url || '👑',
       isUser: true,
     });
@@ -61,7 +63,7 @@ export default function ScoresTab({ profile, wallet, dbLeaderboard, t }: ScoresT
               <span className="text-xs font-bold text-violet-200">Leaderboard</span>
             </div>
             <div className="text-[11px] text-yellow-300 font-semibold mt-0.5">
-              Balance: {userTotalEarnings.toLocaleString()} ETB
+              Total Wins: {userTotalWins.toLocaleString()} ETB
             </div>
           </div>
         </div>

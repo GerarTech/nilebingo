@@ -149,15 +149,33 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'gameId and userId are required' }, { status: 400 });
       }
 
+      const isAppointed = body.isAppointed === true;
+
       // Look up game by code (gameId from client is the code, not UUID)
-      const { data: gameByCode } = await supabase
+      // Query ALL games with this code to handle possible duplicate rows
+      const { data: allGamesByCode } = await supabase
         .from('games')
         .select('id, status, prize_pool, code, winner_id, stake_id')
-        .eq('code', gameId)
-        .maybeSingle();
+        .eq('code', gameId);
 
-      if (!gameByCode) {
+      if (!allGamesByCode || allGamesByCode.length === 0) {
         return NextResponse.json({ error: 'Game not found' }, { status: 404 });
+      }
+
+      let gameByCode = allGamesByCode[0];
+      if (allGamesByCode.length > 1) {
+        // Multiple game rows with same code — find the one this user belongs to
+        const gameIds = allGamesByCode.map(g => g.id);
+        const { data: userGame } = await supabase
+          .from('game_players')
+          .select('game_id')
+          .eq('user_id', userId)
+          .in('game_id', gameIds)
+          .maybeSingle();
+        if (userGame) {
+          const found = allGamesByCode.find(g => g.id === userGame.game_id);
+          if (found) gameByCode = found;
+        }
       }
 
       // Fetch commission: prefer games.commission (if column exists), fall back to bot_config
@@ -234,69 +252,72 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'No card found' }, { status: 400 });
       }
 
-      // Validate win: check if any row, column, or diagonal is fully marked
-      let hasWin = false;
+      // Skip pattern validation for appointed wins (admin override)
+      if (!isAppointed) {
+        // Validate win: check if any row, column, or diagonal is fully marked
+        let hasWin = false;
 
-      // Check rows
-      for (let row = 0; row < card.length; row++) {
-        let complete = true;
-        for (let col = 0; col < card[row].length; col++) {
-          const cell = card[row][col];
-          if (cell === 0) continue; // Free space
-          if (!drawnNumbers.includes(cell)) {
-            complete = false;
-            break;
-          }
-        }
-        if (complete) { hasWin = true; break; }
-      }
-
-      // Check columns
-      if (!hasWin) {
-        for (let col = 0; col < 5; col++) {
+        // Check rows
+        for (let row = 0; row < card.length; row++) {
           let complete = true;
-          for (let row = 0; row < card.length; row++) {
-            const cell = card[row]?.[col];
-            if (cell === 0) continue; // Free space
-            if (cell === undefined || !drawnNumbers.includes(cell)) {
+          for (let col = 0; col < card[row].length; col++) {
+            const cell = card[row][col];
+            if (cell === 0) continue;
+            if (!drawnNumbers.includes(cell)) {
               complete = false;
               break;
             }
           }
           if (complete) { hasWin = true; break; }
         }
-      }
 
-      // Check main diagonal (top-left to bottom-right)
-      if (!hasWin) {
-        let complete = true;
-        for (let i = 0; i < 5; i++) {
-          const cell = card[i]?.[i];
-          if (cell === 0) continue;
-          if (cell === undefined || !drawnNumbers.includes(cell)) {
-            complete = false;
-            break;
+        // Check columns
+        if (!hasWin) {
+          for (let col = 0; col < 5; col++) {
+            let complete = true;
+            for (let row = 0; row < card.length; row++) {
+              const cell = card[row]?.[col];
+              if (cell === 0) continue;
+              if (cell === undefined || !drawnNumbers.includes(cell)) {
+                complete = false;
+                break;
+              }
+            }
+            if (complete) { hasWin = true; break; }
           }
         }
-        if (complete) hasWin = true;
-      }
 
-      // Check anti diagonal (top-right to bottom-left)
-      if (!hasWin) {
-        let complete = true;
-        for (let i = 0; i < 5; i++) {
-          const cell = card[i]?.[4 - i];
-          if (cell === 0) continue;
-          if (cell === undefined || !drawnNumbers.includes(cell)) {
-            complete = false;
-            break;
+        // Check main diagonal (top-left to bottom-right)
+        if (!hasWin) {
+          let complete = true;
+          for (let i = 0; i < 5; i++) {
+            const cell = card[i]?.[i];
+            if (cell === 0) continue;
+            if (cell === undefined || !drawnNumbers.includes(cell)) {
+              complete = false;
+              break;
+            }
           }
+          if (complete) hasWin = true;
         }
-        if (complete) hasWin = true;
-      }
 
-      if (!hasWin) {
-        return NextResponse.json({ win: false, error: 'No winning pattern found' }, { status: 400 });
+        // Check anti diagonal (top-right to bottom-left)
+        if (!hasWin) {
+          let complete = true;
+          for (let i = 0; i < 5; i++) {
+            const cell = card[i]?.[4 - i];
+            if (cell === 0) continue;
+            if (cell === undefined || !drawnNumbers.includes(cell)) {
+              complete = false;
+              break;
+            }
+          }
+          if (complete) hasWin = true;
+        }
+
+        if (!hasWin) {
+          return NextResponse.json({ win: false, error: 'No winning pattern found' }, { status: 400 });
+        }
       }
 
       // Calculate win amount from base principles: stake × total cards × (1 − commission)
