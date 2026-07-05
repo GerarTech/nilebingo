@@ -176,17 +176,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (data.profile) {
           const profileData = data.profile as Profile;
           profileRef.current = profileData;
+          // Always fetch the latest wallet after init — don't rely solely on init response
+          let freshWallet = data.wallet as Wallet | null;
+          try {
+            const wr = await fetch(`/api/public/wallet?userId=${profileData.id}`);
+            const wd = await wr.json();
+            if (wd.wallet) freshWallet = wd.wallet as Wallet;
+          } catch {}
           setState(prev => ({
             ...prev,
             profile: profileData,
-            wallet: (data.wallet as Wallet | null) ?? prev.wallet,
+            wallet: freshWallet ?? prev.wallet,
             language: (profileData.language as Language) || 'en',
             loading: false,
             initialized: true,
           }));
-          if (!data.wallet) {
-            try { await refreshWallet(); } catch {}
-          }
           return;
         }
       } catch (err) {

@@ -88,6 +88,7 @@ function HomePage() {
   const realtimeChannelRef = useRef<any>(null);
   const [takenCards, setTakenCards] = useState<number[]>([]);
   const [lobbyPlayerCount, setLobbyPlayerCount] = useState<number>(0);
+  const winInProgressRef = useRef(false);
 
   const [selectedRoom, setSelectedRoom] = useState<RoomConfig | null>(null);
   const [commissionRate, setCommissionRate] = useState<number>(15);
@@ -561,6 +562,10 @@ function HomePage() {
     }
     setOtherPlayers(virtualCompetitors);
     setShowCardPicker(false); setInGame(true);
+    // Pre-set prize pool from local estimate so the display doesn't flash 0
+    const effComm = selectedRoom.commission ?? commissionRate;
+    const cardCount = Math.max(1, selectedCards.length || 1);
+    setPrizePool(prev => prev > 0 ? prev : entryFee * cardCount * (1 - effComm / 100));
 
     const sequence = getDeterministicDrawSequence(activeGameId, appointedCard?.cardNumber);
     setDeterministicSequence(sequence);
@@ -666,7 +671,7 @@ function HomePage() {
 
   // ============ DRAW INTERVAL ============
   useEffect(() => {
-    if (!inGame || opponentWinner || deterministicSequence.length === 0) {
+    if (!inGame || opponentWinner || showWinModal || deterministicSequence.length === 0) {
       if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
       return;
     }
@@ -685,7 +690,7 @@ function HomePage() {
       setDrawnNumbers(newDrawn);
       setRecentCalled(prev => [{ num, label: `${getColumnLabel(num)}-${num}` }, ...prev].slice(0, 10));
 
-      if (autoWin && !isWatching && playerCards.length > 0) {
+      if (autoWin && !isWatching && playerCards.length > 0 && !winInProgressRef.current) {
         const wonCard = playerCards.find(c => checkWin(c, newDrawn));
         if (wonCard) {
           if (autoWin && !autoMark) {
@@ -728,7 +733,7 @@ function HomePage() {
       }
     }, 2000);
     return () => { if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; } };
-  }, [inGame, opponentWinner, language, isWatching, gameId, selectedStake, addGameToHistory, playerCards, autoMark, autoWin, deterministicSequence, appointedCard]);
+  }, [inGame, opponentWinner, showWinModal, language, isWatching, gameId, selectedStake, addGameToHistory, playerCards, autoMark, autoWin, deterministicSequence, appointedCard]);
 
   // ============ REF SYNC ============
   useEffect(() => { drawnRef.current = drawnNumbers; }, [drawnNumbers]);
@@ -775,6 +780,36 @@ function HomePage() {
     return () => { if (reservationPollRef.current) { clearInterval(reservationPollRef.current); reservationPollRef.current = null; } };
   }, [selectedRoom?.id, gameId, inGame, refreshTakenCards]);
 
+  // ============ LOBBY HEARTBEAT (3s) ============
+  const heartbeatRef = useRef<NodeJS.Timeout | null>(null);
+  const lobbyCountRef = useRef(0);
+  useEffect(() => { lobbyCountRef.current = lobbyPlayerCount; }, [lobbyPlayerCount]);
+  useEffect(() => {
+    if (!selectedRoom || !gameId || inGame) {
+      if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null; }
+      return;
+    }
+    const beat = async () => {
+      try {
+        const res = await fetch(`/api/public/game/heartbeat?gameId=${gameId}`);
+        const data = await res.json();
+        if (!data.success) return;
+        if (data.lobbyPlayerCount !== undefined && data.lobbyPlayerCount > lobbyCountRef.current) {
+          setLobbyPlayerCount(data.lobbyPlayerCount);
+        }
+        if (data.reservedCardCount !== undefined) {
+          setReservedCardCount(prev => Math.max(prev, data.reservedCardCount));
+        }
+        if (data.prizePool !== undefined && data.prizePool > 0) {
+          setPrizePool(data.prizePool);
+        }
+      } catch {}
+    };
+    beat();
+    heartbeatRef.current = setInterval(beat, 3000);
+    return () => { if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null; } };
+  }, [selectedRoom?.id, gameId, inGame]);
+
   // ============ AUTO-MARK ============
   useEffect(() => {
     if (autoMark && inGame && playerCards.length > 0) {
@@ -786,6 +821,7 @@ function HomePage() {
 
   // ============ AUTO-WIN ============
   useEffect(() => {
+    if (winInProgressRef.current) return;
     if (autoWin && inGame && !isWatching && playerCards.length > 0) {
       const wonCard = playerCards.find(c => checkWin(c, drawnNumbers));
       if (wonCard) {
@@ -797,38 +833,40 @@ function HomePage() {
     }
   }, [autoWin, inGame, isWatching, playerCards, drawnNumbers]);
 
-  // ============ TRIGGER WIN ============
+  // ============ TRIGGER WIN (with re-entrancy guard) ============
   const triggerWin = useCallback(async (card: number[][], drawn: number[]) => {
-    if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
-    setWinningCard(card);
-    setWinningCells(getWinningCells(card, drawn));
-    setShowWinModal(true);
+    if (winInProgressRef.current) return;
+    winInProgressRef.current = true;
+    try {
+      if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+      setWinningCard(card);
+      setWinningCells(getWinningCells(card, drawn));
+      setShowWinModal(true);
 
-    if (profile?.id) {
-      try {
-        const res = await fetch('/api/public/game/engine', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'validate_win', gameId, userId: profile.id, drawnNumbers: drawn }),
-        });
-        const data = await res.json();
-        if (data.success) {
-          addGameToHistory(gameId, selectedStake || 10, 'win');
-          await refreshWallet();
-        } else if (data.error === 'Game already finished') {
-          if (data.winner_id === profile.id) {
+      if (profile?.id) {
+        try {
+          const res = await fetch('/api/public/game/engine', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'validate_win', gameId, userId: profile.id, drawnNumbers: drawn }),
+          });
+          const data = await res.json();
+          if (data.success) {
             addGameToHistory(gameId, selectedStake || 10, 'win');
-            await refreshWallet();
-          } else {
-            setShowWinModal(false);
-            setOpponentWinner(data.winner_name || null);
-            if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
-            await refreshWallet();
+          } else if (data.error === 'Game already finished') {
+            if (data.winner_id === profile.id) {
+              addGameToHistory(gameId, selectedStake || 10, 'win');
+            } else {
+              setShowWinModal(false);
+              setOpponentWinner(data.winner_name || null);
+              if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+            }
           }
-        } else {
-          await refreshWallet();
-        }
-      } catch {}
+        } catch {}
+        await refreshWallet();
+      }
+    } finally {
+      winInProgressRef.current = false;
     }
   }, [gameId, selectedStake, addGameToHistory, refreshWallet, profile?.id]);
 
@@ -877,11 +915,17 @@ function HomePage() {
     setIsRegistered(true);
     setReservedCardCount(Math.max(selectedCards.length, reservedCardCount));
     const playBal = wallet?.play_balance || 0;
-    if (playBal >= stakeAmount) {
-      await updateBalance(-stakeAmount, 'play_balance');
-    } else {
-      await updateBalance(-playBal, 'play_balance');
-      await updateBalance(-(stakeAmount - playBal), 'main_balance');
+    try {
+      if (playBal >= stakeAmount) {
+        await updateBalance(-stakeAmount, 'play_balance');
+      } else {
+        if (playBal > 0) await updateBalance(-playBal, 'play_balance');
+        await updateBalance(-(stakeAmount - playBal), 'main_balance');
+      }
+    } catch (e) {
+      console.warn('Balance deduction failed, reverting registration:', e);
+      setIsRegistered(false);
+      return;
     }
     await refreshWallet();
   }, [selectedCards, selectedRoom, wallet, updateBalance, refreshWallet]);

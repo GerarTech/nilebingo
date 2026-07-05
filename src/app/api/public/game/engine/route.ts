@@ -302,7 +302,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ win: false, error: 'No winning pattern found' }, { status: 400 });
       }
 
-      // Calculate win amount server-side using actual cards × stake × (1 - commission)
+      // Calculate win amount server-side using prize_pool from the game record
       let winAmount = Number(gameByCode.prize_pool) || 0;
       if (winAmount <= 0) {
         const { data: stakeRow } = await supabase
@@ -316,12 +316,22 @@ export async function POST(request: NextRequest) {
           .select('id')
           .eq('game_code', gameByCode.code)
           .gt('card_number', 0);
-        const cardCount = Math.max(cardCountData?.length || 1, 1);
-        winAmount = perCardStake * cardCount * (1 - (effectiveCommission ?? 15) / 100);
+        // Only count the winning user's own cards to avoid over-crediting
+        const { data: myCards } = await supabase
+          .from('game_card_reservations')
+          .select('id')
+          .eq('game_code', gameByCode.code)
+          .eq('user_id', userId)
+          .gt('card_number', 0);
+        const myCardCount = Math.max(myCards?.length || 0, 1);
+        const totalCardCount = Math.max(cardCountData?.length || 1, 1);
+        // Prize should be based on total pool, not just user's cards
+        winAmount = perCardStake * totalCardCount * (1 - (effectiveCommission ?? 15) / 100);
       }
 
       const { data: profile } = await supabase.from('profiles').select('telegram_id, first_name').eq('id', userId).single();
 
+      console.log(`[validate_win] Crediting ${winAmount} to user ${userId} for game ${gameId}`);
       const newMain = await supabase.rpc('adjust_main_balance', { p_user_id: userId, p_amount: winAmount });
       if (newMain.error) {
         console.error('adjust_main_balance error:', newMain.error);
