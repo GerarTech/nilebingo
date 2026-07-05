@@ -260,11 +260,38 @@ function HomePage() {
   // ============ LEADERBOARD FETCH ============
   useEffect(() => {
     if (activeTab === 'scores') {
-      fetch('/api/public/leaderboard').then(r => r.json()).then(data => {
+      const params = profile?.id ? `?userId=${profile.id}` : '';
+      fetch(`/api/public/leaderboard${params}`).then(r => r.json()).then(data => {
         if (data && Array.isArray(data.leaderboard)) setDbLeaderboard(data.leaderboard);
       }).catch(() => {});
     }
-  }, [activeTab]);
+  }, [activeTab, profile?.id]);
+
+  // ============ GAME HISTORY FETCH ============
+  useEffect(() => {
+    if ((activeTab === 'profile' || activeTab === 'history') && profile?.id && isValidUUID(profile.id)) {
+      fetch(`/api/public/history?userId=${profile.id}`).then(r => r.json()).then(data => {
+        if (data && Array.isArray(data.history) && data.history.length > 0) {
+          setStakeHistory(prev => {
+            const serverEntries = data.history.map((h: any) => ({
+              gameId: h.gameCode,
+              stake: h.stake,
+              result: h.result,
+              prize: h.winAmount,
+              timestamp: h.createdAt,
+            }));
+            const merged = [...serverEntries];
+            for (const s of prev) {
+              if (!merged.some(m => m.gameId === s.gameId && m.result === s.result)) {
+                merged.push(s);
+              }
+            }
+            return merged.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 50);
+          });
+        }
+      }).catch(() => {});
+    }
+  }, [activeTab, profile?.id]);
 
   // ============ REALTIME RESERVATIONS ============
   const refreshGameState = useCallback(async (gId: string) => {
@@ -769,19 +796,15 @@ function HomePage() {
     const stakeAmount = fee * selectedCards.length;
     const totalBal = (wallet?.main_balance || 0) + (wallet?.play_balance || 0);
     if (totalBal < stakeAmount) return;
+    setIsRegistered(true);
     const playBal = wallet?.play_balance || 0;
-    // Deduct from play balance first, then main balance if needed
-    // Both wallets can be used together to cover the stake
     if (playBal >= stakeAmount) {
       await updateBalance(-stakeAmount, 'play_balance');
     } else {
-      // Use all play balance first, then remainder from main balance
       await updateBalance(-playBal, 'play_balance');
       await updateBalance(-(stakeAmount - playBal), 'main_balance');
     }
-    // Refresh wallet from server to ensure accurate balance after both deductions
     await refreshWallet();
-    setIsRegistered(true);
   }, [selectedCards, selectedRoom, wallet, updateBalance, refreshWallet]);
 
   const unregisterLobby = useCallback(async () => {

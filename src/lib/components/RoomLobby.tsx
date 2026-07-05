@@ -46,8 +46,8 @@ export default function RoomLobby({
   const isBalanceEligible = selectedCards.length > 0 && totalBalance >= fee * selectedCards.length;
 
   if (isRegistered) {
-    const totalLivePlayers = Math.max(lobbyPlayerCount, room.players);
-    const prizePool = fee * totalLivePlayers * (1 - commissionRate / 100);
+    const totalCards = Math.max(lobbyPlayerCount, room.players) - 1 + (selectedCards.length || 1);
+    const prizePool = fee * totalCards * (1 - commissionRate / 100);
 
     return (
       <div className="px-4 pt-4 animate-fade-in pb-24 font-sans bg-[#0c1322] min-h-screen text-white">
@@ -183,7 +183,7 @@ export default function RoomLobby({
       </div>
 
       {selectedCards.length > 0 && (
-        <div className="mb-4 bg-[#142036]/60 border border-[#233c66]/40 rounded-2xl p-3 animate-fade-in shadow-xl">
+        <div className="mb-4 bg-[#142036]/60 border border-[#233c66]/40 rounded-2xl p-3 shadow-xl">
           <div className="text-[10px] text-amber-400 font-extrabold uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
             <span>👁</span> Card Preview
           </div>
@@ -216,7 +216,7 @@ export default function RoomLobby({
         <div className="flex gap-2.5">
           {selectedCards.length > 0 && isBalanceEligible ? (
             <button onClick={onPlay}
-              className="flex-1 bg-gradient-to-r from-[#FEE800] to-amber-500 text-navy font-black py-3.5 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-gold/20 hover:scale-[1.01] active:scale-[0.99] transition-all uppercase tracking-widest animate-pulse cursor-pointer">
+              className="flex-1 bg-gradient-to-r from-[#FEE800] to-amber-500 text-navy font-black py-3.5 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-gold/20 hover:scale-[1.01] active:scale-[0.99] transition-all uppercase tracking-widest cursor-pointer">
               <Play size={10} fill="currentColor" /> Play {selectedCards.length} Cards ({Number(fee * selectedCards.length).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {t('birr')})
             </button>
           ) : (

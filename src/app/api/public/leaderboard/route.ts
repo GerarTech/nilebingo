@@ -7,45 +7,44 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 export async function GET(request: NextRequest) {
   try {
-    // Fetch profiles
-    const { data: profiles, error: pError } = await supabase
-      .from('profiles')
-      .select('id, username, first_name, photo_url');
+    const { searchParams } = new URL(request.url);
+    const currentUserId = searchParams.get('userId') || '';
 
-    if (pError) throw pError;
+    const { data: wins } = await supabase
+      .from('game_history')
+      .select('user_id, win_amount')
+      .gt('win_amount', 0);
 
-    if (!profiles || profiles.length === 0) {
+    if (!wins || wins.length === 0) {
       return NextResponse.json({ leaderboard: [] });
     }
 
-    // Fetch wallets for those profiles
-    const { data: wallets, error: wError } = await supabase
-      .from('wallets')
-      .select('user_id, main_balance, play_balance');
+    const aggregator: Record<string, number> = {};
+    for (const w of wins) {
+      aggregator[w.user_id] = (aggregator[w.user_id] || 0) + Number(w.win_amount);
+    }
 
-    if (wError) throw wError;
+    const userIds = Object.keys(aggregator);
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, username, first_name, photo_url')
+      .in('id', userIds);
 
-    // Map and calculate total balance
-    const mapped = profiles.map(profile => {
-      const wallet = wallets?.find(w => w.user_id === profile.id);
-      const mainBal = wallet ? Number(wallet.main_balance) || 0 : 0;
-      const playBal = wallet ? Number(wallet.play_balance) || 0 : 0;
-      return {
-        id: profile.id,
-        username: profile.first_name || (profile.username ? `@${profile.username}` : 'Anonymous'),
-        earnings: mainBal, // We'll count main_balance as their earnings/funds
-        avatar: profile.photo_url || '👤',
-        isUser: false
-      };
-    });
+    const profileMap = new Map(profiles?.map((p: any) => [p.id, p]) || []);
 
-    // Sort by earnings descending
-    const sorted = mapped.sort((a, b) => b.earnings - a.earnings);
+    const entries = userIds
+      .map(id => ({
+        id,
+        username: profileMap.get(id)?.first_name || profileMap.get(id)?.username || 'Anonymous',
+        earnings: aggregator[id],
+        avatar: profileMap.get(id)?.photo_url || '👤',
+        isUser: id === currentUserId,
+      }))
+      .sort((a, b) => b.earnings - a.earnings)
+      .slice(0, 50);
 
-    return NextResponse.json({ leaderboard: sorted }, {
-      headers: {
-        'Cache-Control': 'no-store, max-age=0'
-      }
+    return NextResponse.json({ leaderboard: entries }, {
+      headers: { 'Cache-Control': 'no-store, max-age=0' },
     });
   } catch (error) {
     console.error('Error fetching leaderboard:', error);

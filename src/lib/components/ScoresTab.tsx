@@ -26,9 +26,9 @@ export default function ScoresTab({ profile, wallet, dbLeaderboard, t }: ScoresT
     { id: 'user', username: profile?.first_name || 'You', earnings: userTotalEarnings, avatar: profile?.photo_url || '👑', isUser: true },
   ];
 
-  const hasUser = activeDbLeaderboard.some(p => p.id === profile?.id || p.isUser);
   const listToUse = [...activeDbLeaderboard];
-  if (!hasUser) {
+  const userIdx = listToUse.findIndex(p => p.id === profile?.id || p.id === 'user');
+  if (userIdx === -1) {
     listToUse.push({
       id: profile?.id || 'user',
       username: profile?.first_name || 'You',
@@ -37,14 +37,9 @@ export default function ScoresTab({ profile, wallet, dbLeaderboard, t }: ScoresT
       isUser: true,
     });
   } else {
-    for (let i = 0; i < listToUse.length; i++) {
-      if (listToUse[i].id === profile?.id || listToUse[i].id === 'user') {
-        listToUse[i].isUser = true;
-        listToUse[i].username = profile?.first_name || 'You';
-        listToUse[i].earnings = Number(wallet?.main_balance) || 0;
-        listToUse[i].avatar = profile?.photo_url || '👑';
-      }
-    }
+    listToUse[userIdx].isUser = true;
+    listToUse[userIdx].username = profile?.first_name || 'You';
+    listToUse[userIdx].avatar = profile?.photo_url || '👑';
   }
 
   const sortedList = listToUse.sort((a, b) => b.earnings - a.earnings);
