@@ -168,7 +168,7 @@ export default function RoomLobby({
             const isSelected = selectedCards.includes(num);
             const isTaken = takenCards.includes(num);
             return (
-              <button key={num} onClick={() => { if (!isTaken) onToggleCard(num); }} disabled={isTaken}
+              <button key={num} onClick={() => { if (!isTaken) onToggleCard(num); }} disabled={isTaken || isRegistered}
                 className={`aspect-square w-full rounded-lg sm:rounded-xl flex items-center justify-center text-[10px] sm:text-[11.5px] font-black transition-all border select-none ${
                   isSelected
                     ? 'bg-gradient-to-b from-[#ff5a00] to-[#e04f00] border-[#ff7a22]/30 border-b-[3.5px] border-b-[#9e3800] text-white shadow-lg shadow-[#ff5a00]/25 font-black scale-[1.04] z-10'
