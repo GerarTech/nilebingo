@@ -320,20 +320,47 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Calculate win amount from base principles: stake × total cards × (1 − commission)
+      // Look up the per-card stake from the stakes table
       const { data: stakeRow } = await supabase
         .from('stakes')
         .select('amount')
         .eq('id', gameByCode.stake_id)
         .maybeSingle();
       const perCardStake = Number(stakeRow?.amount) || 10;
+
+      // Count actual card reservations (positive card numbers = player-chosen cards)
       const { data: cardCountData } = await supabase
         .from('game_card_reservations')
         .select('id')
         .eq('game_code', gameByCode.code)
         .gt('card_number', 0);
       const totalCardCount = Math.max(cardCountData?.length || 1, 1);
-      const winAmount = perCardStake * totalCardCount * (1 - (effectiveCommission ?? 15) / 100);
+      const totalBet = perCardStake * totalCardCount;
+
+      // Update prize pool via the same RPC used everywhere (authoritative prize calculation)
+      try {
+        await supabase.rpc('update_game_prize_pool', {
+          p_game_code: gameByCode.code,
+          p_stake_amt: perCardStake,
+          p_commission: effectiveCommission ?? 15,
+        });
+      } catch {
+        // Old RPC version only accepts 2 args (no p_commission), try that
+        try {
+          await supabase.rpc('update_game_prize_pool', {
+            p_game_code: gameByCode.code,
+            p_stake_amt: perCardStake,
+          });
+        } catch {}
+      }
+
+      // Read the authoritative prize pool from the games table
+      const { data: freshGame } = await supabase
+        .from('games')
+        .select('prize_pool')
+        .eq('id', gameByCode.id)
+        .maybeSingle();
+      const winAmount = Number(freshGame?.prize_pool) || (totalBet * (1 - (effectiveCommission ?? 15) / 100));
 
       const { data: profile } = await supabase.from('profiles').select('telegram_id, first_name').eq('id', userId).single();
 
@@ -352,7 +379,6 @@ export async function POST(request: NextRequest) {
         reference: `WIN-${gameId}`,
       });
 
-      const totalStake = perCardStake * totalCardCount;
       const { data: existingHistory } = await supabase
         .from('game_history')
         .select('id')
@@ -362,7 +388,7 @@ export async function POST(request: NextRequest) {
       const historyPayload = {
         game_id: gameByCode.id,
         user_id: userId,
-        stake: totalStake,
+        stake: totalBet,
         win_amount: winAmount,
         numbers_matched: drawnNumbers.filter((n: number) => n > 0).length,
       };
@@ -371,15 +397,6 @@ export async function POST(request: NextRequest) {
       } else {
         await supabase.from('game_history').insert(historyPayload);
       }
-
-      // Update prize pool to final value BEFORE marking game finished (so downstream readers see correct value)
-      try {
-        await supabase.rpc('update_game_prize_pool', {
-          p_game_code: gameByCode.code,
-          p_stake_amt: perCardStake,
-          p_commission: effectiveCommission ?? 15,
-        });
-      } catch {} // Non-fatal if RPC fails
 
       // Mark game as finished with winner
       await supabase.from('games').update({ status: 'finished', winner_id: userId }).eq('id', gameByCode.id);
@@ -423,12 +440,6 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Game not found' }, { status: 404 });
       }
 
-      if (game.status !== 'finished') {
-        await supabase.from('games').update({ status: 'finished' }).eq('id', game.id);
-      }
-
-      await supabase.from('game_card_reservations').delete().eq('game_code', game.code);
-
       const { data: gamePlayer } = await supabase
         .from('game_players')
         .select('*')
@@ -454,6 +465,7 @@ export async function POST(request: NextRequest) {
         .eq('id', game.stake_id)
         .maybeSingle();
       const perCardStake = Number(stakeRow?.amount) || 10;
+      // Count user's own cards BEFORE deleting reservations
       const { data: myCards } = await supabase
         .from('game_card_reservations')
         .select('id')
@@ -462,6 +474,12 @@ export async function POST(request: NextRequest) {
         .gt('card_number', 0);
       const myCardCount = Math.max(myCards?.length || 0, 1);
       const totalStake = perCardStake * myCardCount;
+
+      if (game.status !== 'finished') {
+        await supabase.from('games').update({ status: 'finished' }).eq('id', game.id);
+      }
+
+      await supabase.from('game_card_reservations').delete().eq('game_code', game.code);
 
       const existingHistory = await supabase
         .from('game_history')

@@ -237,12 +237,12 @@ function HomePage() {
     return remaining <= 0 ? period : remaining;
   }, []);
 
-  const addGameToHistory = useCallback((gId: string, stakeAmt: number, outcome: 'win' | 'loss', actualPrizeAmount?: number) => {
+  const addGameToHistory = useCallback((gId: string, totalStakeAmt: number, outcome: 'win' | 'loss', actualPrizeAmount?: number) => {
     if (isWatching || !gId) return;
 
-    const stakePerCard = Number(stakeAmt || selectedStake || selectedRoom?.entry || 10);
+    const totalStake = Number(totalStakeAmt || selectedStake || (selectedRoom?.entry || 10) * Math.max(1, selectedCardsRef.current.length || playerCards.length || 1));
     const cardCount = Math.max(1, selectedCardsRef.current.length || playerCards.length || 1);
-    const totalStake = stakePerCard * cardCount;
+    const stakePerCard = totalStake / cardCount;
     const actualPrize = actualPrizeAmount !== undefined
       ? actualPrizeAmount
       : outcome === 'win'
@@ -270,11 +270,6 @@ function HomePage() {
           drawnNumbers: drawnRef.current || [],
           roomName: selectedRoom?.name || 'Quick Lobby',
         })
-      }).catch(() => {});
-
-      fetch('/api/public/games/update-prize', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: gId, stakeAmount: stakePerCard })
       }).catch(() => {});
     }
   }, [isWatching, profile?.id, selectedRoom, selectedStake, commissionRate]);
@@ -868,13 +863,14 @@ function HomePage() {
           const data = await res.json();
           if (data.success) {
             const cardCount = selectedCardsRef.current.length || 1;
-            const totalUserStake = (selectedStake || 10) * cardCount;
+            const totalUserStake = selectedStake || (selectedRoom?.entry || 10) * cardCount;
             // Store net profit (win minus stake) so history shows what was actually added to wallet
             const netWin = data.winAmount - totalUserStake;
-            addGameToHistory(gameId, selectedStake || 10, netWin >= 0 ? 'win' : 'loss', netWin);
+            addGameToHistory(gameId, totalUserStake, netWin >= 0 ? 'win' : 'loss', netWin);
           } else if (data.error === 'Game already finished') {
             if (data.winner_id === profile.id) {
-              addGameToHistory(gameId, selectedStake || 10, 'win');
+              const cc = selectedCardsRef.current.length || 1;
+              addGameToHistory(gameId, selectedStake || (selectedRoom?.entry || 10) * cc, 'win');
             } else {
               setShowWinModal(false);
               setOpponentWinner(data.winner_name || 'Opponent');
