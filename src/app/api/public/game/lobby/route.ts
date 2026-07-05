@@ -95,12 +95,14 @@ export async function GET(request: NextRequest) {
       const currentSec = Math.floor(Date.now() / 1000);
       const cycle = Math.floor(currentSec / period);
       const sharedGameId = generateDeterministicGameId(roomId, cycle);
+      const remaining = period - (currentSec % period) || period;
       return NextResponse.json({
         success: true,
         gameId: sharedGameId,
         roomId,
         cycle,
         period,
+        countdown: remaining,
         serverTime: new Date().toISOString(),
       });
     }

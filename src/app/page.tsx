@@ -73,9 +73,12 @@ function HomePage() {
   const [showRules, setShowRules] = useState(false);
   const [cardPickerCountdown, setCardPickerCountdown] = useState(50);
   const [livePlayerCount, setLivePlayerCount] = useState(1);
+  const [reservedCardCount, setReservedCardCount] = useState(0);
   const [prizePool, setPrizePool] = useState(0);
   const [gameId, setGameId] = useState('');
   const [previewCard, setPreviewCard] = useState<number[][]>([]);
+  const [serverTimeOffset, setServerTimeOffset] = useState<number | null>(null);
+  const serverTimeOffsetRef = useRef<number | null>(null);
   const [showWinModal, setShowWinModal] = useState(false);
   const [resultCountdown, setResultCountdown] = useState<number | null>(null);
   const [winningCard, setWinningCard] = useState<number[][]>([]);
@@ -200,13 +203,29 @@ function HomePage() {
       if (profile?.id) query.set('userId', profile.id);
       const res = await fetch(`/api/public/game/lobby?${query.toString()}`);
       const data = await res.json();
-      if (data?.success && data.gameId) return data.gameId as string;
+      if (data?.success && data.gameId) {
+        if (data.serverTime) {
+          const serverMs = new Date(data.serverTime).getTime();
+          const offset = serverMs - Date.now();
+          setServerTimeOffset(offset);
+          serverTimeOffsetRef.current = offset;
+        }
+        return data.gameId as string;
+      }
     } catch {}
     const currentSec = Math.floor(Date.now() / 1000);
     const period = getRoomPeriod(roomId);
     const cycle = Math.floor(currentSec / period);
     return generateDeterministicGameId(roomId, cycle);
   }, [profile?.id]);
+
+  const getRoomCountdown = useCallback((period: number) => {
+    const offset = serverTimeOffsetRef.current ?? 0;
+    const now = Date.now() + offset;
+    const currentSec = Math.floor(now / 1000);
+    const remaining = period - (currentSec % period);
+    return remaining <= 0 ? period : remaining;
+  }, []);
 
   const addGameToHistory = useCallback((gId: string, stakeAmt: number, outcome: 'win' | 'loss') => {
     if (isWatching || !gId) return;
@@ -336,7 +355,9 @@ function HomePage() {
         setTakenCards(otherCards.filter((n: number) => n > 0));
 
         const uniqueUserIds = new Set(reservations.map((r: any) => r.user_id));
+        const reservedCount = reservations.filter((r: any) => Number(r.card_number) > 0).length;
         setLobbyPlayerCount(Math.max(uniqueUserIds.size, data.livePlayerCount || 0));
+        setReservedCardCount(Math.max(reservedCount, selectedCards.length));
 
         const myRes = reservations.filter((r: any) => r.user_id === profile.id).map((r: any) => r.card_number);
         const activeMyRes = myRes.filter((n: number) => n > 0);
@@ -346,7 +367,7 @@ function HomePage() {
     } catch (e) {
       console.error('Failed to refresh game state:', e);
     }
-  }, [profile?.id]);
+  }, [profile?.id, selectedCards]);
 
   useEffect(() => { if (!selectedRoom || !gameId || inGame) return; refreshGameState(gameId); }, [selectedRoom?.id, gameId, inGame, refreshGameState]);
 
@@ -361,14 +382,16 @@ function HomePage() {
       if (data.success) {
         const reservations = data.reservations || [];
         const otherCards = reservations.filter((r: any) => r.user_id !== profile.id).map((r: any) => r.card_number);
+        const reservedCount = reservations.filter((r: any) => Number(r.card_number) > 0).length;
         setTakenCards(otherCards.filter((n: number) => n > 0));
         const uniqueUserIds = new Set(reservations.map((r: any) => r.user_id));
         setLobbyPlayerCount(Math.max(uniqueUserIds.size, data.livePlayerCount || 0));
+        setReservedCardCount(Math.max(reservedCount, selectedCards.length));
       }
     } catch (e) {
       // Silent fail for polling
     }
-  }, [profile?.id]);
+  }, [profile?.id, selectedCards]);
 
   useEffect(() => {
     if (!selectedRoom || !gameId || inGame) return;
@@ -491,8 +514,10 @@ function HomePage() {
         const reservations = data.reservations || [];
         // Only update server-side data that can't be determined optimistically
         const otherCards = reservations.filter((r: any) => r.user_id !== uid).map((r: any) => r.card_number);
+        const reservedCount = reservations.filter((r: any) => Number(r.card_number) > 0).length;
         setTakenCards(otherCards.filter((n: number) => n > 0));
         setLobbyPlayerCount(new Set(reservations.map((r: any) => r.user_id)).size);
+        setReservedCardCount(Math.max(reservedCount, nextSelected.filter(n => n > 0).length));
       }
     } catch (e) {
       console.error('Error toggling card:', e);
@@ -579,7 +604,6 @@ function HomePage() {
   // ============ ROOM COUNTDOWN TICK ============
   useEffect(() => {
     const tick = setInterval(() => {
-      const currentSec = Math.floor(Date.now() / 1000);
       const sr = selectedRoomRef.current;
       const ig = inGameRef.current;
       const ir = isRegisteredRef.current;
@@ -588,9 +612,8 @@ function HomePage() {
       const cr = commissionRateRef.current;
       setRooms(prevRooms => prevRooms.map(r => {
         const period = getRoomPeriod(r.id);
-        const elapsed = currentSec % period;
-        const remaining = period - elapsed;
-        if (remaining === period && sr && sr.id === r.id && !ig) {
+        const remaining = getRoomCountdown(period);
+        if (remaining <= 1 && sr && sr.id === r.id && !ig) {
           if (ir) sg(false);
           else if (isr) sg(true);
         }
@@ -598,8 +621,7 @@ function HomePage() {
         return { ...r, status: 'starting_soon' as const, countdown: remaining, winAmount: (r.entry * r.players) * (1 - roomComm / 100) };
       }));
       // Update game ID every tick based on the current cycle so the lobby always
-      // shows the correct game ID for the upcoming round (not just at the 1-second
-      // boundary which is easily missed).
+      // shows the correct game ID for the upcoming round.
       if (sr && !ig && !ir) {
         void (async () => {
           const serverGameId = await getCurrentLobbyGameId(sr.id);
@@ -610,6 +632,7 @@ function HomePage() {
                 setPreviewCard([]);
                 setTakenCards([]);
                 setLobbyPlayerCount(0);
+                setReservedCardCount(0);
                 setIsRegistered(false);
                 setIsSpectatingReady(false);
                 return serverGameId;
@@ -619,6 +642,7 @@ function HomePage() {
             return;
           }
           const period = getRoomPeriod(sr.id);
+          const currentSec = Math.floor((Date.now() + (serverTimeOffsetRef.current ?? 0)) / 1000);
           const newCycle = Math.floor(currentSec / period);
           const newGameId = generateDeterministicGameId(sr.id, newCycle);
           setGameId(prevId => {
@@ -627,6 +651,7 @@ function HomePage() {
               setPreviewCard([]);
               setTakenCards([]);
               setLobbyPlayerCount(0);
+              setReservedCardCount(0);
               setIsRegistered(false);
               setIsSpectatingReady(false);
               return newGameId;
@@ -637,7 +662,7 @@ function HomePage() {
       }
     }, 1000);
     return () => clearInterval(tick);
-  }, [inGame, selectedRoom, getCurrentLobbyGameId]);
+  }, [inGame, selectedRoom, getCurrentLobbyGameId, getRoomCountdown]);
 
   // ============ DRAW INTERVAL ============
   useEffect(() => {
@@ -820,6 +845,7 @@ function HomePage() {
     setPreviewCard([]);
     setTakenCards([]);
     setLobbyPlayerCount(0);
+    setReservedCardCount(0);
     setIsRegistered(false);
     setIsSpectatingReady(false);
     setGameId(currentGameId);
@@ -849,6 +875,7 @@ function HomePage() {
     const totalBal = (wallet?.main_balance || 0) + (wallet?.play_balance || 0);
     if (totalBal < stakeAmount) return;
     setIsRegistered(true);
+    setReservedCardCount(Math.max(selectedCards.length, reservedCardCount));
     const playBal = wallet?.play_balance || 0;
     if (playBal >= stakeAmount) {
       await updateBalance(-stakeAmount, 'play_balance');
@@ -1049,14 +1076,14 @@ function HomePage() {
         <RoomLobby
           room={roomTick} gameId={gameId}
           selectedCards={selectedCards} takenCards={takenCards}
-          lobbyPlayerCount={lobbyPlayerCount} previewCard={previewCard}
+          lobbyPlayerCount={lobbyPlayerCount} reservedCardCount={reservedCardCount} previewCard={previewCard}
           isRegistered={isRegistered} walletBalance={(wallet?.main_balance || 0) + (wallet?.play_balance || 0)}
           wallet={wallet} t={t}
           onBack={() => { setSelectedRoom(null); setSelectedCards([]); setPreviewCard([]); }}
           onToggleCard={toggleCard}
           onPlay={playWithCard}
           onUnregister={unregisterLobby}
-          onDeposit={() => { setSelectedCards([]); setPreviewCard([]); setSelectedRoom(null); setWalletView('deposit'); setActiveTab('wallet'); }}
+          onDeposit={() => { setSelectedCards([]); setPreviewCard([]); setSelectedRoom(null); setReservedCardCount(0); setWalletView('deposit'); setActiveTab('wallet'); }}
           commissionRate={selectedRoom.commission ?? commissionRate}
         />
       );

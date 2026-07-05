@@ -253,6 +253,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => { clearInterval(interval); document.removeEventListener('visibilitychange', onVisibility); };
   }, [state.initialized, state.profile?.id]);
 
+  useEffect(() => {
+    if (!state.initialized || !state.profile || state.wallet) return;
+    refreshWallet().catch(() => {});
+  }, [state.initialized, state.profile, state.wallet, refreshWallet]);
+
   const setCurrentGame = useCallback((gameId: string | null) => {
     setState(prev => ({ ...prev, currentGameId: gameId }));
   }, []);

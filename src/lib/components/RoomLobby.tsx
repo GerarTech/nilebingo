@@ -21,6 +21,7 @@ interface RoomLobbyProps {
   selectedCards: number[];
   takenCards: number[];
   lobbyPlayerCount: number;
+  reservedCardCount: number;
   previewCard: number[][];
   isRegistered: boolean;
   walletBalance: number;
@@ -35,7 +36,7 @@ interface RoomLobbyProps {
 }
 
 export default function RoomLobby({
-  room, gameId, selectedCards, takenCards, lobbyPlayerCount,
+  room, gameId, selectedCards, takenCards, lobbyPlayerCount, reservedCardCount,
   previewCard, isRegistered, walletBalance, wallet, t,
   onBack, onToggleCard, onPlay, onUnregister, onDeposit,
   commissionRate,
@@ -46,7 +47,7 @@ export default function RoomLobby({
   const isBalanceEligible = selectedCards.length > 0 && totalBalance >= fee * selectedCards.length;
 
   if (isRegistered) {
-    const totalCards = Math.max(lobbyPlayerCount, room.players) - 1 + (selectedCards.length || 1);
+    const totalCards = Math.max(reservedCardCount, selectedCards.length, 1);
     const prizePool = fee * totalCards * (1 - commissionRate / 100);
 
     return (
@@ -135,7 +136,7 @@ export default function RoomLobby({
           <div className="text-[7.5px] text-gray-400 font-extrabold uppercase tracking-wider">PRIZE</div>
           <div className="text-sm font-black text-gold mt-1">
             {(() => {
-              const totalCards = Math.max(lobbyPlayerCount, room.players) - 1 + (selectedCards.length || 1);
+              const totalCards = Math.max(reservedCardCount, selectedCards.length, 1);
               return `${(fee * totalCards * (1 - commissionRate / 100)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${t('birr')}`;
             })()}
           </div>
