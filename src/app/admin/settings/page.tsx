@@ -58,6 +58,7 @@ export default function SettingsPage() {
   const [adminChatId, setAdminChatId] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'commands' | 'messages' | 'game_config' | 'branding' | 'gateways' | 'bias' | 'notifications'>('commands');
   const [commands, setCommands] = useState<BotCommands>({
     admin_stats: '/admin_stats',
@@ -267,11 +268,17 @@ export default function SettingsPage() {
   };
 
   const saveConfig = async (merged: any) => {
-    await fetch('/api/admin/data', {
+    setSaveError(null);
+    const res = await fetch('/api/admin/data', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'update_bot_config', commands: merged }),
     });
+    const data = await res.json();
+    if (data.error) {
+      setSaveError(data.error);
+      return;
+    }
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -437,6 +444,9 @@ export default function SettingsPage() {
               <Save size={14} />
               {saved ? 'Saved!' : 'Save Commands'}
             </button>
+            {saveError && (
+              <p className="text-[10px] text-red-400 mt-1 text-center">{saveError}</p>
+            )}
           </div>
         )}
 

@@ -55,6 +55,26 @@ async function getBotCommands(): Promise<Record<string, any>> {
   if (cachedCommands && (now - commandsCacheTime) < COMMANDS_CACHE_TTL && Object.keys(cachedCommands).length > 0) {
     return cachedCommands;
   }
+
+  const DEFAULTS: Record<string, any> = {
+    admin_stats: '/admin_stats',
+    admin_users: '/admin_users',
+    admin_pending: '/admin_pending',
+    admin_help: '/admin_help',
+    admin_approve: '/approve_',
+    admin_reject: '/reject_',
+    telebirr_number: 'CHANGE_ME',
+    telebirr_name: 'CHANGE_ME',
+    telebirr_max: '1000',
+    cbe_account: 'CHANGE_ME',
+    cbe_name: 'CHANGE_ME',
+    cbe_max: '5000',
+    withdraw_required_games: '5',
+    referral_bonus: '10',
+    referral_min_deposit: '50',
+    banks: [],
+    check_et_enabled: false,
+  };
   
   try {
     const { data } = await supabase
@@ -63,45 +83,11 @@ async function getBotCommands(): Promise<Record<string, any>> {
       .eq('id', 'main')
       .single();
     
-    cachedCommands = data?.commands || {
-      admin_stats: '/admin_stats',
-      admin_users: '/admin_users',
-      admin_pending: '/admin_pending',
-      admin_help: '/admin_help',
-      admin_approve: '/approve_',
-      admin_reject: '/reject_',
-      telebirr_number: 'CHANGE_ME',
-      telebirr_name: 'CHANGE_ME',
-      telebirr_max: '1000',
-      cbe_account: 'CHANGE_ME',
-      cbe_name: 'CHANGE_ME',
-      cbe_max: '5000',
-      withdraw_required_games: '5',
-      referral_bonus: '10',
-      referral_min_deposit: '50',
-      banks: []
-    };
+    cachedCommands = { ...DEFAULTS, ...(data?.commands || {}) };
     commandsCacheTime = now;
     return cachedCommands;
   } catch {
-    return {
-      admin_stats: '/admin_stats',
-      admin_users: '/admin_users',
-      admin_pending: '/admin_pending',
-      admin_help: '/admin_help',
-      admin_approve: '/approve_',
-      admin_reject: '/reject_',
-      telebirr_number: 'CHANGE_ME',
-      telebirr_name: 'CHANGE_ME',
-      telebirr_max: '1000',
-      cbe_account: 'CHANGE_ME',
-      cbe_name: 'CHANGE_ME',
-      cbe_max: '5000',
-      withdraw_required_games: '5',
-      referral_bonus: '10',
-      referral_min_deposit: '50',
-      banks: []
-    };
+    return { ...DEFAULTS };
   }
 }
 
@@ -216,7 +202,7 @@ const CHECK_ET_BANK_CODES: Record<string, string> = {
   mpesa: 'mpesa',
 };
 
-async function verifyWithCheckET(bankCode: string, transactionNumber: string, accountNumber: string, expectedAmount: number): Promise<{ verified: boolean; reason?: string }> {
+async function verifyWithCheckET(bankCode: string, transactionNumber: string, accountNumber: string, expectedAmount: number, expectedReceiverName?: string): Promise<{ verified: boolean; reason?: string }> {
   if (!checkEtApiKey) return { verified: false, reason: 'Check.et not configured' };
   if (!bankCode || !transactionNumber) return { verified: false, reason: 'Missing bank code or transaction number' };
 
@@ -255,22 +241,28 @@ async function verifyWithCheckET(bankCode: string, transactionNumber: string, ac
       return { verified: false, reason: 'No receipt data returned' };
     }
 
-    if (receipt.status !== 'completed') {
+    if (String(receipt.status).toLowerCase() !== 'completed') {
       return { verified: false, reason: `Transaction status: ${receipt.status}` };
     }
 
-    if (receipt.amount !== undefined) {
-      const verifiedAmount = Number(receipt.amount);
-      if (Math.abs(verifiedAmount - expectedAmount) > 0.01) {
-        return { verified: false, reason: `Amount mismatch: expected ${expectedAmount} ETB, found ${verifiedAmount} ETB` };
-      }
+    const verifiedAmount = Number(receipt.amount);
+    if (isNaN(verifiedAmount) || Math.abs(verifiedAmount - expectedAmount) > 0.01) {
+      return { verified: false, reason: `Amount mismatch: expected ${expectedAmount} ETB, found ${isNaN(verifiedAmount) ? 'N/A' : verifiedAmount} ETB` };
     }
 
     if (accountNumber && receipt.receiver_account) {
       const cleanExpected = accountNumber.replace(/\D/g, '');
       const cleanActual = String(receipt.receiver_account).replace(/\D/g, '');
       if (cleanActual !== cleanExpected) {
-        return { verified: false, reason: `Receiver account mismatch` };
+        return { verified: false, reason: `Receiver account mismatch: expected "${accountNumber}", found "${receipt.receiver_account}"` };
+      }
+    }
+
+    if (expectedReceiverName && receipt.receiver_name) {
+      const exp = expectedReceiverName.toLowerCase().replace(/\s+/g, ' ');
+      const act = String(receipt.receiver_name).toLowerCase().replace(/\s+/g, ' ');
+      if (!act.includes(exp) && !exp.includes(act)) {
+        return { verified: false, reason: `Receiver name mismatch: expected "${expectedReceiverName}", found "${receipt.receiver_name}"` };
       }
     }
 
@@ -1275,12 +1267,13 @@ export async function POST(request: NextRequest) {
             if (!bankCode) return false;
             const accountNumber = bank?.account || (bankId === 'cbe' ? (commands.cbe_account || '') : '');
             if (!accountNumber && bankCode !== 'telebirr') return false;
-            return { bankCode, accountNumber };
+            const receiverName = bank?.recipient || (bankId === 'cbe' ? (commands.cbe_name || '') : (bankId === 'telebirr' ? (commands.telebirr_name || '') : ''));
+            return { bankCode, accountNumber, receiverName };
           };
 
           const autoVerify = doAutoVerify();
           if (autoVerify) {
-            const vResult = await verifyWithCheckET(autoVerify.bankCode, txId, autoVerify.accountNumber, amount);
+            const vResult = await verifyWithCheckET(autoVerify.bankCode, txId, autoVerify.accountNumber, amount, autoVerify.receiverName);
             if (vResult.verified) {
               const txAmount = Math.abs(Number(amount));
               const newMain = await supabase.rpc('adjust_main_balance', { p_user_id: userProfile.id, p_amount: txAmount });
