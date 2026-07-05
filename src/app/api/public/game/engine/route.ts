@@ -186,10 +186,16 @@ export async function POST(request: NextRequest) {
 
       // If game already finished, return the winner
       if (gameByCode.status === 'finished') {
+        const { data: winnerProfile } = await supabase
+          .from('profiles')
+          .select('first_name, username')
+          .eq('id', gameByCode.winner_id)
+          .maybeSingle();
         return NextResponse.json({
           win: false,
           error: 'Game already finished',
           winner_id: gameByCode.winner_id,
+          winner_name: winnerProfile?.first_name || winnerProfile?.username || null,
         }, { status: 400 });
       }
 
@@ -310,9 +316,8 @@ export async function POST(request: NextRequest) {
           .select('id')
           .eq('game_code', gameByCode.code)
           .gt('card_number', 0);
-        const cardCount = cardCountData?.length || 0;
-        const totalCards = Math.max(cardCount || 1, 1);
-        winAmount = perCardStake * totalCards * (1 - (effectiveCommission ?? 15) / 100);
+        const cardCount = Math.max(cardCountData?.length || 1, 1);
+        winAmount = perCardStake * cardCount * (1 - (effectiveCommission ?? 15) / 100);
       }
 
       const { data: profile } = await supabase.from('profiles').select('telegram_id, first_name').eq('id', userId).single();
@@ -330,6 +335,38 @@ export async function POST(request: NextRequest) {
         status: 'completed',
         reference: `WIN-${gameId}`,
       });
+
+      const { data: stakeRow } = await supabase
+        .from('stakes')
+        .select('amount')
+        .eq('id', gameByCode.stake_id)
+        .maybeSingle();
+      const perCardStake = Number(stakeRow?.amount) || 10;
+      const { data: cardCountData } = await supabase
+        .from('game_card_reservations')
+        .select('id')
+        .eq('game_code', gameByCode.code)
+        .gt('card_number', 0);
+      const cardCount = Math.max(cardCountData?.length || 1, 1);
+      const totalStake = perCardStake * cardCount;
+      const { data: existingHistory } = await supabase
+        .from('game_history')
+        .select('id')
+        .eq('game_id', gameByCode.id)
+        .eq('user_id', userId)
+        .maybeSingle();
+      const historyPayload = {
+        game_id: gameByCode.id,
+        user_id: userId,
+        stake: totalStake,
+        win_amount: winAmount,
+        numbers_matched: drawnNumbers.filter((n: number) => n > 0).length,
+      };
+      if (existingHistory) {
+        await supabase.from('game_history').update(historyPayload).eq('id', existingHistory.id);
+      } else {
+        await supabase.from('game_history').insert(historyPayload);
+      }
 
       // Mark game as finished with winner
       await supabase.from('games').update({ status: 'finished', winner_id: userId }).eq('id', gameByCode.id);
@@ -397,6 +434,19 @@ export async function POST(request: NextRequest) {
         .filter(cell => cell !== 0 && drawnNumbers.includes(cell))
         .length;
 
+      const { data: stakeRow } = await supabase
+        .from('stakes')
+        .select('amount')
+        .eq('id', game.stake_id)
+        .maybeSingle();
+      const perCardStake = Number(stakeRow?.amount) || 10;
+      const { data: cardCountData } = await supabase
+        .from('game_card_reservations')
+        .select('id')
+        .eq('game_code', game.code)
+        .gt('card_number', 0);
+      const totalStake = perCardStake * Math.max(cardCountData?.length || 1, 1);
+
       const existingHistory = await supabase
         .from('game_history')
         .select('id')
@@ -408,10 +458,16 @@ export async function POST(request: NextRequest) {
         await supabase.from('game_history').insert({
           game_id: game.id,
           user_id: userId,
-          stake: 0,
-          win_amount: 0,
+          stake: totalStake,
+          win_amount: -totalStake,
           numbers_matched: numbersMatched,
         });
+      } else {
+        await supabase.from('game_history').update({
+          stake: totalStake,
+          win_amount: -totalStake,
+          numbers_matched: numbersMatched,
+        }).eq('id', existingHistory.data.id);
       }
 
       return NextResponse.json({

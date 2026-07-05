@@ -7,6 +7,30 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key';
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+async function ensureWallet(userId: string) {
+  const { data: existingWallet } = await supabase
+    .from('wallets')
+    .select('*')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (existingWallet) {
+    return existingWallet;
+  }
+
+  const { data: newWallet, error } = await supabase
+    .from('wallets')
+    .insert({ user_id: userId, main_balance: 0, play_balance: 0 })
+    .select('*')
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return newWallet;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -16,12 +40,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'userId is required' }, { status: 400 });
     }
 
-    const { data: wallet } = await supabase
-      .from('wallets')
-      .select('*')
-      .eq('user_id', userId)
-      .maybeSingle();
-
+    const wallet = await ensureWallet(userId);
     return NextResponse.json({ wallet });
   } catch (error) {
     console.error('Wallet API error:', error);

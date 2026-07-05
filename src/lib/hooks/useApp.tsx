@@ -120,10 +120,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
           if (initRes.ok) {
             const initData = await initRes.json();
             if (initData.profile) {
+              profileRef.current = initData.profile as Profile;
               setState(prev => ({
                 ...prev,
                 profile: initData.profile as Profile,
-                wallet: initData.wallet as Wallet | null,
+                wallet: (initData.wallet as Wallet | null) ?? prev.wallet,
               }));
             }
           }
@@ -173,14 +174,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const data = await res.json();
 
         if (data.profile) {
+          const profileData = data.profile as Profile;
+          profileRef.current = profileData;
           setState(prev => ({
             ...prev,
-            profile: data.profile as Profile,
-            wallet: data.wallet as Wallet | null,
-            language: (data.profile.language as Language) || 'en',
+            profile: profileData,
+            wallet: (data.wallet as Wallet | null) ?? prev.wallet,
+            language: (profileData.language as Language) || 'en',
             loading: false,
             initialized: true,
           }));
+          if (!data.wallet) {
+            try { await refreshWallet(); } catch {}
+          }
           return;
         }
       } catch (err) {
@@ -276,11 +282,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (data.wallet) {
           setState(prev => ({ ...prev, wallet: data.wallet as Wallet }));
         }
+        await refreshWallet();
       } catch (e) {
         console.warn('Could not persist wallet balance update:', e);
       }
     }
-  }, []);
+  }, [refreshWallet]);
 
   const updateAvatar = useCallback(async (avatar: string) => {
     if (!state.profile) return;

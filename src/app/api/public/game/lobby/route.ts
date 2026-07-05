@@ -64,11 +64,46 @@ function hashUUIDToInteger(uuid: string): number {
   return -((Math.abs(hash) % 900000) + 100000);
 }
 
+function getRoomPeriod(roomId: string): number {
+  const periods: Record<string, number> = { bronze: 30, silver: 40, gold: 50, diamond: 60, premium: 75 };
+  return periods[roomId] || 90;
+}
+
+function generateDeterministicGameId(roomId: string, cycle: number): string {
+  let seed = 0;
+  for (let i = 0; i < roomId.length; i++) seed = ((seed << 5) - seed) + roomId.charCodeAt(i);
+  seed = ((seed << 5) - seed) + cycle;
+  seed = seed & 0x7fffffff;
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let result = '';
+  for (let i = 0; i < 8; i++) {
+    seed = (seed * 1664525 + 1013904223) & 0x7fffffff;
+    result += chars[seed % chars.length];
+  }
+  return result;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const gameId = searchParams.get('gameId');
+    const roomId = searchParams.get('roomId');
     const userId = searchParams.get('userId');
+
+    if (!gameId && roomId) {
+      const period = getRoomPeriod(roomId);
+      const currentSec = Math.floor(Date.now() / 1000);
+      const cycle = Math.floor(currentSec / period);
+      const sharedGameId = generateDeterministicGameId(roomId, cycle);
+      return NextResponse.json({
+        success: true,
+        gameId: sharedGameId,
+        roomId,
+        cycle,
+        period,
+        serverTime: new Date().toISOString(),
+      });
+    }
 
     if (!gameId) {
       return NextResponse.json({ error: 'gameId is required' }, { status: 400 });

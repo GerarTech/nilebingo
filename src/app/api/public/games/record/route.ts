@@ -45,6 +45,8 @@ export async function POST(request: NextRequest) {
     }
 
     const isWin = outcome === 'win';
+    const cardCount = Math.max(1, Number(body.cardCount || 0));
+    const totalStake = Number(stakeAmount || 0) * cardCount;
 
     // 2. Use existing game if code is provided, otherwise create a new one
     let game;
@@ -116,6 +118,42 @@ export async function POST(request: NextRequest) {
       } catch (rpcErr) {
         console.error('Error updating prize pool via RPC (create):', rpcErr);
         game = created;
+      }
+    }
+
+    let netOutcomeAmount = isWin ? totalStake : -totalStake;
+    if (game && isWin) {
+      try {
+        const { data: commissionRow } = await supabase.from('games').select('commission').eq('id', game.id).maybeSingle();
+        const commissionRate = Number(commissionRow?.commission ?? 15);
+        netOutcomeAmount = totalStake * (1 - commissionRate / 100);
+      } catch {}
+    }
+
+    if (game) {
+      try {
+        const { data: existingHistory } = await supabase
+          .from('game_history')
+          .select('id')
+          .eq('game_id', game.id)
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        const historyPayload = {
+          game_id: game.id,
+          user_id: userId,
+          stake: totalStake || 0,
+          win_amount: netOutcomeAmount,
+          numbers_matched: Array.isArray(drawnNumbers) ? drawnNumbers.length : 0,
+        };
+
+        if (existingHistory) {
+          await supabase.from('game_history').update(historyPayload).eq('id', existingHistory.id);
+        } else {
+          await supabase.from('game_history').insert(historyPayload);
+        }
+      } catch (historyErr) {
+        console.error('Error upserting game history:', historyErr);
       }
     }
 

@@ -193,38 +193,61 @@ function HomePage() {
     }
   }, []);
 
+  const getCurrentLobbyGameId = useCallback(async (roomId: string) => {
+    if (!roomId) return null;
+    try {
+      const query = new URLSearchParams({ roomId });
+      if (profile?.id) query.set('userId', profile.id);
+      const res = await fetch(`/api/public/game/lobby?${query.toString()}`);
+      const data = await res.json();
+      if (data?.success && data.gameId) return data.gameId as string;
+    } catch {}
+    const currentSec = Math.floor(Date.now() / 1000);
+    const period = getRoomPeriod(roomId);
+    const cycle = Math.floor(currentSec / period);
+    return generateDeterministicGameId(roomId, cycle);
+  }, [profile?.id]);
+
   const addGameToHistory = useCallback((gId: string, stakeAmt: number, outcome: 'win' | 'loss') => {
     if (isWatching || !gId) return;
-    // Calculate prize using stake × total reserved cards (your selected cards + already-betted cards) × (1 - commission)
-    const stakeValue = stakeAmt || selectedStake || selectedRoom?.entry || 10;
-    const myCards = Math.max(1, (selectedCards && selectedCards.length) || playerCards.length);
-    const alreadyBetted = (takenCards && takenCards.length) || 0;
-    const totalCards = alreadyBetted + myCards;
+
+    const stakePerCard = Number(stakeAmt || selectedStake || selectedRoom?.entry || 10);
+    const cardCount = Math.max(1, (selectedCards.length || playerCards.length || 1));
+    const totalStake = stakePerCard * cardCount;
     const effComm = selectedRoom?.commission ?? commissionRate;
-    const actualPrize = outcome === 'win' ? stakeValue * totalCards * (1 - effComm / 100) : -stakeAmt;
+    const actualPrize = outcome === 'win'
+      ? Math.max(0, totalStake * (1 - effComm / 100))
+      : -totalStake;
+
     setStakeHistory(prev => {
       const exists = prev.some(item => item.gameId === gId && item.result === outcome);
       if (exists) return prev;
       const filtered = prev.filter(item => item.gameId !== gId || item.result !== outcome);
-      const newHistory = [{ gameId: gId, stake: stakeAmt, result: outcome, prize: actualPrize, timestamp: new Date().toISOString() }, ...filtered].slice(0, 10);
+      const newHistory = [{ gameId: gId, stake: totalStake, result: outcome, prize: actualPrize, timestamp: new Date().toISOString() }, ...filtered].slice(0, 10);
       try { localStorage.setItem('nile_bingo_stake_history', JSON.stringify(newHistory)); } catch {}
       return newHistory;
     });
     if (profile?.id) {
-      const pot = stakeValue * totalCards * (1 - effComm / 100);
       fetch('/api/public/games/record', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: gId, userId: profile.id, stakeAmount: stakeAmt, outcome, drawnNumbers: drawnRef.current || [], roomName: selectedRoom?.name || 'Quick Lobby' })
+        body: JSON.stringify({
+          code: gId,
+          userId: profile.id,
+          stakeAmount: stakePerCard,
+          cardCount,
+          outcome,
+          drawnNumbers: drawnRef.current || [],
+          roomName: selectedRoom?.name || 'Quick Lobby',
+        })
       }).catch(() => {});
 
-      // Trigger a fast server-side prize update so the authoritative pool reflects latest reservations/bets
       fetch('/api/public/games/update-prize', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: gId, stakeAmount: stakeAmt })
+        body: JSON.stringify({ code: gId, stakeAmount: stakePerCard })
       }).catch(() => {});
     }
-  }, [isWatching, profile?.id, selectedRoom, livePlayerCount, commissionRate, playerCards]);
+  }, [isWatching, profile?.id, selectedRoom, selectedStake, commissionRate]);
 
   // ============ CONFIG FETCH ============
   const fetchConfig = useCallback(() => {
@@ -484,7 +507,7 @@ function HomePage() {
   // ============ START GAMEPLAY ============
   const startGameplay = useCallback(async (isSpectateMode: boolean) => {
     if (!selectedRoom) return;
-    const activeGameId = gameId || generateDeterministicGameId(selectedRoom.id, Math.floor(Date.now() / 1000 / getRoomPeriod(selectedRoom.id)));
+    const activeGameId = await getCurrentLobbyGameId(selectedRoom.id) || generateDeterministicGameId(selectedRoom.id, Math.floor(Date.now() / 1000 / getRoomPeriod(selectedRoom.id)));
     const entryFee = selectedRoom.entry;
 
     // Set stake to total amount paid (entry fee × number of cards)
@@ -541,7 +564,7 @@ function HomePage() {
         setLivePlayerCount(selectedRoom.players);
       }
     })();
-  }, [selectedRoom, selectedCards, registerLiveGame, appointedCard, getDeterministicDrawSequence, gameId]);
+  }, [selectedRoom, selectedCards, registerLiveGame, appointedCard, getDeterministicDrawSequence, getCurrentLobbyGameId]);
 
   // Sync refs for tick interval to avoid stale closure issues
   useEffect(() => {
@@ -578,26 +601,43 @@ function HomePage() {
       // shows the correct game ID for the upcoming round (not just at the 1-second
       // boundary which is easily missed).
       if (sr && !ig && !ir) {
-        const period = getRoomPeriod(sr.id);
-        const newCycle = Math.floor(currentSec / period);
-        const newGameId = generateDeterministicGameId(sr.id, newCycle);
-        setGameId(prevId => {
-          if (prevId !== newGameId) {
-            // Clear all game-cycle state when game ID changes (new game cycle)
-            setSelectedCards([]);
-            setPreviewCard([]);
-            setTakenCards([]);
-            setLobbyPlayerCount(0);
-            setIsRegistered(false);
-            setIsSpectatingReady(false);
-            return newGameId;
+        void (async () => {
+          const serverGameId = await getCurrentLobbyGameId(sr.id);
+          if (serverGameId) {
+            setGameId(prevId => {
+              if (prevId !== serverGameId) {
+                setSelectedCards([]);
+                setPreviewCard([]);
+                setTakenCards([]);
+                setLobbyPlayerCount(0);
+                setIsRegistered(false);
+                setIsSpectatingReady(false);
+                return serverGameId;
+              }
+              return prevId;
+            });
+            return;
           }
-          return prevId;
-        });
+          const period = getRoomPeriod(sr.id);
+          const newCycle = Math.floor(currentSec / period);
+          const newGameId = generateDeterministicGameId(sr.id, newCycle);
+          setGameId(prevId => {
+            if (prevId !== newGameId) {
+              setSelectedCards([]);
+              setPreviewCard([]);
+              setTakenCards([]);
+              setLobbyPlayerCount(0);
+              setIsRegistered(false);
+              setIsSpectatingReady(false);
+              return newGameId;
+            }
+            return prevId;
+          });
+        })();
       }
     }, 1000);
     return () => clearInterval(tick);
-  }, [inGame, selectedRoom]);
+  }, [inGame, selectedRoom, getCurrentLobbyGameId]);
 
   // ============ DRAW INTERVAL ============
   useEffect(() => {
@@ -685,13 +725,19 @@ function HomePage() {
           if (g.prize_pool) setPrizePool(Number(g.prize_pool));
           if (g.status === 'finished' && g.winner_id) {
             if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
-            setOpponentWinner('Another Player');
+            if (g.winner_id !== profile?.id) {
+              const { data: winnerProfile } = await supabase.from('profiles').select('first_name, username').eq('id', g.winner_id).maybeSingle();
+              const winnerName = winnerProfile?.first_name || winnerProfile?.username || null;
+              setOpponentWinner(winnerName || null);
+            } else {
+              setOpponentWinner(null);
+            }
           }
         }
       } catch {}
     }, 1000);
     return () => clearInterval(poll);
-  }, [inGame, gameId]);
+  }, [inGame, gameId, profile?.id]);
 
   // ============ CARD RESERVATION POLLING (1s fallback) ============
   const reservationPollRef = useRef<NodeJS.Timeout | null>(null);
@@ -750,7 +796,7 @@ function HomePage() {
             await refreshWallet();
           } else {
             setShowWinModal(false);
-            setOpponentWinner(data.winner_id ? 'Another Player' : null);
+            setOpponentWinner(data.winner_name || null);
             if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
             await refreshWallet();
           }
@@ -766,11 +812,8 @@ function HomePage() {
     setSelectedStake(stake); setSelectedCards([]); setPreviewCard([]); setCardPickerCountdown(50); setShowCardPicker(true);
   }, []);
 
-  const handleJoinRoom = useCallback((room: RoomConfig) => {
-    const period = getRoomPeriod(room.id);
-    const currentSec = Math.floor(Date.now() / 1000);
-    const cycle = Math.floor(currentSec / period);
-    const gameIdForCycle = generateDeterministicGameId(room.id, cycle);
+  const handleJoinRoom = useCallback(async (room: RoomConfig) => {
+    const currentGameId = await getCurrentLobbyGameId(room.id) || generateDeterministicGameId(room.id, Math.floor(Date.now() / 1000 / getRoomPeriod(room.id)));
     setSelectedRoom(room);
     setSelectedStake(room.entry);
     setSelectedCards([]);
@@ -779,8 +822,8 @@ function HomePage() {
     setLobbyPlayerCount(0);
     setIsRegistered(false);
     setIsSpectatingReady(false);
-    setGameId(gameIdForCycle);
-  }, []);
+    setGameId(currentGameId);
+  }, [getCurrentLobbyGameId]);
 
   // ============ PLAY / REGISTER / LEAVE ============
   const watchGame = useCallback(async () => {
@@ -915,22 +958,42 @@ function HomePage() {
     if (typeof navigator !== 'undefined' && navigator.clipboard) { navigator.clipboard.writeText(inviteLink); setCopiedLink(true); setTimeout(() => setCopiedLink(false), 2000); }
   }, [inviteLink]);
 
-  const simulateReferralJoin = useCallback(() => {
-    const nextCount = referralCount + 1;
-    setReferralCount(nextCount);
-    if (typeof window !== 'undefined') localStorage.setItem('nile_bingo_referrals', nextCount.toString());
-    updateBalance(referralBonus, 'play_balance');
-    setToastMessage(`${t('friend_registered') || 'Friend Registered!'} +${referralBonus} ${t('birr')}`);
-    setToastType('success');
-    setShowRefToast(true); setTimeout(() => setShowRefToast(false), 3500);
-  }, [referralCount, updateBalance, referralBonus, t]);
-
   const showToast = useCallback((message: string, type: 'error' | 'success' | 'info' = 'error') => {
     setToastMessage(message);
     setToastType(type);
     setShowRefToast(true);
     setTimeout(() => setShowRefToast(false), 3500);
   }, []);
+
+  const simulateReferralJoin = useCallback(async () => {
+    if (!profile?.id) {
+      showToast(t('friend_registered') || 'Please sign in to claim the referral bonus.', 'error');
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/public/referral', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: profile.id }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Unable to process referral bonus');
+      }
+
+      const nextCount = referralCount + 1;
+      setReferralCount(nextCount);
+      if (typeof window !== 'undefined') localStorage.setItem('nile_bingo_referrals', nextCount.toString());
+      await refreshWallet();
+      setToastMessage(`${t('friend_registered') || 'Referral bonus credited!'} +${data.bonus ?? referralBonus} ${t('birr')}`);
+      setToastType('success');
+      setShowRefToast(true); setTimeout(() => setShowRefToast(false), 3500);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to process referral bonus';
+      showToast(message, 'error');
+    }
+  }, [profile?.id, referralCount, referralBonus, refreshWallet, showToast, t]);
 
   const navigateToWallet = useCallback(() => { setWalletView('main'); setActiveTab('wallet'); }, [setActiveTab]);
 
