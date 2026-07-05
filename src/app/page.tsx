@@ -322,7 +322,6 @@ function HomePage() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const tg = (window as any).Telegram?.WebApp;
-      const tg = (window as any).Telegram?.WebApp;
       const telegramUser = tg?.initDataUnsafe?.user;
       const telegramId = telegramUser?.id ? String(telegramUser.id) : null;
       if (telegramId) {
