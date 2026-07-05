@@ -594,6 +594,21 @@ async function executeApprove(chatId: number, tx: any, finalAmount: number) {
     }
   }
 
+  if (tx.type === 'withdraw') {
+    const { error: balanceError } = await supabase.rpc('adjust_main_balance', { p_user_id: tx.user_id, p_amount: -finalAmount });
+    if (balanceError) {
+      console.error('adjust_main_balance error:', balanceError);
+      await sendMessage(chatId, `⚠️ *Balance deduction failed*: ${balanceError.message}\n\nTransaction remains pending. Please retry.`, { parse_mode: 'Markdown' });
+      return;
+    }
+    await supabase.from('transactions').update({ status: 'completed' }).eq('id', tx.id);
+
+    const { data: prof } = await supabase.from('profiles').select('telegram_id, first_name').eq('id', tx.user_id).single();
+    if (prof?.telegram_id) {
+      await sendMessage(prof.telegram_id, `✅ *Withdrawal Approved!*\n\nYour withdrawal of *${finalAmount.toLocaleString()} ETB* has been approved and deducted from your Main Wallet.`, { parse_mode: 'Markdown' });
+    }
+  }
+
   await sendMessage(chatId, `✅ Transaction approved. Amount: ${finalAmount} ETB.`);
 }
 
@@ -796,7 +811,9 @@ export async function POST(request: NextRequest) {
         } catch (e) { /* ignore */ }
       } else if (data.startsWith('pub_cancel_')) {
         const txId = data.replace('pub_cancel_', '');
-        await answerCallbackQuery(callbackQuery.id, 'Cancelled');
+        await answerCallbackQuery(callbackQuery.id, 'Rejected');
+
+        await supabase.from('transactions').update({ status: 'failed' }).eq('id', txId);
 
         try {
           await fetch(`${TG_API}/editMessageText`, {
@@ -805,7 +822,7 @@ export async function POST(request: NextRequest) {
             body: JSON.stringify({
               chat_id: chatId,
               message_id: callbackQuery.message?.message_id,
-              text: `❌ *Cancelled*\n\nApproval for ${txId.slice(0, 8)} was cancelled.`,
+              text: `❌ *Rejected*\n\nTransaction ${txId.slice(0, 8)} has been rejected.`,
               parse_mode: 'Markdown',
             }),
           });

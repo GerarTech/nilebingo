@@ -72,6 +72,15 @@ export async function POST(request: NextRequest) {
         .eq('user_id', profile.id)
         .maybeSingle();
       wallet = walletData;
+
+      if (!wallet) {
+        const { data: newWallet } = await supabase
+          .from('wallets')
+          .insert({ user_id: profile.id, main_balance: 0, play_balance: 0 })
+          .select()
+          .single();
+        wallet = newWallet;
+      }
     }
 
     return NextResponse.json({ profile, wallet });

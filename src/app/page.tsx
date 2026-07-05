@@ -322,8 +322,14 @@ function HomePage() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const tg = (window as any).Telegram?.WebApp;
-      if (tg) { tg.ready(); tg.expand(); const user = tg.initDataUnsafe?.user; initialize(String(user?.id || '999999999'), user?.first_name, user?.username); }
-      else {
+      const tg = (window as any).Telegram?.WebApp;
+      const telegramUser = tg?.initDataUnsafe?.user;
+      const telegramId = telegramUser?.id ? String(telegramUser.id) : null;
+      if (telegramId) {
+        tg?.ready();
+        tg?.expand();
+        initialize(telegramId, telegramUser?.first_name, telegramUser?.username);
+      } else {
         const guestId = (() => {
           try {
             let id = localStorage.getItem('fallback_user_id');

@@ -689,7 +689,13 @@ export async function POST(request: NextRequest) {
 
       if (data.startsWith('confirm_reject_')) {
         const txId = data.replace('confirm_reject_', '');
-        const { data: tx } = await supabase.from('transactions').select('*, profiles!inner(telegram_id, first_name, username)').eq('id', txId).single();
+        await tgCall('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: 'Rejecting transaction...' });
+        const { data: tx, error: fetchError } = await supabase.from('transactions').select('*, profiles!inner(telegram_id, first_name, username)').eq('id', txId).maybeSingle();
+        if (fetchError || !tx) {
+          await supabase.from('transactions').update({ status: 'failed' }).eq('id', txId);
+          await sendMessage(chatId, 'Transaction rejected.');
+          return NextResponse.json({ ok: true });
+        }
         await supabase.from('transactions').update({ status: 'failed' }).eq('id', txId);
         
         const bankName = tx?.details?.bank_name || '-';
