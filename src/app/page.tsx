@@ -522,9 +522,10 @@ function HomePage() {
     setOtherPlayers(virtualCompetitors);
     setShowCardPicker(false); setInGame(true);
     // Pre-set prize pool from local estimate so the display doesn't flash 0
+    // Use total cards estimate (room player count × cards per player) rather than just user's cards
     const effComm = selectedRoom.commission ?? commissionRate;
-    const cardCount = Math.max(1, selectedCards.length || 1);
-    setPrizePool(prev => prev > 0 ? prev : entryFee * cardCount * (1 - effComm / 100));
+    const totalCardsEstimate = Math.max(lobbyPlayerCount * 2, selectedRoom.players * 2, 2);
+    setPrizePool(prev => prev > 0 ? prev : entryFee * totalCardsEstimate * (1 - effComm / 100));
 
     const sequence = getDeterministicDrawSequence(activeGameId, appointedCard?.cardNumber);
     setDeterministicSequence(sequence);
@@ -539,13 +540,16 @@ function HomePage() {
         if (existingGame) {
           const { count } = await supabase.from('game_players').select('*', { count: 'exact', head: true }).eq('game_id', existingGame.id);
           setLivePlayerCount(count || 1);
-          if (existingGame.prize_pool) setPrizePool(Number(existingGame.prize_pool));
+          setPrizePool(Number(existingGame.prize_pool) || entryFee * Math.max(count || 1, 1) * (1 - effComm / 100));
         } else {
           const { data: reservations } = await supabase.from('game_card_reservations').select('user_id').eq('game_code', activeGameId);
           if (reservations) {
-            setLivePlayerCount(new Set(reservations.map(r => r.user_id)).size || 1);
+            const totalPlayerCount = new Set(reservations.map(r => r.user_id)).size || 1;
+            setLivePlayerCount(totalPlayerCount);
+            setPrizePool(entryFee * Math.max(totalPlayerCount, 1) * 2 * (1 - effComm / 100));
           } else {
             setLivePlayerCount(selectedRoom.players);
+            setPrizePool(entryFee * selectedRoom.players * 2 * (1 - effComm / 100));
           }
         }
       } catch (err) {
@@ -719,11 +723,11 @@ function HomePage() {
     if (!inGame || !gameId) return;
     const poll = setInterval(async () => {
       try {
-        const { data: g } = await supabase.from('games').select('id, prize_pool, status, winner_id').eq('code', gameId).maybeSingle();
+        const { data: g } = await supabase.from('games').select('id, prize_pool, status, winner_id, stake_id').eq('code', gameId).maybeSingle();
         if (g) {
           const { count } = await supabase.from('game_players').select('*', { count: 'exact', head: true }).eq('game_id', g.id).eq('is_watching', false);
           if (count !== null && count !== liveCountRef.current) { liveCountRef.current = count; setLivePlayerCount(count); }
-          if (g.prize_pool) setPrizePool(Number(g.prize_pool));
+          setPrizePool(Number(g.prize_pool) || (selectedRoomRef.current?.entry || 10) * Math.max(count || 1, 1) * (1 - (commissionRateRef.current || 15) / 100));
           if (g.status === 'finished' && g.winner_id) {
             if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
             if (g.winner_id !== profile?.id) {
@@ -981,7 +985,17 @@ function HomePage() {
 
   const leaveGame = useCallback(async () => {
     if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
-    if (inGame && !isWatching && gameId && !showWinModal && !opponentWinner) addGameToHistory(gameId, selectedStake || 10, 'loss');
+    // Capture pre-reset state for history check before we reset everything
+    const shouldRecordLoss = inGame && !isWatching && gameId && !showWinModal && !opponentWinner;
+    // Reset all state synchronously BEFORE any async operations
+    // to prevent re-renders with inGame=true and opponentWinner=null from
+    // re-creating the draw interval or keeping the live poll active
+    lockedGameIdRef.current = null;
+    setInGame(false); setIsWatching(false); setGameCard([]); setDrawnNumbers([]);
+    drawnRef.current = []; setSelectedStake(null); setSelectedCards([]); setRecentCalled([]);
+    setShowWinModal(false); setWinningCard([]); setWinningCells([]);
+    setOtherPlayers([]); setOpponentWinner(null);
+    if (shouldRecordLoss) addGameToHistory(gameId, selectedStake || 10, 'loss');
     const uid = profile?.id;
     if (gameId && isValidUUID(uid)) {
       try {
@@ -994,11 +1008,6 @@ function HomePage() {
         console.error('Failed to leave game on server:', e);
       }
     }
-    lockedGameIdRef.current = null;
-    setInGame(false); setIsWatching(false); setGameCard([]); setDrawnNumbers([]);
-    drawnRef.current = []; setSelectedStake(null); setSelectedCards([]); setRecentCalled([]);
-    setShowWinModal(false); setWinningCard([]); setWinningCells([]);
-    setOtherPlayers([]); setOpponentWinner(null);
     await refreshWallet();
     setTakenCards([]); setLobbyPlayerCount(0);
     if (realtimeChannelRef.current) { supabase.removeChannel(realtimeChannelRef.current); realtimeChannelRef.current = null; }
