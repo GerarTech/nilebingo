@@ -312,7 +312,7 @@ export async function POST(request: NextRequest) {
           .gt('card_number', 0);
         const cardCount = cardCountData?.length || 0;
         const totalCards = Math.max(cardCount || 1, 1);
-        winAmount = perCardStake * totalCards * (1 - effectiveCommission / 100);
+        winAmount = perCardStake * totalCards * (1 - (effectiveCommission ?? 15) / 100);
       }
 
       const { data: profile } = await supabase.from('profiles').select('telegram_id, first_name').eq('id', userId).single();
