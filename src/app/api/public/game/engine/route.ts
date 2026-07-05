@@ -298,7 +298,10 @@ export async function POST(request: NextRequest) {
       const { data: profile } = await supabase.from('profiles').select('telegram_id, first_name').eq('id', userId).single();
 
       const newMain = await supabase.rpc('adjust_main_balance', { p_user_id: userId, p_amount: winAmount });
-      if (newMain.error) console.error('adjust_main_balance error:', newMain.error);
+      if (newMain.error) {
+        console.error('adjust_main_balance error:', newMain.error);
+        return NextResponse.json({ success: false, error: 'Failed to credit winnings. Please contact support.' }, { status: 500 });
+      }
 
       await supabase.from('transactions').insert({
         user_id: userId,

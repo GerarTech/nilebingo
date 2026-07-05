@@ -95,11 +95,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshWallet = useCallback(async () => {
-    if (isValidUUID(profileRef.current?.id)) {
+    const pid = profileRef.current?.id;
+    const tid = profileRef.current?.telegram_id;
+    if (isValidUUID(pid)) {
       try {
-        const res = await fetch(`/api/public/wallet?userId=${profileRef.current!.id}`);
+        const res = await fetch(`/api/public/wallet?userId=${pid}`);
         const data = await res.json();
-        if (data.wallet) setState(prev => ({ ...prev, wallet: data.wallet as Wallet }));
+        if (data.wallet) {
+          setState(prev => ({ ...prev, wallet: data.wallet as Wallet }));
+        } else if (tid) {
+          const initRes = await fetch('/api/public/init', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ telegramId: tid }),
+          });
+          if (initRes.ok) {
+            const initData = await initRes.json();
+            if (initData.profile) {
+              setState(prev => ({
+                ...prev,
+                profile: initData.profile as Profile,
+                wallet: initData.wallet as Wallet | null,
+              }));
+            }
+          }
+        }
       } catch (e) {
         console.warn('Could not refresh wallet:', e);
       }
@@ -109,47 +129,49 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const initialize = useCallback(async (telegramId: string, firstName?: string, username?: string) => {
     setState(prev => ({ ...prev, loading: true }));
 
-    try {
-      const res = await fetch('/api/public/init', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ telegramId, firstName, username }),
-      });
+    let lastError: unknown = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const res = await fetch('/api/public/init', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ telegramId, firstName, username }),
+        });
 
-      if (!res.ok) throw new Error('Init API returned ' + res.status);
+        if (!res.ok) {
+          lastError = new Error('Init API returned ' + res.status);
+          if (attempt < 2) await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+          continue;
+        }
 
-      const data = await res.json();
+        const data = await res.json();
 
-      if (data.profile) {
-        setState(prev => ({
-          ...prev,
-          profile: data.profile as Profile,
-          wallet: data.wallet as Wallet | null,
-          language: (data.profile.language as Language) || 'en',
-          loading: false,
-          initialized: true,
-        }));
-      } else {
-        const fbProf = fallbackProfile(telegramId);
-        setState(prev => ({
-          ...prev,
-          loading: false,
-          initialized: true,
-          profile: fbProf,
-          wallet: fallbackWallet(fbProf.id),
-        }));
+        if (data.profile) {
+          setState(prev => ({
+            ...prev,
+            profile: data.profile as Profile,
+            wallet: data.wallet as Wallet | null,
+            language: (data.profile.language as Language) || 'en',
+            loading: false,
+            initialized: true,
+          }));
+          return;
+        }
+      } catch (err) {
+        lastError = err;
+        if (attempt < 2) await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
       }
-    } catch (err) {
-      console.warn('Init API failed, using local fallback:', err);
-      const fbProf = fallbackProfile(telegramId);
-      setState(prev => ({
-        ...prev,
-        loading: false,
-        initialized: true,
-        profile: fbProf,
-        wallet: fallbackWallet(fbProf.id),
-      }));
     }
+
+    console.warn('Init API failed after 3 retries, using local fallback:', lastError);
+    const fbProf = fallbackProfile(telegramId);
+    setState(prev => ({
+      ...prev,
+      loading: false,
+      initialized: true,
+      profile: fbProf,
+      wallet: fallbackWallet(fbProf.id),
+    }));
   }, []);
 
   // Periodically refresh wallet when initialized to keep balance in sync
@@ -161,18 +183,37 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!initializedRef.current) return;
     const fetchWallet = () => {
       const pid = profileIdRef.current;
+      const tid = profileRef.current?.telegram_id;
       if (isValidUUID(pid)) {
         fetch(`/api/public/wallet?userId=${pid}`)
           .then(r => r.json())
           .then(data => {
-            if (data.wallet) setState(prev => ({ ...prev, wallet: data.wallet }));
+            if (data.wallet) {
+              setState(prev => ({ ...prev, wallet: data.wallet }));
+            } else if (tid) {
+              fetch('/api/public/init', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ telegramId: tid }),
+              })
+                .then(r => r.json())
+                .then(initData => {
+                  if (initData.profile) {
+                    setState(prev => ({
+                      ...prev,
+                      profile: initData.profile as Profile,
+                      wallet: initData.wallet as Wallet | null,
+                    }));
+                  }
+                })
+                .catch(() => {});
+            }
           })
           .catch(() => {});
       }
     };
-    // Refresh wallet every 30 seconds to keep balance in sync without surprising the user
+    fetchWallet();
     const interval = setInterval(fetchWallet, 30000);
-    // Also refresh when the page becomes visible (user switches back to the app)
     const onVisibility = () => { if (document.visibilityState === 'visible') fetchWallet(); };
     document.addEventListener('visibilitychange', onVisibility);
     return () => { clearInterval(interval); document.removeEventListener('visibilitychange', onVisibility); };

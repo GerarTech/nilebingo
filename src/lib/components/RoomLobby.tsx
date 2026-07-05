@@ -85,7 +85,7 @@ export default function RoomLobby({
             <div className="text-center">
               <div className="inline-block bg-white/[0.03] border border-white/[0.06] rounded-xl px-6 py-2.5 text-center">
                 <div className="text-[8px] text-gray-500 uppercase font-bold tracking-wider">Stake</div>
-                <div className="text-xs font-extrabold text-white mt-1">{Number(fee).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {t('birr')}</div>
+                <div className="text-xs font-extrabold text-white mt-1">{Number(fee * selectedCards.length).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {t('birr')}</div>
               </div>
             </div>
           </div>

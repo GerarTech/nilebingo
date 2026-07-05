@@ -671,11 +671,15 @@ function HomePage() {
     if (!inGame || !gameId) return;
     const poll = setInterval(async () => {
       try {
-        const { data: g } = await supabase.from('games').select('id, prize_pool').eq('code', gameId).maybeSingle();
+        const { data: g } = await supabase.from('games').select('id, prize_pool, status, winner_id').eq('code', gameId).maybeSingle();
         if (g) {
           const { count } = await supabase.from('game_players').select('*', { count: 'exact', head: true }).eq('game_id', g.id).eq('is_watching', false);
           if (count !== null && count !== liveCountRef.current) { liveCountRef.current = count; setLivePlayerCount(count); }
           if (g.prize_pool) setPrizePool(Number(g.prize_pool));
+          if (g.status === 'finished' && g.winner_id) {
+            if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+            setOpponentWinner('Another Player');
+          }
         }
       } catch {}
     }, 1000);

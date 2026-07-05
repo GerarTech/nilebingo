@@ -86,10 +86,9 @@ export default function GameView({
         </div>
 
         {/* Top Bar Stats */}
-        <div className="grid grid-cols-4 gap-1.5 mb-3 font-sans">
+        <div className="grid grid-cols-3 gap-1.5 mb-3 font-sans">
           {[
             { label: t('game_id'), value: `#${gameId.substring(0, 5)}` },
-            { label: t('players'), value: <RollingCounter value={livePlayerCount} /> },
             { label: 'Bet', value: `${selectedStake} ETB` },
             { label: t('prize'), value: <span className="text-gold"><RollingCounter value={prizePool} suffix=" ETB" /></span> },
           ].map((stat, i) => (
