@@ -27,7 +27,7 @@ export default function WinModal({
 }: WinModalProps) {
   if (!show) return null;
 
-  const singlePrize = prizePool > 0 ? prizePool : Math.round(stake * livePlayerCount * (1 - commissionRate / 100));
+  const singlePrize = prizePool > 0 ? prizePool : stake * livePlayerCount * (1 - commissionRate / 100);
 
   return (
     <div

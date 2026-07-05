@@ -22,6 +22,9 @@ import {
   adjustBalance,
   setBalance,
   deleteUser,
+  bulkDeleteUsers,
+  bulkAdjustBalance,
+  bulkSetBalance,
   getBotConfig,
   updateBotConfig,
   getBotMessages,
@@ -190,6 +193,18 @@ export async function POST(request: NextRequest) {
       }
       case 'delete_user': {
         const result = await deleteUser(body.userId);
+        return NextResponse.json(result);
+      }
+      case 'bulk_delete_users': {
+        const result = await bulkDeleteUsers(body.userIds);
+        return NextResponse.json(result);
+      }
+      case 'bulk_adjust_balance': {
+        const result = await bulkAdjustBalance(body.userIds, body.amount, body.walletType, body.reason);
+        return NextResponse.json(result);
+      }
+      case 'bulk_set_balance': {
+        const result = await bulkSetBalance(body.userIds, body.walletType, body.value);
         return NextResponse.json(result);
       }
       case 'update_bot_config': {

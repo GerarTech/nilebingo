@@ -125,7 +125,7 @@ export async function POST(request: NextRequest) {
           .eq('game_id', game.id);
 
         const totalPlayersCount = totalPlayers || 1;
-        const commissionWon = Math.max(0, Math.round((Number(stakeAmount) * totalPlayersCount) - Number(prizePool)));
+        const commissionWon = Math.max(0, (Number(stakeAmount) * totalPlayersCount) - Number(prizePool));
 
         const text = `🏆 *BINGO WINNER*\n\n` +
                      `🎫 Game: \`${code}\`\n` +

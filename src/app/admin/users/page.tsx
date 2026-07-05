@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Search, Check, X, Phone, User as UserIcon, Wallet, ArrowUpDown, Trash2, AlertTriangle } from 'lucide-react';
+import { useEffect, useState, useCallback } from 'react';
+import { Search, Check, X, Phone, User as UserIcon, Wallet, Trash2, AlertTriangle, ChevronDown, ChevronUp, Users } from 'lucide-react';
 
 interface UserWithWallet {
   id: string;
@@ -27,14 +27,25 @@ export default function UsersPage() {
   const [setType, setSetType] = useState<'main' | 'play'>('main');
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  const loadUsers = () => {
+  // Bulk selection state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkMode, setBulkMode] = useState(false);
+  const [bulkAction, setBulkAction] = useState<'delete' | 'adjust' | 'set' | null>(null);
+  const [bulkAmount, setBulkAmount] = useState('');
+  const [bulkType, setBulkType] = useState<'main' | 'play'>('main');
+  const [bulkReason, setBulkReason] = useState('');
+  const [bulkValue, setBulkValue] = useState('');
+  const [bulkProcessing, setBulkProcessing] = useState(false);
+  const [bulkResult, setBulkResult] = useState<string | null>(null);
+
+  const loadUsers = useCallback(() => {
     fetch('/api/admin/data?action=users')
       .then(r => r.json())
       .then(d => { if (Array.isArray(d)) setUsers(d); setLoading(false); })
       .catch(() => setLoading(false));
-  };
+  }, []);
 
-  useEffect(() => { loadUsers(); }, []);
+  useEffect(() => { loadUsers(); }, [loadUsers]);
 
   const loadUserDetail = async (userId: string) => {
     const res = await fetch(`/api/admin/data?action=user&userId=${userId}`);
@@ -101,6 +112,79 @@ export default function UsersPage() {
     loadUsers();
   };
 
+  // Bulk actions
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filtered.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filtered.map(u => u.id)));
+    }
+  };
+
+  const clearSelection = () => {
+    setSelectedIds(new Set());
+    setBulkAction(null);
+    setBulkResult(null);
+  };
+
+  const executeBulkAction = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+
+    setBulkProcessing(true);
+    setBulkResult(null);
+
+    try {
+      if (bulkAction === 'delete') {
+        const res = await fetch('/api/admin/data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'bulk_delete_users', userIds: ids }),
+        });
+        const data = await res.json();
+        setBulkResult(`Deleted ${data.deleted} user(s)${data.errors ? `, ${data.errors} error(s)` : ''}`);
+      } else if (bulkAction === 'adjust') {
+        const amount = parseFloat(bulkAmount);
+        if (isNaN(amount) || !bulkReason) return;
+        const res = await fetch('/api/admin/data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'bulk_adjust_balance', userIds: ids, amount, walletType: bulkType, reason: bulkReason }),
+        });
+        const data = await res.json();
+        setBulkResult(`Adjusted ${data.updated} wallet(s)${data.errors ? `, ${data.errors} error(s)` : ''}`);
+      } else if (bulkAction === 'set') {
+        const value = parseFloat(bulkValue);
+        if (isNaN(value) || value < 0) return;
+        const res = await fetch('/api/admin/data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'bulk_set_balance', userIds: ids, walletType: bulkType, value }),
+        });
+        const data = await res.json();
+        setBulkResult(`Set ${data.updated} wallet(s)${data.errors ? `, ${data.errors} error(s)` : ''}`);
+      }
+    } catch {
+      setBulkResult('An error occurred');
+    }
+
+    setBulkProcessing(false);
+    loadUsers();
+    if (bulkAction === 'delete') {
+      setSelectedIds(new Set());
+      setBulkAction(null);
+    }
+  };
+
   const filtered = users.filter(u =>
     u.first_name?.toLowerCase().includes(search.toLowerCase()) ||
     u.username?.toLowerCase().includes(search.toLowerCase()) ||
@@ -110,9 +194,67 @@ export default function UsersPage() {
 
   if (loading) return <div className="text-gray-400 text-sm">Loading users...</div>;
 
+  const bulkBar = selectedIds.size > 0 && (
+    <div className="sticky top-0 z-10 mb-3 p-3 bg-gold/10 border border-gold/30 rounded-xl">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs font-bold text-gold">{selectedIds.size} user(s) selected</span>
+        <button onClick={clearSelection} className="text-[10px] text-gray-400 hover:text-white">Clear</button>
+      </div>
+      {!bulkAction ? (
+        <div className="flex gap-2">
+          <button onClick={() => setBulkAction('delete')} className="flex-1 bg-red-500/20 text-red-400 font-bold py-2 rounded-lg text-xs hover:bg-red-500/30">Delete</button>
+          <button onClick={() => setBulkAction('adjust')} className="flex-1 bg-gold/20 text-gold font-bold py-2 rounded-lg text-xs hover:bg-gold/30">Adjust</button>
+          <button onClick={() => setBulkAction('set')} className="flex-1 bg-emerald-600/20 text-emerald-400 font-bold py-2 rounded-lg text-xs hover:bg-emerald-600/30">Set Balance</button>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {bulkAction === 'delete' && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-1.5 text-[10px] text-red-300"><AlertTriangle size={12} /> Permanently delete {selectedIds.size} user(s) and all associated data.</div>
+              <button onClick={executeBulkAction} disabled={bulkProcessing} className="w-full bg-red-600 text-white font-bold py-2 rounded-lg text-xs hover:bg-red-500 disabled:opacity-50">{bulkProcessing ? 'Processing...' : `Delete ${selectedIds.size} User(s)`}</button>
+            </div>
+          )}
+          {bulkAction === 'adjust' && (
+            <div className="space-y-2">
+              <select value={bulkType} onChange={(e) => setBulkType(e.target.value as any)} className="w-full bg-navy-light border border-white/10 rounded-lg px-3 py-2 text-xs text-white">
+                <option value="main">Main Wallet</option>
+                <option value="play">Play Wallet</option>
+              </select>
+              <input type="number" value={bulkAmount} onChange={(e) => setBulkAmount(e.target.value)} placeholder="Amount (+/-)" className="w-full bg-navy-light border border-white/10 rounded-lg px-3 py-2 text-xs text-white" />
+              <input type="text" value={bulkReason} onChange={(e) => setBulkReason(e.target.value)} placeholder="Reason" className="w-full bg-navy-light border border-white/10 rounded-lg px-3 py-2 text-xs text-white" />
+              <button onClick={executeBulkAction} disabled={bulkProcessing || !bulkAmount || !bulkReason} className="w-full bg-gold text-navy font-bold py-2 rounded-lg text-xs disabled:opacity-50">{bulkProcessing ? 'Processing...' : `Adjust ${selectedIds.size} Wallet(s)`}</button>
+            </div>
+          )}
+          {bulkAction === 'set' && (
+            <div className="space-y-2">
+              <select value={bulkType} onChange={(e) => setBulkType(e.target.value as any)} className="w-full bg-navy-light border border-white/10 rounded-lg px-3 py-2 text-xs text-white">
+                <option value="main">Main Wallet</option>
+                <option value="play">Play Wallet</option>
+              </select>
+              <input type="number" value={bulkValue} onChange={(e) => setBulkValue(e.target.value)} placeholder="Exact new balance" className="w-full bg-navy-light border border-white/10 rounded-lg px-3 py-2 text-xs text-white" />
+              <button onClick={executeBulkAction} disabled={bulkProcessing || !bulkValue} className="w-full bg-emerald-600 text-white font-bold py-2 rounded-lg text-xs disabled:opacity-50">{bulkProcessing ? 'Processing...' : `Set ${selectedIds.size} Wallet(s)`}</button>
+            </div>
+          )}
+          <button onClick={() => setBulkAction(null)} className="w-full text-[10px] text-gray-500 hover:text-white py-1">Back</button>
+          {bulkResult && <div className="text-[10px] text-green-400 text-center">{bulkResult}</div>}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div>
-      <h1 className="text-xl font-bold text-white mb-4">Users</h1>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-xl font-bold text-white">Users</h1>
+        <button
+          onClick={() => { setBulkMode(!bulkMode); if (bulkMode) clearSelection(); }}
+          className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg transition-colors ${bulkMode ? 'bg-gold text-navy' : 'bg-navy border border-white/10 text-gray-300 hover:bg-white/5'}`}
+        >
+          <Users size={14} />
+          Bulk
+          {bulkMode ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+        </button>
+      </div>
 
       {/* Search */}
       <div className="relative mb-4">
@@ -126,17 +268,39 @@ export default function UsersPage() {
         />
       </div>
 
+      {bulkMode && bulkBar}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Users List */}
         <div className="lg:col-span-2 space-y-2 max-h-[70vh] overflow-y-auto">
+          {bulkMode && (
+            <div className="flex items-center gap-2 px-1 py-1">
+              <input
+                type="checkbox"
+                checked={selectedIds.size === filtered.length && filtered.length > 0}
+                onChange={toggleSelectAll}
+                className="w-4 h-4 rounded border-white/20 bg-navy"
+              />
+              <span className="text-[10px] text-gray-500">{selectedIds.size}/{filtered.length} selected</span>
+            </div>
+          )}
           {filtered.map((user) => (
             <div
               key={user.id}
-              onClick={() => loadUserDetail(user.id)}
-              className={`glass rounded-xl p-3 cursor-pointer transition-all hover:bg-white/5 ${selectedUser?.id === user.id ? 'ring-1 ring-gold/50' : ''}`}
+              onClick={() => { if (!bulkMode) loadUserDetail(user.id); }}
+              className={`glass rounded-xl p-3 cursor-pointer transition-all hover:bg-white/5 ${selectedUser?.id === user.id && !bulkMode ? 'ring-1 ring-gold/50' : ''}`}
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
+                  {bulkMode && (
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(user.id)}
+                      onChange={() => toggleSelect(user.id)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-4 h-4 rounded border-white/20 bg-navy"
+                    />
+                  )}
                   <div className="w-10 h-10 rounded-full bg-gradient-gold flex items-center justify-center">
                     <UserIcon size={18} className="text-navy" />
                   </div>

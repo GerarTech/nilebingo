@@ -84,6 +84,9 @@ export default function HomeView({
               <span className="absolute -top-1.5 -right-1.5 text-white text-[7.5px] font-black px-1.5 py-0.5 rounded-full shadow-md select-none uppercase tracking-tighter" style={{ backgroundColor: themeColor, boxShadow: `0 2px 8px ${themeColor}55` }}>
                 {room.countdown}S
               </span>
+              <span className="absolute -top-1.5 -left-1.5 text-white text-[7.5px] font-black px-1.5 py-0.5 rounded-full shadow-md select-none uppercase tracking-tighter" style={{ backgroundColor: '#10b981', boxShadow: '0 2px 8px rgba(16,185,129,0.55)' }}>
+                {room.players}
+              </span>
               <span className="text-xl font-black text-white block">{room.entry}</span>
               <span className="text-[10px] text-gray-400 font-extrabold uppercase mt-1 tracking-wider block">{t('birr')}</span>
               {isSelected && <span className="w-1.5 h-1.5 rounded-full mt-2" style={{ backgroundColor: themeColor }} />}

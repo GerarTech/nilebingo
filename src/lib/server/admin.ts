@@ -176,7 +176,7 @@ export async function getDashboardStats() {
   let totalCommissionFromGames = 0;
   const { data: finishedGames } = await supabase
     .from('games')
-    .select('id, code, prize_pool, stake_id')
+    .select('id, code, prize_pool, stake_id, commission')
     .eq('status', 'finished')
     .not('prize_pool', 'eq', 0);
 
@@ -329,7 +329,7 @@ export async function getCommissionReport(options: {
   // Fetch all finished games with prize data
   let gamesQuery = supabase
     .from('games')
-    .select('id, code, prize_pool, stake_id, created_at')
+    .select('id, code, prize_pool, stake_id, created_at, commission')
     .eq('status', 'finished');
 
   if (options.dateFrom) gamesQuery = gamesQuery.gte('created_at', options.dateFrom);
@@ -648,6 +648,39 @@ export async function deleteUser(userId: string) {
   const { error: profileErr } = await supabase.from('profiles').delete().eq('id', userId);
   if (profileErr) return { error: profileErr.message };
   return { success: true };
+}
+
+export async function bulkDeleteUsers(userIds: string[]) {
+  let deleted = 0;
+  let errors = 0;
+  for (const userId of userIds) {
+    const result = await deleteUser(userId);
+    if (result.success) deleted++;
+    else errors++;
+  }
+  return { success: true, deleted, errors };
+}
+
+export async function bulkAdjustBalance(userIds: string[], amount: number, type: 'main' | 'play', reason: string) {
+  let updated = 0;
+  let errors = 0;
+  for (const userId of userIds) {
+    const result = await adjustBalance(userId, amount, type, reason);
+    if (result.success) updated++;
+    else errors++;
+  }
+  return { success: true, updated, errors };
+}
+
+export async function bulkSetBalance(userIds: string[], type: 'main' | 'play', value: number) {
+  let updated = 0;
+  let errors = 0;
+  for (const userId of userIds) {
+    const result = await setBalance(userId, type, value);
+    if (result.success) updated++;
+    else errors++;
+  }
+  return { success: true, updated, errors };
 }
 
 export async function getBotMessages() {

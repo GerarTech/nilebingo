@@ -275,6 +275,18 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'This game cycle has already finished. Please wait for the next round.' }, { status: 409 });
       }
 
+      // Look up room-specific commission from bot_config
+      let roomCommission: number | null = null;
+      try {
+        const { data: configData } = await supabase.from('bot_config').select('commands').eq('id', 'main').single();
+        const config = configData?.commands || {};
+        const rooms = Array.isArray(config.rooms) ? config.rooms : [];
+        const matchingRoom = rooms.find((r: any) => Number(r.entry) === Number(stakeAmount));
+        if (matchingRoom && typeof matchingRoom.commission === 'number') {
+          roomCommission = matchingRoom.commission;
+        }
+      } catch {}
+
       let stakeId: string | null = null;
       const { data: stakeData } = await supabase
         .from('stakes')
@@ -309,16 +321,20 @@ export async function POST(request: NextRequest) {
             .eq('id', dbGameId);
         }
       } else {
+        const gameInsert: any = {
+          stake_id: stakeId,
+          code: gameId,
+          status: 'active',
+          prize_pool: 0,
+          called_count: 0,
+          drawn_numbers: [],
+        };
+        if (roomCommission !== null) {
+          gameInsert.commission = roomCommission;
+        }
         const { data: newGame, error: err } = await supabase
           .from('games')
-          .insert({
-            stake_id: stakeId,
-            code: gameId,
-            status: 'active',
-            prize_pool: 0,
-            called_count: 0,
-            drawn_numbers: [],
-          })
+          .insert(gameInsert)
           .select('id')
           .single();
 
@@ -376,12 +392,13 @@ export async function POST(request: NextRequest) {
           }, { onConflict: 'game_id,user_id' });
       }
 
-      // Try updating prize pool
+      // Try updating prize pool with room-specific commission
       try {
-        await supabase.rpc('update_game_prize_pool', {
-          p_game_code: gameId,
-          p_stake_amt: stakeAmount,
-        });
+        const rpcParams: any = { p_game_code: gameId, p_stake_amt: stakeAmount };
+        if (roomCommission !== null) {
+          rpcParams.p_commission = roomCommission;
+        }
+        await supabase.rpc('update_game_prize_pool', rpcParams);
       } catch (poolErr) {
         console.warn('Prize pool update failed (probably safe if already updated):', poolErr);
       }

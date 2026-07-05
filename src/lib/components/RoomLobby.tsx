@@ -94,9 +94,14 @@ export default function RoomLobby({
             <span>🎴</span> GAME ID: {gameId}
           </div>
         </div>
-        <div className="flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md">
-          <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
-          <span className="text-[8px] font-extrabold uppercase text-emerald-400">Live</span>
+        <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md">
+            <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
+            <span className="text-[8px] font-extrabold uppercase text-emerald-400">Live</span>
+          </div>
+          <div className="bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md">
+            <span className="text-[8px] font-extrabold text-amber-400">{Math.max(lobbyPlayerCount, 0)} players</span>
+          </div>
         </div>
       </div>
 
@@ -110,7 +115,7 @@ export default function RoomLobby({
           <div className="text-sm font-black text-gold mt-1">
             {(() => {
               const totalCards = Math.max(lobbyPlayerCount, room.players) - 1 + (selectedCards.length || 1);
-              return `${Math.round(fee * totalCards * (1 - commissionRate / 100)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${t('birr')}`;
+              return `${(fee * totalCards * (1 - commissionRate / 100)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${t('birr')}`;
             })()}
           </div>
         </div>

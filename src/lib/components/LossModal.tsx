@@ -22,7 +22,7 @@ export default function LossModal({
 }: LossModalProps) {
   if (!show) return null;
 
-  const singlePrize = Math.round(stake * livePlayerCount * (1 - commissionRate / 100));
+  const singlePrize = stake * livePlayerCount * (1 - commissionRate / 100);
 
   return (
     <div

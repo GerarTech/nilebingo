@@ -51,6 +51,7 @@ interface GameRoom {
   entry: number;
   players: number;
   maxPlayers: number;
+  commission?: number;
 }
 
 export default function SettingsPage() {
@@ -106,7 +107,8 @@ export default function SettingsPage() {
     name: '',
     entry: 10,
     players: 5,
-    maxPlayers: 100
+    maxPlayers: 100,
+    commission: undefined,
   });
   const [savingGame, setSavingGame] = useState(false);
 
@@ -311,8 +313,10 @@ export default function SettingsPage() {
     if (!newRoom.name) return;
     const id = newRoom.name.toLowerCase().replace(/[^a-z0-9]/g, '_') + '_' + Date.now();
     setRoomsList(prev => [...prev, { ...newRoom, id }]);
-    setNewRoom({ name: '', entry: 10, players: 5, maxPlayers: 100 });
+    setNewRoom({ name: '', entry: 10, players: 5, maxPlayers: 100, commission: undefined });
   };
+
+  const roomEffectiveCommission = (room: GameRoom) => room.commission ?? commission;
 
   const deleteRoom = (id: string) => {
     setRoomsList(prev => prev.filter(r => r.id !== id));
@@ -660,7 +664,8 @@ export default function SettingsPage() {
               
               <div className="space-y-2 max-h-[40vh] overflow-y-auto pr-1">
                 {roomsList.map((room, idx) => {
-                  const maxWin = Math.round((room.entry * room.players) * (1 - commission / 100));
+                  const roomComm = roomEffectiveCommission(room);
+                  const maxWin = (room.entry * room.players) * (1 - roomComm / 100);
                   return (
                     <div key={room.id} className="p-3 bg-navy-light border border-white/5 rounded-xl space-y-2">
                       <div className="flex justify-between items-center">
@@ -678,7 +683,7 @@ export default function SettingsPage() {
                         </button>
                       </div>
 
-                      <div className="grid grid-cols-3 gap-2 text-[10px]">
+                      <div className="grid grid-cols-4 gap-2 text-[10px]">
                         <div>
                           <label className="text-[9px] text-gray-500 block">Entry Fee (ETB)</label>
                           <input
@@ -697,8 +702,18 @@ export default function SettingsPage() {
                             className="w-full bg-navy border border-white/10 rounded-md px-2 py-1 text-white text-xs"
                           />
                         </div>
+                        <div>
+                          <label className="text-[9px] text-gray-500 block">Commission %</label>
+                          <input
+                            type="number"
+                            value={room.commission ?? ''}
+                            placeholder={`${commission}%`}
+                            onChange={(e) => updateRoomField(idx, 'commission', e.target.value === '' ? undefined : Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)))}
+                            className="w-full bg-navy border border-white/10 rounded-md px-2 py-1 text-white text-xs"
+                          />
+                        </div>
                         <div className="flex flex-col justify-end">
-                          <label className="text-[9px] text-gray-500 block">Payout (-{commission}%)</label>
+                          <label className="text-[9px] text-gray-500 block">Payout (-{roomComm}%)</label>
                           <span className="text-[#10b981] font-bold py-1 px-1 text-xs font-mono">{maxWin} ETB</span>
                         </div>
                       </div>
@@ -737,6 +752,16 @@ export default function SettingsPage() {
                     type="number"
                     value={newRoom.players}
                     onChange={(e) => setNewRoom(prev => ({ ...prev, players: Math.max(1, parseInt(e.target.value, 10) || 1) }))}
+                    className="w-full bg-navy border border-white/10 rounded-md px-2.5 py-1.5 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-gray-500 block mb-0.5">Commission %</label>
+                  <input
+                    type="number"
+                    value={newRoom.commission ?? ''}
+                    placeholder={`${commission}%`}
+                    onChange={(e) => setNewRoom(prev => ({ ...prev, commission: e.target.value === '' ? undefined : Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)) }))}
                     className="w-full bg-navy border border-white/10 rounded-md px-2.5 py-1.5 text-white"
                   />
                 </div>

@@ -32,7 +32,7 @@ function isValidUUID(id: string | undefined): boolean {
 
 type RoomConfig = {
   id: string; name: string; entry: number; players: number;
-  maxPlayers: number; winAmount: number;
+  maxPlayers: number; winAmount: number; commission: number;
   status: 'playing' | 'starting_soon'; countdown: number;
 };
 
@@ -96,12 +96,12 @@ function HomePage() {
   const [rulesText, setRulesText] = useState<string>('');
 
   const [rooms, setRooms] = useState<RoomConfig[]>([
-    { id: 'bronze', name: 'Bronze Room', entry: 10, players: 10, maxPlayers: 100, winAmount: 85, status: 'starting_soon', countdown: 30 },
-    { id: 'silver', name: 'Silver Room', entry: 20, players: 12, maxPlayers: 100, winAmount: 204, status: 'starting_soon', countdown: 23 },
-    { id: 'gold', name: 'Gold Room', entry: 50, players: 15, maxPlayers: 100, winAmount: 638, status: 'starting_soon', countdown: 40 },
-    { id: 'diamond', name: 'Diamond Room', entry: 100, players: 20, maxPlayers: 100, winAmount: 1700, status: 'starting_soon', countdown: 58 },
-    { id: 'premium', name: 'Premium Room', entry: 200, players: 5, maxPlayers: 100, winAmount: 850, status: 'starting_soon', countdown: 15 },
-    { id: 'vip', name: 'VIP Room', entry: 500, players: 2, maxPlayers: 100, winAmount: 850, status: 'starting_soon', countdown: 95 },
+    { id: 'bronze', name: 'Bronze Room', entry: 10, players: 10, maxPlayers: 100, commission: 15, winAmount: 85, status: 'starting_soon', countdown: 30 },
+    { id: 'silver', name: 'Silver Room', entry: 20, players: 12, maxPlayers: 100, commission: 15, winAmount: 204, status: 'starting_soon', countdown: 23 },
+    { id: 'gold', name: 'Gold Room', entry: 50, players: 15, maxPlayers: 100, commission: 15, winAmount: 638, status: 'starting_soon', countdown: 40 },
+    { id: 'diamond', name: 'Diamond Room', entry: 100, players: 20, maxPlayers: 100, commission: 15, winAmount: 1700, status: 'starting_soon', countdown: 58 },
+    { id: 'premium', name: 'Premium Room', entry: 200, players: 5, maxPlayers: 100, commission: 15, winAmount: 850, status: 'starting_soon', countdown: 15 },
+    { id: 'vip', name: 'VIP Room', entry: 500, players: 2, maxPlayers: 100, commission: 15, winAmount: 850, status: 'starting_soon', countdown: 95 },
   ]);
 
   const [dbLeaderboard, setDbLeaderboard] = useState<any[]>([]);
@@ -199,7 +199,8 @@ function HomePage() {
     const entryFee = selectedRoom?.entry || 10;
     const numCards = Math.max(1, playerCards.length);
     const totalCards = livePlayerCount - 1 + numCards;
-    const actualPrize = outcome === 'win' ? Math.round(entryFee * totalCards * (1 - commissionRate / 100)) : -stakeAmt;
+    const effComm = selectedRoom?.commission ?? commissionRate;
+    const actualPrize = outcome === 'win' ? entryFee * totalCards * (1 - effComm / 100) : -stakeAmt;
     setStakeHistory(prev => {
       const exists = prev.some(item => item.gameId === gId && item.result === outcome);
       if (exists) return prev;
@@ -209,7 +210,7 @@ function HomePage() {
       return newHistory;
     });
     if (profile?.id) {
-      const pot = Math.round(entryFee * totalCards * (1 - commissionRate / 100));
+      const pot = entryFee * totalCards * (1 - effComm / 100);
       fetch('/api/public/games/record', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -235,12 +236,16 @@ function HomePage() {
       if (typeof data.withdrawMinAmount === 'number') setWithdrawMinAmount(data.withdrawMinAmount);
       if (typeof data.withdrawRequiredGames === 'number') setWithdrawRequiredGames(data.withdrawRequiredGames);
       if (Array.isArray(data.rooms)) {
-        setRooms(data.rooms.map((room: any, i: number) => ({
-          id: room.id || `room_${i}`, name: room.name || 'Room', entry: Number(room.entry) || 10,
-          players: Number(room.players) || 10, maxPlayers: Number(room.maxPlayers) || 100,
-          winAmount: Math.round((Number(room.entry) * Number(room.players)) * (1 - (data.commission ?? 15) / 100)),
-          status: 'starting_soon' as const, countdown: 15 + i * 7
-        })));
+        setRooms(data.rooms.map((room: any, i: number) => {
+          const roomComm = typeof room.commission === 'number' ? room.commission : (data.commission ?? 15);
+          return {
+            id: room.id || `room_${i}`, name: room.name || 'Room', entry: Number(room.entry) || 10,
+            players: Number(room.players) || 10, maxPlayers: Number(room.maxPlayers) || 100,
+            commission: roomComm,
+            winAmount: (Number(room.entry) * Number(room.players)) * (1 - roomComm / 100),
+            status: 'starting_soon' as const, countdown: 15 + i * 7,
+          };
+        }));
       }
     }).catch(() => {});
   }, []);
@@ -532,7 +537,8 @@ function HomePage() {
           if (ir) sg(false);
           else if (isr) sg(true);
         }
-        return { ...r, status: 'starting_soon' as const, countdown: remaining, winAmount: Math.round((r.entry * r.players) * (1 - cr / 100)) };
+        const roomComm = r.commission ?? cr;
+        return { ...r, status: 'starting_soon' as const, countdown: remaining, winAmount: (r.entry * r.players) * (1 - roomComm / 100) };
       }));
       // Update game ID every tick based on the current cycle so the lobby always
       // shows the correct game ID for the upcoming round (not just at the 1-second
@@ -916,6 +922,8 @@ function HomePage() {
     // Game tab
     if (inGame) {
       const resultMode = showWinModal ? 'win' : opponentWinner ? 'loss' : null;
+      const roomForCommission = rooms.find(r => r.entry === (selectedStake || 10));
+      const effectiveComm = roomForCommission?.commission ?? commissionRate;
       return (
         <>
           <GameView
@@ -926,7 +934,7 @@ function HomePage() {
             language={language} livePlayerCount={livePlayerCount}
             recentCalled={recentCalled} opponentWinner={opponentWinner}
             showWinModal={showWinModal} showLossModal={opponentWinner !== null} showLeaveModal={showLeaveModal}
-            winningCard={winningCard} winningCells={winningCells} commissionRate={commissionRate}
+            winningCard={winningCard} winningCells={winningCells} commissionRate={effectiveComm}
             prizePool={prizePool} resultCountdown={resultCountdown} t={t}
             onSetAutoMark={setAutoMark} onSetAutoWin={setAutoWin}
             onManualDraw={manualDraw} onBingo={handleBingo} onLeave={leaveGame}
@@ -954,7 +962,7 @@ function HomePage() {
           onPlay={playWithCard}
           onUnregister={unregisterLobby}
           onDeposit={() => { setSelectedCards([]); setPreviewCard([]); setSelectedRoom(null); setWalletView('deposit'); setActiveTab('wallet'); }}
-          commissionRate={commissionRate}
+          commissionRate={selectedRoom.commission ?? commissionRate}
         />
       );
     }

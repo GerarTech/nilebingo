@@ -381,15 +381,22 @@ export async function POST(request: NextRequest) {
       const { stakeId, stakeAmount } = body;
       const code = 'BG-' + Math.floor(100000 + Math.random() * 900000);
 
-      // Fetch commission rate from bot_config so the prize pool matches the admin setting
+      // Fetch commission rate from bot_config (room-specific if available, falling back to global)
       let commission = 15;
+      let roomCommission: number | null = null;
       try {
         const { data: configData } = await supabase.from('bot_config').select('commands').eq('id', 'main').single();
         const config = configData?.commands || {};
         if (typeof config.commission === 'number') commission = config.commission;
+        const rooms = Array.isArray(config.rooms) ? config.rooms : [];
+        const matchingRoom = rooms.find((r: any) => Number(r.entry) === Number(stakeAmount));
+        if (matchingRoom && typeof matchingRoom.commission === 'number') {
+          roomCommission = matchingRoom.commission;
+          commission = matchingRoom.commission;
+        }
       } catch {}
 
-      const prizePool = Math.round((stakeAmount || 10) * cardNumbers.length * (1 - commission / 100));
+      const prizePool = (stakeAmount || 10) * cardNumbers.length * (1 - commission / 100);
 
       const { data: wallet } = await supabase
         .from('wallets')
@@ -431,18 +438,22 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      const gameInsert: any = {
+        stake_id: stakeIdResolved,
+        code,
+        status: 'active',
+        drawn_numbers: [],
+        current_number: null,
+        prize_pool: prizePool,
+        called_count: 0,
+        created_at: new Date().toISOString(),
+      };
+      if (roomCommission !== null) {
+        gameInsert.commission = roomCommission;
+      }
       const { data: game, error: gameError } = await supabase
         .from('games')
-        .insert({
-          stake_id: stakeIdResolved,
-          code,
-          status: 'active',
-          drawn_numbers: [],
-          current_number: null,
-          prize_pool: prizePool,
-          called_count: 0,
-          created_at: new Date().toISOString(),
-        })
+        .insert(gameInsert)
         .select()
         .single();
 
