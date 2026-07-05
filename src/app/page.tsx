@@ -136,8 +136,12 @@ function HomePage() {
   const isRegisteredRef = useRef(false);
   const isSpectatingReadyRef = useRef(false);
   const inGameRef = useRef(false);
+  const selectedCardsRef = useRef<number[]>([]);
   const commissionRateRef = useRef(15);
   const startGameplayRef = useRef<any>(null);
+  const startGameplayLockRef = useRef(false);
+  const refreshGameStateRef = useRef<any>(null);
+  const refreshTakenCardsRef = useRef<any>(null);
   const tickReadyRef = useRef(false);
 
   // ============ DETERMINISTIC DRAW SEQUENCE ============
@@ -358,7 +362,7 @@ function HomePage() {
         const uniqueUserIds = new Set(reservations.map((r: any) => r.user_id));
         const reservedCount = reservations.filter((r: any) => Number(r.card_number) > 0).length;
         setLobbyPlayerCount(Math.max(uniqueUserIds.size, data.livePlayerCount || 0));
-        setReservedCardCount(Math.max(reservedCount, selectedCards.length));
+        setReservedCardCount(Math.max(reservedCount, selectedCardsRef.current.length));
 
         const myRes = reservations.filter((r: any) => r.user_id === profile.id).map((r: any) => r.card_number);
         const activeMyRes = myRes.filter((n: number) => n > 0);
@@ -368,9 +372,13 @@ function HomePage() {
     } catch (e) {
       console.error('Failed to refresh game state:', e);
     }
-  }, [profile?.id, selectedCards]);
+  }, [profile?.id]);
 
-  useEffect(() => { if (!selectedRoom || !gameId || inGame) return; refreshGameState(gameId); }, [selectedRoom?.id, gameId, inGame, refreshGameState]);
+  useEffect(() => {
+    if (!selectedRoom || !gameId || inGame) return;
+    refreshGameStateRef.current = refreshGameState;
+    refreshGameState(gameId);
+  }, [selectedRoom?.id, gameId, inGame]);
 
   // Light polling that only updates takenCards and lobbyPlayerCount
   // Does NOT overwrite selectedCards to avoid flicker during card selection
@@ -387,21 +395,22 @@ function HomePage() {
         setTakenCards(otherCards.filter((n: number) => n > 0));
         const uniqueUserIds = new Set(reservations.map((r: any) => r.user_id));
         setLobbyPlayerCount(Math.max(uniqueUserIds.size, data.livePlayerCount || 0));
-        setReservedCardCount(Math.max(reservedCount, selectedCards.length));
+        setReservedCardCount(Math.max(reservedCount, selectedCardsRef.current.length));
       }
     } catch (e) {
       // Silent fail for polling
     }
-  }, [profile?.id, selectedCards]);
+  }, [profile?.id]);
 
   useEffect(() => {
     if (!selectedRoom || !gameId || inGame) return;
+    refreshTakenCardsRef.current = refreshTakenCards;
     const channel = supabase.channel(`game-${gameId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'game_card_reservations', filter: `game_code=eq.${gameId}` }, () => refreshTakenCards(gameId))
       .subscribe();
     realtimeChannelRef.current = channel;
     return () => { if (realtimeChannelRef.current) { supabase.removeChannel(realtimeChannelRef.current); realtimeChannelRef.current = null; } };
-  }, [selectedRoom?.id, gameId, inGame, refreshTakenCards]);
+  }, [selectedRoom?.id, gameId, inGame]);
 
   // ============ INIT & VOICE ============
   useEffect(() => { if (typeof window !== 'undefined' && window.speechSynthesis) window.speechSynthesis.getVoices(); }, []);
@@ -533,7 +542,10 @@ function HomePage() {
   // ============ START GAMEPLAY ============
   const startGameplay = useCallback(async (isSpectateMode: boolean) => {
     if (!selectedRoom) return;
-    const activeGameId = await getCurrentLobbyGameId(selectedRoom.id) || generateDeterministicGameId(selectedRoom.id, Math.floor(Date.now() / 1000 / getRoomPeriod(selectedRoom.id)));
+    if (startGameplayLockRef.current) { console.log('[startGameplay] already in progress, skipping'); return; }
+    startGameplayLockRef.current = true;
+    try {
+      const activeGameId = await getCurrentLobbyGameId(selectedRoom.id) || generateDeterministicGameId(selectedRoom.id, Math.floor(Date.now() / 1000 / getRoomPeriod(selectedRoom.id)));
     const entryFee = selectedRoom.entry;
 
     // Set stake to total amount paid (entry fee × number of cards)
@@ -594,6 +606,7 @@ function HomePage() {
         setLivePlayerCount(selectedRoom.players);
       }
     })();
+    } finally { startGameplayLockRef.current = false; }
   }, [selectedRoom, selectedCards, registerLiveGame, appointedCard, getDeterministicDrawSequence, getCurrentLobbyGameId]);
 
   // Sync refs for tick interval to avoid stale closure issues
@@ -602,9 +615,10 @@ function HomePage() {
     isRegisteredRef.current = isRegistered;
     isSpectatingReadyRef.current = isSpectatingReady;
     inGameRef.current = inGame;
+    selectedCardsRef.current = selectedCards;
     selectedRoomRef.current = selectedRoom;
     commissionRateRef.current = commissionRate;
-  }, [startGameplay, isRegistered, isSpectatingReady, inGame, selectedRoom, commissionRate]);
+  }, [startGameplay, isRegistered, isSpectatingReady, inGame, selectedCards, selectedRoom, commissionRate]);
 
   // ============ ROOM COUNTDOWN TICK ============
   useEffect(() => {
