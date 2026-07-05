@@ -522,9 +522,9 @@ function HomePage() {
     setOtherPlayers(virtualCompetitors);
     setShowCardPicker(false); setInGame(true);
     // Pre-set prize pool from local estimate so the display doesn't flash 0
-    // Use total cards estimate (room player count × cards per player) rather than just user's cards
+    // Use actual reserved card count (from DB polling) for consistency with waiting screen
     const effComm = selectedRoom.commission ?? commissionRate;
-    const totalCardsEstimate = Math.max(lobbyPlayerCount * 2, selectedRoom.players * 2, 2);
+    const totalCardsEstimate = Math.max(reservedCardCount, selectedCards.length, lobbyPlayerCount * 2, selectedRoom.players * 2, 2);
     setPrizePool(prev => prev > 0 ? prev : entryFee * totalCardsEstimate * (1 - effComm / 100));
 
     const sequence = getDeterministicDrawSequence(activeGameId, appointedCard?.cardNumber);
@@ -545,11 +545,12 @@ function HomePage() {
           const { data: reservations } = await supabase.from('game_card_reservations').select('user_id').eq('game_code', activeGameId);
           if (reservations) {
             const totalPlayerCount = new Set(reservations.map(r => r.user_id)).size || 1;
+            const totalCardCount = Math.max(reservations.length, totalPlayerCount, 1);
             setLivePlayerCount(totalPlayerCount);
-            setPrizePool(entryFee * Math.max(totalPlayerCount, 1) * 2 * (1 - effComm / 100));
+            setPrizePool(entryFee * totalCardCount * (1 - effComm / 100));
           } else {
             setLivePlayerCount(selectedRoom.players);
-            setPrizePool(entryFee * selectedRoom.players * 2 * (1 - effComm / 100));
+            setPrizePool(entryFee * Math.max(selectedRoom.players, 1) * (1 - effComm / 100));
           }
         }
       } catch (err) {
@@ -683,8 +684,8 @@ function HomePage() {
         // Virtual players no longer trigger loss — game continues
       }
 
-      // Periodically check server for game completion by another player (every 5 draws)
-      if (nextIndex > 0 && nextIndex % 5 === 0 && !winInProgressRef.current) {
+      // Check server for game completion by another player on every draw for instant cross-device detection
+      if (!winInProgressRef.current) {
         void supabase.from('games').select('status, winner_id').eq('code', gameId).maybeSingle().then(({ data }) => {
           if (data && data.status === 'finished' && data.winner_id && data.winner_id !== profile?.id) {
             setOpponentWinner('Another player');
@@ -727,13 +728,14 @@ function HomePage() {
         if (g) {
           const { count } = await supabase.from('game_players').select('*', { count: 'exact', head: true }).eq('game_id', g.id).eq('is_watching', false);
           if (count !== null && count !== liveCountRef.current) { liveCountRef.current = count; setLivePlayerCount(count); }
-          setPrizePool(Number(g.prize_pool) || (selectedRoomRef.current?.entry || 10) * Math.max(count || 1, 1) * (1 - (commissionRateRef.current || 15) / 100));
+          // Use total card reservations for accurate prize pool fallback (matching waiting-screen logic)
+          const { count: cardCount } = await supabase.from('game_card_reservations').select('*', { count: 'exact', head: true }).eq('game_code', gameId).gt('card_number', 0);
+          const totalCards = Math.max(cardCount || 0, count || 1, 1);
+          setPrizePool(Number(g.prize_pool) || (selectedRoomRef.current?.entry || 10) * totalCards * (1 - (commissionRateRef.current || 15) / 100));
           if (g.status === 'finished' && g.winner_id) {
             if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
             if (g.winner_id !== profile?.id) {
-              const { data: winnerProfile } = await supabase.from('profiles').select('first_name, username').eq('id', g.winner_id).maybeSingle();
-              const winnerName = winnerProfile?.first_name || winnerProfile?.username || null;
-              setOpponentWinner(winnerName || null);
+              setOpponentWinner('Another player');
             } else {
               setOpponentWinner(null);
             }
@@ -859,12 +861,21 @@ function HomePage() {
             }
           }
         } catch {}
+        // Refresh wallet immediately then again after a delay to handle any DB read-after-write consistency lag
         await refreshWallet();
+        setTimeout(() => { void refreshWallet(); }, 500);
       }
     } finally {
       winInProgressRef.current = false;
     }
   }, [gameId, selectedStake, addGameToHistory, refreshWallet, profile?.id]);
+
+  // Safety net: refresh wallet whenever win modal appears (ensures balance is up-to-date after win credit)
+  useEffect(() => {
+    if (showWinModal) {
+      refreshWallet();
+    }
+  }, [showWinModal, refreshWallet]);
 
   // ============ SELECT STAKE / ROOM ============
   const selectStake = useCallback((stake: number) => {
@@ -981,6 +992,8 @@ function HomePage() {
     }
     lockedGameIdRef.current = null;
     setIsSpectatingReady(false); setTakenCards([]); setLobbyPlayerCount(0);
+    // Refresh wallet after leaving game to ensure balance reflects any changes
+    refreshWallet();
   }, [isRegistered, selectedCards, selectedRoom, updateBalance, refreshWallet, gameId, profile?.id]);
 
   const leaveGame = useCallback(async () => {

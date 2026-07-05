@@ -311,7 +311,8 @@ export async function POST(request: NextRequest) {
       if (!gameId || !userId || !Array.isArray(selectedCards) || selectedCards.length === 0) {
         return NextResponse.json({ error: 'gameId, userId, and selectedCards array are required' }, { status: 400 });
       }
-      // Check for conflicts — cards already reserved by OTHER users
+      // Verify ALL selected cards still belong to this user (reserved via toggle_card).
+      // If any card belongs to another user, reject — avoids a race where upsert would silently overwrite.
       const { data: existing } = await supabase
         .from('game_card_reservations')
         .select('card_number, user_id')
@@ -324,15 +325,6 @@ export async function POST(request: NextRequest) {
           conflicts: conflicts.map((r: any) => r.card_number),
         }, { status: 409 });
       }
-      // Bulk upsert reservations for this user
-        const inserts = selectedCards.map((cardNum: number) =>
-          supabase.from('game_card_reservations').upsert({
-            game_code: gameId,
-            user_id: userId,
-            card_number: cardNum,
-          }, { onConflict: 'game_code,card_number' })
-        );
-      await Promise.all(inserts);
       return NextResponse.json({ success: true });
     }
 
@@ -428,13 +420,30 @@ export async function POST(request: NextRequest) {
           .from('games')
           .insert(gameInsert)
           .select('id')
-          .single();
+          .maybeSingle();
 
-        if (err || !newGame) {
-          console.error('Error creating game in registration:', err);
+        if (err) {
+          if (err.code === '23505') {
+            // Unique violation — another request inserted the same code between our SELECT and INSERT.
+            // Fetch the existing row atomically.
+            const { data: existing } = await supabase
+              .from('games')
+              .select('id, status')
+              .eq('code', gameId)
+              .maybeSingle();
+            if (!existing) {
+              return NextResponse.json({ error: 'Failed to create game session' }, { status: 500 });
+            }
+            dbGameId = existing.id;
+          } else {
+            console.error('Error creating game in registration:', err);
+            return NextResponse.json({ error: 'Failed to create game session' }, { status: 500 });
+          }
+        } else if (!newGame) {
           return NextResponse.json({ error: 'Failed to create game session' }, { status: 500 });
+        } else {
+          dbGameId = newGame.id;
         }
-        dbGameId = newGame.id;
       }
 
       // Prepare cards to play
@@ -484,7 +493,9 @@ export async function POST(request: NextRequest) {
           }, { onConflict: 'game_id,user_id' });
       }
 
-      // Ensure card reservations exist for this user's selected cards
+      // Ensure card reservations exist for this user's selected cards.
+      // Cards were already reserved via toggle_card; this is a safety check.
+      // Use insert so a conflict with another user's reservation is rejected, not silently overwritten.
       if (selectedCards && selectedCards.length > 0) {
         const existingRes = await supabase
           .from('game_card_reservations')
@@ -494,11 +505,15 @@ export async function POST(request: NextRequest) {
         const existingCards = new Set((existingRes.data || []).map((r: any) => r.card_number));
         const toInsert = selectedCards.filter((n: number) => !existingCards.has(n));
         for (const cardNum of toInsert) {
-          await supabase.from('game_card_reservations').upsert({
+          const { error } = await supabase.from('game_card_reservations').insert({
             game_code: gameId,
             user_id: userId,
             card_number: cardNum,
-          }, { onConflict: 'game_code,card_number' });
+          });
+          if (error && error.code === '23505') {
+            // Another user claimed this card between our check and insert
+            console.warn(`Card ${cardNum} already taken by another user during register_game`);
+          }
         }
       }
 
