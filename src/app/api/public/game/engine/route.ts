@@ -32,22 +32,19 @@ async function sendGameStats(botToken: string, gameId: string) {
     const prize = Number(game.prize_pool || 0);
     const drawnCount = (game.drawn_numbers || []).length;
 
-    // Calculate commission earned
     let commission = 0;
-    if (game.stake_id) {
+    // Calculate commission earned from prize pool and rate
+    // commission = prize * rate / (100 - rate)  i.e., prize_pool = stake * cards * (1 - rate/100)
+    const rate = Number(game.commission ?? 15);
+    commission = prize * rate / (100 - rate);
+    if (commission <= 0 && game.stake_id) {
+      // Fallback: read from revenue - prize
       const { data: stake } = await supabase.from('stakes').select('amount').eq('id', game.stake_id).single();
       if (stake) {
         const { data: cardsData } = await supabase.from('game_card_reservations').select('id').eq('game_code', game.code).gt('card_number', 0);
-        const cards = cardsData?.length || 0;
-        const totalEntities = Math.max(playerCount, cards || 0);
-        commission = Math.max(0, (Number(stake.amount) * totalEntities) - prize);
+        const totalCards = Math.max(cardsData?.length || 0, playerCount, 1);
+        commission = Math.max(0, (Number(stake.amount) * totalCards) - prize);
       }
-    }
-    if (commission === 0) {
-      // Back-calculate from commission rate
-      const { data: configData } = await supabase.from('bot_config').select('commands').eq('id', 'main').single();
-      const rate = Number(configData?.commands?.commission || 15);
-      commission = prize * rate / (100 - rate);
     }
 
     let statsMsg = `*🏁 GAME FINISHED*\n\n`;
@@ -354,11 +351,17 @@ export async function POST(request: NextRequest) {
         await supabase.from('game_history').insert(historyPayload);
       }
 
+      // Update prize pool to final value BEFORE marking game finished (so downstream readers see correct value)
+      try {
+        await supabase.rpc('update_game_prize_pool', {
+          p_game_code: gameByCode.code,
+          p_stake_amt: perCardStake,
+          p_commission: effectiveCommission ?? 15,
+        });
+      } catch {} // Non-fatal if RPC fails
+
       // Mark game as finished with winner
       await supabase.from('games').update({ status: 'finished', winner_id: userId }).eq('id', gameByCode.id);
-
-      // Clean up card reservations
-      await supabase.from('game_card_reservations').delete().eq('game_code', gameByCode.code);
 
       await supabase.from('game_players').update({ auto_mark: true }).eq('game_id', gameByCode.id).eq('user_id', userId);
 
@@ -366,9 +369,13 @@ export async function POST(request: NextRequest) {
         await tgSend(botToken, profile.telegram_id, `🎉 *BINGO WIN!*\n\nCongratulations ${profile.first_name || 'Player'}! You won *${winAmount.toLocaleString()} ETB*!\n\nKeep playing and winning! 🍀`);
       }
 
+      // Send stats BEFORE deleting reservations so sendGameStats can read actual card count
       if (botToken) {
         await sendGameStats(botToken, gameByCode.id);
       }
+
+      // Clean up card reservations AFTER stats are sent
+      await supabase.from('game_card_reservations').delete().eq('game_code', gameByCode.code);
 
       return NextResponse.json({
         success: true,

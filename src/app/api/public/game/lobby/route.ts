@@ -311,8 +311,7 @@ export async function POST(request: NextRequest) {
       if (!gameId || !userId || !Array.isArray(selectedCards) || selectedCards.length === 0) {
         return NextResponse.json({ error: 'gameId, userId, and selectedCards array are required' }, { status: 400 });
       }
-      // Verify ALL selected cards still belong to this user (reserved via toggle_card).
-      // If any card belongs to another user, reject — avoids a race where upsert would silently overwrite.
+      // Verify ALL selected cards are not taken by OTHER users
       const { data: existing } = await supabase
         .from('game_card_reservations')
         .select('card_number, user_id')
@@ -324,6 +323,23 @@ export async function POST(request: NextRequest) {
           error: 'Some selected cards are already taken',
           conflicts: conflicts.map((r: any) => r.card_number),
         }, { status: 409 });
+      }
+      // Insert any selected cards that aren't yet reserved (e.g. if toggle_card ran but reservation expired)
+      // Using insert (not upsert) so a conflict with another user's reservation is rejected, not overwritten.
+      const existingCards = new Set((existing || []).map((r: any) => r.card_number));
+      for (const cardNum of selectedCards) {
+        if (!existingCards.has(cardNum)) {
+          const { error } = await supabase.from('game_card_reservations').insert({
+            game_code: gameId,
+            user_id: userId,
+            card_number: cardNum,
+          });
+          if (error && error.code === '23505') {
+            return NextResponse.json({
+              error: `Card ${cardNum} was just taken by another player. Please choose a different one.`,
+            }, { status: 409 });
+          }
+        }
       }
       return NextResponse.json({ success: true });
     }
@@ -517,9 +533,8 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Update prize pool — commission is already stored on the game row (if set), so don't pass
-      // it as a separate RPC param. The new RPC reads from games.commission; the old RPC reads
-      // from bot_config. Skipping p_commission avoids parameter mismatch errors.
+      // Update prize pool — p_stake_amt is the PER-CARD entry fee (already correct, stakeAmount is per card).
+      // Formula: p_stake_amt * total_cards * (1 - commission/100)
       try {
         await supabase.rpc('update_game_prize_pool', { p_game_code: gameId, p_stake_amt: stakeAmount });
       } catch (poolErr) {

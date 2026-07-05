@@ -61,18 +61,6 @@ export default function GameView({
   // When autoMark is ON, the grid shows all drawn numbers (auto-marked).
   // When autoMark is OFF, the grid only shows numbers the user has manually marked.
   const markedNumbers = autoMark ? drawnNumbers : userMarkedNumbers;
-  const isBingoReady = inGame && playerCards.some(c => checkWin(c, markedNumbers));
-
-  const nearWinInfo = (() => {
-    if (isWatching || playerCards.length === 0) return null;
-    let bestAway: number | null = null;
-    playerCards.forEach(card => {
-      const away = getNumbersAwayFromWin(card, markedNumbers);
-      if (away !== null && (bestAway === null || away < bestAway)) bestAway = away;
-    });
-    if (bestAway === null || bestAway > 2) return null;
-    return { numbersAway: bestAway };
-  })();
 
   return (
     <>
@@ -144,26 +132,7 @@ export default function GameView({
           </div>
         </div>
 
-        {/* Near win tension */}
-        {nearWinInfo && !isBingoReady && (
-          <div className={`mb-3 rounded-2xl p-3 border animate-pulse ${
-            nearWinInfo.numbersAway === 1
-              ? 'bg-red-900/30 border-red-500/50 shadow-lg shadow-red-500/20'
-              : 'bg-amber-900/20 border-amber-500/40'
-          }`}>
-            <div className="flex items-center justify-center gap-2">
-              <span className="text-lg">{nearWinInfo.numbersAway === 1 ? '🔥' : '⚡'}</span>
-              <span className={`text-sm font-black uppercase tracking-wider ${
-                nearWinInfo.numbersAway === 1 ? 'text-red-300' : 'text-amber-300'
-              }`}>
-                {nearWinInfo.numbersAway === 1
-                  ? (t('near_win_one') || '1 NUMBER AWAY!')
-                  : (t('near_win_two') || '2 NUMBERS AWAY!')}
-              </span>
-              <span className="text-lg">{nearWinInfo.numbersAway === 1 ? '🔥' : '⚡'}</span>
-            </div>
-          </div>
-        )}
+
 
         {/* Bingo Cards */}
         <div className="space-y-4 mb-4">
@@ -222,20 +191,11 @@ export default function GameView({
             </button>
           </div>
 
-          <div className="flex gap-2 relative">
-            {isBingoReady && !isWatching && (
-              <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-red-600 border border-red-400 text-white font-extrabold text-[9px] px-2.5 py-1 rounded-full animate-bounce shadow-lg shadow-red-500/50 uppercase tracking-widest pointer-events-none flex items-center gap-1.5 z-20">
-                <span className="w-1.5 h-1.5 bg-white rounded-full animate-ping shrink-0" />🔥 READY!
-              </div>
-            )}
+          <div className="flex gap-2">
             {!isWatching && (
               <button onClick={onBingo} disabled={opponentWinner !== null}
-                className={`flex-1 font-black py-4 rounded-xl text-sm transition-all tracking-wider uppercase relative overflow-hidden select-none cursor-pointer ${
-                  isBingoReady
-                    ? 'bg-gradient-to-r from-red-600 via-amber-500 to-red-600 text-white shadow-xl shadow-red-500/40 scale-[1.01] border border-red-400 animate-pulse'
-                    : 'bg-[#FEE800] text-navy hover:opacity-95 shadow-md shadow-gold/15 transition-transform hover:scale-[1.01] active:translate-y-0.5'
-                }`}>
-                🚀 {isBingoReady ? '🔥 CLAIM BINGO! 🔥' : 'CLAIM BINGO!'}
+                className="flex-1 font-black py-4 rounded-xl text-sm transition-all tracking-wider uppercase relative overflow-hidden select-none cursor-pointer bg-[#FEE800] text-navy hover:opacity-95 shadow-md shadow-gold/15 transition-transform hover:scale-[1.01] active:translate-y-0.5">
+                🚀 CLAIM BINGO!
               </button>
             )}
             <button onClick={onLeaveAttempt}

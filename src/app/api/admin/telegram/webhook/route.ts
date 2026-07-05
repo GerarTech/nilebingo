@@ -299,8 +299,16 @@ async function handleAdminCommission(chatId: number) {
 
         if (stakeAmt === 0) continue;
 
+        // Count actual cards (not just players) for accurate revenue
+        const { data: cardData } = await supabase
+          .from('game_card_reservations')
+          .select('id')
+          .eq('game_code', game.code)
+          .gt('card_number', 0);
+        const totalCards = Math.max(cardData?.length || 0, playerCount, 1);
+
         const prize = Number(game.prize_pool) || 0;
-        const entryTotal = stakeAmt * playerCount;
+        const entryTotal = stakeAmt * totalCards;
         const commission = entryTotal - prize;
 
         if (commission < 0) continue;

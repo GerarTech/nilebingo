@@ -147,6 +147,7 @@ function HomePage() {
   const lockedGameIdRef = useRef<string | null>(null);
   const gameIdRef = useRef('');
   const gameStatusChannelRef = useRef<any>(null);
+  const opponentWinnerRef = useRef<string | null>(null);
 
   // ============ DETERMINISTIC DRAW SEQUENCE ============
   const getDeterministicDrawSequence = useCallback((gId: string, targetCardNum?: number | null) => {
@@ -236,16 +237,17 @@ function HomePage() {
     return remaining <= 0 ? period : remaining;
   }, []);
 
-  const addGameToHistory = useCallback((gId: string, stakeAmt: number, outcome: 'win' | 'loss') => {
+  const addGameToHistory = useCallback((gId: string, stakeAmt: number, outcome: 'win' | 'loss', actualPrizeAmount?: number) => {
     if (isWatching || !gId) return;
 
     const stakePerCard = Number(stakeAmt || selectedStake || selectedRoom?.entry || 10);
-    const cardCount = Math.max(1, (selectedCards.length || playerCards.length || 1));
+    const cardCount = Math.max(1, selectedCardsRef.current.length || playerCards.length || 1);
     const totalStake = stakePerCard * cardCount;
-    const effComm = selectedRoom?.commission ?? commissionRate;
-    const actualPrize = outcome === 'win'
-      ? Math.max(0, totalStake * (1 - effComm / 100))
-      : -totalStake;
+    const actualPrize = actualPrizeAmount !== undefined
+      ? actualPrizeAmount
+      : outcome === 'win'
+        ? Math.max(0, totalStake * (1 - commissionRate / 100))
+        : -totalStake;
 
     setStakeHistory(prev => {
       const exists = prev.some(item => item.gameId === gId && item.result === outcome);
@@ -572,7 +574,8 @@ function HomePage() {
     selectedRoomRef.current = selectedRoom;
     commissionRateRef.current = commissionRate;
     gameIdRef.current = gameId;
-  }, [startGameplay, isRegistered, isSpectatingReady, inGame, selectedCards, selectedRoom, commissionRate, gameId]);
+    opponentWinnerRef.current = opponentWinner;
+  }, [startGameplay, isRegistered, isSpectatingReady, inGame, selectedCards, selectedRoom, commissionRate, gameId, opponentWinner]);
 
   // ============ ROOM COUNTDOWN TICK ============
   useEffect(() => {
@@ -644,6 +647,11 @@ function HomePage() {
       return;
     }
     intervalRef.current = setInterval(() => {
+      // Bail out immediately if another player already won (prevents any further draws)
+      if (opponentWinnerRef.current) {
+        if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+        return;
+      }
       const currentDrawn = drawnRef.current;
       const nextIndex = currentDrawn.length;
       if (nextIndex >= 75) {
@@ -686,10 +694,11 @@ function HomePage() {
       }
 
       // Check server for game completion by another player on every draw for instant cross-device detection
-      if (!winInProgressRef.current) {
+      if (!winInProgressRef.current && !opponentWinnerRef.current) {
         void supabase.from('games').select('status, winner_id').eq('code', gameId).maybeSingle().then(({ data }) => {
           if (data && data.status === 'finished' && data.winner_id && data.winner_id !== profile?.id) {
-            setOpponentWinner('Another player');
+            if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+            setOpponentWinner(data.winner_id);
           }
         });
       }
@@ -733,13 +742,9 @@ function HomePage() {
           const { count: cardCount } = await supabase.from('game_card_reservations').select('*', { count: 'exact', head: true }).eq('game_code', gameId).gt('card_number', 0);
           const totalCards = Math.max(cardCount || 0, count || 1, 1);
           setPrizePool(Number(g.prize_pool) || (selectedRoomRef.current?.entry || 10) * totalCards * (1 - (commissionRateRef.current || 15) / 100));
-          if (g.status === 'finished' && g.winner_id) {
+          if (g.status === 'finished' && g.winner_id && !opponentWinnerRef.current) {
             if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
-            if (g.winner_id !== profile?.id) {
-              setOpponentWinner('Another player');
-            } else {
-              setOpponentWinner(null);
-            }
+            setOpponentWinner(g.winner_id === profile?.id ? null : 'Another player');
           }
         }
       } catch {}
@@ -851,7 +856,10 @@ function HomePage() {
           });
           const data = await res.json();
           if (data.success) {
-            addGameToHistory(gameId, selectedStake || 10, 'win');
+            const cardCount = selectedCardsRef.current.length || 1;
+            const totalUserStake = (selectedStake || 10) * cardCount;
+            const isProfit = data.winAmount > totalUserStake;
+            addGameToHistory(gameId, selectedStake || 10, isProfit ? 'win' : 'loss', data.winAmount);
           } else if (data.error === 'Game already finished') {
             if (data.winner_id === profile.id) {
               addGameToHistory(gameId, selectedStake || 10, 'win');
