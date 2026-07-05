@@ -97,6 +97,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const refreshWallet = useCallback(async () => {
     const pid = profileRef.current?.id;
     const tid = profileRef.current?.telegram_id;
+    // Guest user: load from localStorage
+    if (tid && !/^\d+$/.test(tid)) {
+      try {
+        const raw = localStorage.getItem(`guest_wallet_${tid}`);
+        if (raw) setState(prev => ({ ...prev, wallet: JSON.parse(raw) as Wallet }));
+      } catch {}
+      return;
+    }
     if (isValidUUID(pid)) {
       try {
         const res = await fetch(`/api/public/wallet?userId=${pid}`);
@@ -128,6 +136,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const initialize = useCallback(async (telegramId: string, firstName?: string, username?: string) => {
     setState(prev => ({ ...prev, loading: true }));
+
+    // Guest (non-Telegram) IDs: skip API entirely, use local fallback + localStorage wallet
+    if (!/^\d+$/.test(telegramId)) {
+      const fbProf = fallbackProfile(telegramId);
+      let savedWallet: Wallet | null = null;
+      try {
+        const raw = localStorage.getItem(`guest_wallet_${telegramId}`);
+        if (raw) savedWallet = JSON.parse(raw) as Wallet;
+      } catch {}
+      setState(prev => ({
+        ...prev,
+        loading: false,
+        initialized: true,
+        profile: fbProf,
+        wallet: savedWallet || fallbackWallet(fbProf.id),
+      }));
+      return;
+    }
 
     let lastError: unknown = null;
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -184,6 +210,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const fetchWallet = () => {
       const pid = profileIdRef.current;
       const tid = profileRef.current?.telegram_id;
+      // Guest user: skip server wallet fetch
+      if (tid && !/^\d+$/.test(tid)) return;
       if (isValidUUID(pid)) {
         fetch(`/api/public/wallet?userId=${pid}`)
           .then(r => r.json())
@@ -225,7 +253,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const updateBalance = useCallback(async (amount: number, type: 'play_balance' | 'main_balance') => {
     const profile = profileRef.current;
-    if (profile && isValidUUID(profile.id)) {
+    if (!profile) return;
+    // Guest user: update localStorage wallet locally
+    if (!/^\d+$/.test(profile.telegram_id)) {
+      setState(prev => {
+        if (!prev.wallet) return prev;
+        const field = type === 'main_balance' ? 'main_balance' : 'play_balance';
+        const newWallet = { ...prev.wallet, [field]: Number(prev.wallet[field]) + amount };
+        try { localStorage.setItem(`guest_wallet_${profile.telegram_id}`, JSON.stringify(newWallet)); } catch {}
+        return { ...prev, wallet: newWallet as Wallet };
+      });
+      return;
+    }
+    if (isValidUUID(profile.id)) {
       try {
         const res = await fetch('/api/public/wallet', {
           method: 'PATCH',

@@ -762,10 +762,8 @@ function HomePage() {
   const handleJoinRoom = useCallback((room: RoomConfig) => {
     const period = getRoomPeriod(room.id);
     const currentSec = Math.floor(Date.now() / 1000);
-    const elapsed = currentSec % period;
-    const remaining = period - elapsed;
-    const targetCycle = elapsed === 0 ? Math.floor(currentSec / period) : Math.floor((currentSec + remaining) / period);
-    const nextGameId = generateDeterministicGameId(room.id, targetCycle);
+    const cycle = Math.floor(currentSec / period);
+    const gameIdForCycle = generateDeterministicGameId(room.id, cycle);
     setSelectedRoom(room);
     setSelectedStake(room.entry);
     setSelectedCards([]);
@@ -774,7 +772,7 @@ function HomePage() {
     setLobbyPlayerCount(0);
     setIsRegistered(false);
     setIsSpectatingReady(false);
-    setGameId(nextGameId);
+    setGameId(gameIdForCycle);
   }, []);
 
   // ============ PLAY / REGISTER / LEAVE ============

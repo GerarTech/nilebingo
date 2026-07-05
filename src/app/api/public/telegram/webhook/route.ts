@@ -795,6 +795,7 @@ export async function POST(request: NextRequest) {
       '/language': 'language',
       '/support': 'contact',
       '/stats': 'stats',
+      '/invite': 'mycode',
     };
     const matchesCommand = (cmdText: string, plainText: string) => {
       if (SLASH_TO_KEY[text] === plainText) return true;

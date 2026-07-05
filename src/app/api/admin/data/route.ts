@@ -215,6 +215,21 @@ export async function POST(request: NextRequest) {
         const result = await updateBotMessages(body.messages);
         return NextResponse.json(result);
       }
+      case 'cleanup_guest_users': {
+        const { data: allProfiles } = await supabase
+          .from('profiles')
+          .select('id, telegram_id');
+        let deleted = 0;
+        if (allProfiles) {
+          for (const p of allProfiles) {
+            if (!/^\d+$/.test(String(p.telegram_id || ''))) {
+              await deleteUser(p.id);
+              deleted++;
+            }
+          }
+        }
+        return NextResponse.json({ success: true, deleted });
+      }
       default:
         return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
     }

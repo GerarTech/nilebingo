@@ -644,7 +644,7 @@ export async function setBalance(userId: string, type: 'main' | 'play', value: n
 
 // Delete user and all associated data
 export async function deleteUser(userId: string) {
-  const childTables = ['game_card_reservations', 'game_players', 'transactions', 'wallets'];
+  const childTables = ['game_card_reservations', 'game_players', 'transactions', 'wallets', 'game_history'];
   for (const table of childTables) {
     const { error } = await supabase.from(table).delete().eq('user_id', userId);
     if (error) return { error: error.message };
