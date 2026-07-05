@@ -39,7 +39,23 @@ export async function GET(request: NextRequest) {
       { id: 'vip', name: 'VIP Room', entry: 500, players: 2, maxPlayers: 100 }
     ];
 
-    return NextResponse.json({ commission, rooms, appName, appLogo, appLogoPng, botUsername, colorScheme, referralEnabled, referralBonus, rulesText, withdrawMinAmount, withdrawRequiredGames }, {
+    const happyHour = config.happy_hour || { enabled: false, room_id: 'bronze', commission_override: 0, label: 'Happy Hour', start_hour: 18, end_hour: 22 };
+    const dailyStreak = config.daily_streak || { enabled: true, rewards: [5, 5, 5, 10, 10, 15, 25] };
+    const paymentGateways = {
+      cbeAccount: config.cbe_account || '',
+      cbeName: config.cbe_name || 'Nile Bingo',
+      cbeMax: Number(config.cbe_max) || 5000,
+      telebirrNumber: config.telebirr_number || '',
+      telebirrName: config.telebirr_name || '',
+      telebirrMax: Number(config.telebirr_max) || 1000,
+      banks: Array.isArray(config.banks) ? config.banks : [],
+    };
+
+    return NextResponse.json({
+      commission, rooms, appName, appLogo, appLogoPng, botUsername, colorScheme,
+      referralEnabled, referralBonus, rulesText, withdrawMinAmount, withdrawRequiredGames,
+      happyHour, dailyStreak, paymentGateways,
+    }, {
       headers: {
         'Cache-Control': 'no-store, max-age=0'
       }

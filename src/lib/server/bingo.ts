@@ -138,6 +138,43 @@ export function generateGameCode(): string {
   return letters[Math.floor(Math.random() * letters.length)] + nums;
 }
 
+/** How many numbers away from any winning line (row/col/diag). Returns null if already won. */
+export function getNumbersAwayFromWin(card: number[][], drawnNumbers: number[]): number | null {
+  if (checkWin(card, drawnNumbers)) return null;
+
+  const marked = markCard(card, drawnNumbers);
+  const rows = card.length;
+  const cols = card[0]?.length || 5;
+  let best = 99;
+
+  for (let row = 0; row < rows; row++) {
+    let missing = 0;
+    for (let col = 0; col < cols; col++) {
+      if (!marked[row][col]) missing++;
+    }
+    if (missing < best) best = missing;
+  }
+  for (let col = 0; col < cols; col++) {
+    let missing = 0;
+    for (let row = 0; row < rows; row++) {
+      if (!marked[row][col]) missing++;
+    }
+    if (missing < best) best = missing;
+  }
+  let diagMissing = 0;
+  for (let i = 0; i < rows; i++) {
+    if (!marked[i][i]) diagMissing++;
+  }
+  if (diagMissing < best) best = diagMissing;
+  diagMissing = 0;
+  for (let i = 0; i < rows; i++) {
+    if (!marked[i][cols - 1 - i]) diagMissing++;
+  }
+  if (diagMissing < best) best = diagMissing;
+
+  return best === 99 ? null : best;
+}
+
 // Get column label for a number
 export function getColumnLabel(num: number): string {
   if (num >= 1 && num <= 15) return 'B';

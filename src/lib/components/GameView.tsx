@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
 import BingoGrid from './BingoGrid';
 import RollingCounter from './RollingCounter';
-import { getColumnLabel, getWinningCells, checkWin } from '../server/bingo';
+import { getColumnLabel, getWinningCells, checkWin, getNumbersAwayFromWin } from '../server/bingo';
 import WinModal from './WinModal';
 import LossModal from './LossModal';
 import LeaveModal from './LeaveModal';
@@ -62,6 +62,17 @@ export default function GameView({
   // When autoMark is OFF, the grid only shows numbers the user has manually marked.
   const markedNumbers = autoMark ? drawnNumbers : userMarkedNumbers;
   const isBingoReady = inGame && playerCards.some(c => checkWin(c, markedNumbers));
+
+  const nearWinInfo = (() => {
+    if (isWatching || playerCards.length === 0) return null;
+    let bestAway: number | null = null;
+    playerCards.forEach(card => {
+      const away = getNumbersAwayFromWin(card, markedNumbers);
+      if (away !== null && (bestAway === null || away < bestAway)) bestAway = away;
+    });
+    if (bestAway === null || bestAway > 2) return null;
+    return { numbersAway: bestAway };
+  })();
 
   return (
     <>
@@ -132,6 +143,27 @@ export default function GameView({
             </div>
           </div>
         </div>
+
+        {/* Near win tension */}
+        {nearWinInfo && !isBingoReady && (
+          <div className={`mb-3 rounded-2xl p-3 border animate-pulse ${
+            nearWinInfo.numbersAway === 1
+              ? 'bg-red-900/30 border-red-500/50 shadow-lg shadow-red-500/20'
+              : 'bg-amber-900/20 border-amber-500/40'
+          }`}>
+            <div className="flex items-center justify-center gap-2">
+              <span className="text-lg">{nearWinInfo.numbersAway === 1 ? '🔥' : '⚡'}</span>
+              <span className={`text-sm font-black uppercase tracking-wider ${
+                nearWinInfo.numbersAway === 1 ? 'text-red-300' : 'text-amber-300'
+              }`}>
+                {nearWinInfo.numbersAway === 1
+                  ? (t('near_win_one') || '1 NUMBER AWAY!')
+                  : (t('near_win_two') || '2 NUMBERS AWAY!')}
+              </span>
+              <span className="text-lg">{nearWinInfo.numbersAway === 1 ? '🔥' : '⚡'}</span>
+            </div>
+          </div>
+        )}
 
         {/* Bingo Cards */}
         <div className="space-y-4 mb-4">

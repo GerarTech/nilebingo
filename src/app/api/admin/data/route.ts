@@ -7,6 +7,7 @@ export const dynamic = 'force-dynamic';
 import {
   verifyAdmin,
   getDashboardStats,
+  getAnalytics,
   getUsers,
   getUserDetail,
   getTransactions,
@@ -56,6 +57,10 @@ export async function GET(request: NextRequest) {
       case 'dashboard': {
         const stats = await getDashboardStats();
         return NextResponse.json(stats);
+      }
+      case 'analytics': {
+        const analytics = await getAnalytics();
+        return NextResponse.json(analytics);
       }
       case 'users': {
         const users = await getUsers();

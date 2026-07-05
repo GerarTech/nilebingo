@@ -127,7 +127,7 @@ function HomePage() {
   const [toastType, setToastType] = useState<'error' | 'success' | 'info'>('error');
   const [referralEnabled, setReferralEnabled] = useState<boolean>(true);
   const [referralBonus, setReferralBonus] = useState<number>(1);
-  const [walletView, setWalletView] = useState<'main' | 'deposit' | 'withdraw' | 'transfer'>('main');
+  const [walletView, setWalletView] = useState<'main' | 'deposit' | 'withdraw' | 'transfer' | 'transactions'>('main');
   const [withdrawMinAmount, setWithdrawMinAmount] = useState<number>(50);
   const [withdrawRequiredGames, setWithdrawRequiredGames] = useState<number>(5);
 
@@ -542,10 +542,11 @@ function HomePage() {
           setLivePlayerCount(count || 1);
           setPrizePool(Number(existingGame.prize_pool) || entryFee * Math.max(count || 1, 1) * (1 - effComm / 100));
         } else {
-          const { data: reservations } = await supabase.from('game_card_reservations').select('user_id').eq('game_code', activeGameId);
+          const { data: reservations } = await supabase.from('game_card_reservations').select('user_id, card_number').eq('game_code', activeGameId);
           if (reservations) {
             const totalPlayerCount = new Set(reservations.map(r => r.user_id)).size || 1;
-            const totalCardCount = Math.max(reservations.length, totalPlayerCount, 1);
+            const activeCards = reservations.filter((r: any) => r.card_number > 0).length;
+            const totalCardCount = Math.max(activeCards, totalPlayerCount, 1);
             setLivePlayerCount(totalPlayerCount);
             setPrizePool(entryFee * totalCardCount * (1 - effComm / 100));
           } else {
@@ -1130,7 +1131,7 @@ function HomePage() {
   const renderContent = () => {
     if (activeTab === 'scores') return <ScoresTab profile={profile} wallet={wallet} dbLeaderboard={dbLeaderboard} t={t} />;
     if (activeTab === 'history') return <HistoryTab stakeHistory={stakeHistory} t={t} />;
-    if (activeTab === 'wallet') return <WalletTab wallet={wallet} botUsername={botUsername} referralEnabled={referralEnabled} referralBonus={referralBonus} referralCount={referralCount} inviteLink={inviteLink} copiedLink={copiedLink} withdrawMinAmount={withdrawMinAmount} withdrawRequiredGames={withdrawRequiredGames} t={t} onCopyRefLink={copyRefLink} onSimulateReferral={simulateReferralJoin} />;
+    if (activeTab === 'wallet') return <WalletTab wallet={wallet} walletView={walletView} onSetWalletView={setWalletView} botUsername={botUsername} referralEnabled={referralEnabled} referralBonus={referralBonus} referralCount={referralCount} inviteLink={inviteLink} copiedLink={copiedLink} withdrawMinAmount={withdrawMinAmount} withdrawRequiredGames={withdrawRequiredGames} t={t} onCopyRefLink={copyRefLink} onSimulateReferral={simulateReferralJoin} />;
     if (activeTab === 'profile') return <ProfileTab profile={profile} wallet={wallet} stakeHistory={stakeHistory} language={language} t={t} onSetLanguage={setLanguage} onUpdateAvatar={updateAvatar} />;
 
     // Game tab

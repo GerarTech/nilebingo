@@ -59,7 +59,7 @@ export default function SettingsPage() {
   const [adminPassword, setAdminPassword] = useState('');
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'commands' | 'messages' | 'game_config' | 'branding' | 'gateways' | 'bias' | 'notifications'>('commands');
+  const [activeTab, setActiveTab] = useState<'commands' | 'messages' | 'game_config' | 'branding' | 'gateways' | 'bias' | 'notifications' | 'promotions'>('commands');
   const [commands, setCommands] = useState<BotCommands>({
     admin_stats: '/admin_stats',
     admin_users: '/admin_users',
@@ -145,6 +145,16 @@ export default function SettingsPage() {
   const [adminReferralEnabled, setAdminReferralEnabled] = useState(true);
   const [appointedWinners, setAppointedWinners] = useState<Record<string, {card_number: number, after_balls: number}>>({});
 
+  const [happyHourEnabled, setHappyHourEnabled] = useState(false);
+  const [happyHourRoom, setHappyHourRoom] = useState('bronze');
+  const [happyHourCommission, setHappyHourCommission] = useState(0);
+  const [happyHourLabel, setHappyHourLabel] = useState('Happy Hour');
+  const [happyHourStart, setHappyHourStart] = useState(18);
+  const [happyHourEnd, setHappyHourEnd] = useState(22);
+
+  const [streakEnabled, setStreakEnabled] = useState(true);
+  const [streakRewards, setStreakRewards] = useState('5,5,5,10,10,15,25');
+
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -197,6 +207,20 @@ export default function SettingsPage() {
         }
         if (config.referralEnabled !== undefined) {
           setAdminReferralEnabled(config.referralEnabled !== false);
+        }
+        if (config.happy_hour) {
+          const hh = config.happy_hour;
+          setHappyHourEnabled(Boolean(hh.enabled));
+          setHappyHourRoom(hh.room_id || 'bronze');
+          setHappyHourCommission(typeof hh.commission_override === 'number' ? hh.commission_override : 0);
+          setHappyHourLabel(hh.label || 'Happy Hour');
+          setHappyHourStart(typeof hh.start_hour === 'number' ? hh.start_hour : 18);
+          setHappyHourEnd(typeof hh.end_hour === 'number' ? hh.end_hour : 22);
+        }
+        if (config.daily_streak) {
+          const ds = config.daily_streak;
+          setStreakEnabled(ds.enabled !== false);
+          if (Array.isArray(ds.rewards)) setStreakRewards(ds.rewards.join(','));
         }
         
         // Gateways loading
@@ -257,6 +281,18 @@ export default function SettingsPage() {
       rules_text: rulesText,
       check_et_enabled: checkEtEnabled,
       appointed_winners: appointedWinners,
+      happy_hour: {
+        enabled: happyHourEnabled,
+        room_id: happyHourRoom,
+        commission_override: happyHourCommission,
+        label: happyHourLabel,
+        start_hour: happyHourStart,
+        end_hour: happyHourEnd,
+      },
+      daily_streak: {
+        enabled: streakEnabled,
+        rewards: streakRewards.split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n) && n > 0),
+      },
       banks,
       admin_chat_ids: adminChatIds.split(/[\s,]+/).filter(Boolean),
       notification_channels: notifChannels.map(ch => ({
@@ -412,6 +448,13 @@ export default function SettingsPage() {
           >
             <Trophy size={12} className="inline mr-1" />
             Biased Draw Engine
+          </button>
+          <button
+            onClick={() => setActiveTab('promotions')}
+            className={`px-4 py-2 text-xs font-medium transition-all shrink-0 ${activeTab === 'promotions' ? 'text-gold border-b-2 border-gold font-bold' : 'text-gray-400 hover:text-white'}`}
+          >
+            <Trophy size={12} className="inline mr-1" />
+            Promotions
           </button>
           <button
             onClick={() => setActiveTab('notifications')}

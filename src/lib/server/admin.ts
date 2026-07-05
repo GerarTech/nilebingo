@@ -226,6 +226,105 @@ export async function getDashboardStats() {
   };
 }
 
+function ethDayBounds(dayOffset = 0): { start: string; end: string; label: string } {
+  const now = new Date(Date.now() + 3 * 60 * 60 * 1000);
+  now.setUTCDate(now.getUTCDate() - dayOffset);
+  const label = now.toISOString().slice(0, 10);
+  const start = new Date(`${label}T00:00:00+03:00`).toISOString();
+  const end = new Date(`${label}T23:59:59.999+03:00`).toISOString();
+  return { start, end, label };
+}
+
+export async function getAnalytics() {
+  const [
+    { data: profiles },
+    { data: transactions },
+    { data: gamePlayers },
+    { data: games },
+  ] = await Promise.all([
+    supabase.from('profiles').select('id, created_at'),
+    supabase.from('transactions').select('type, amount, status, created_at, user_id'),
+    supabase.from('game_players').select('user_id, created_at, is_watching'),
+    supabase.from('games').select('id, created_at, status'),
+  ]);
+
+  let streakRows: { user_id: string; streak_count: number; last_claim_date: string | null }[] = [];
+  try {
+    const { data } = await supabase.from('user_streaks').select('user_id, streak_count, last_claim_date');
+    streakRows = (data as typeof streakRows) || [];
+  } catch {
+    streakRows = [];
+  }
+
+  const today = ethDayBounds(0);
+  const yesterday = ethDayBounds(1);
+
+  const uniqueUsersInRange = (items: { user_id?: string; created_at?: string }[] | null, start: string, end: string) => {
+    const set = new Set<string>();
+    (items || []).forEach(item => {
+      if (!item.user_id || !item.created_at) return;
+      if (item.created_at >= start && item.created_at <= end) set.add(item.user_id);
+    });
+    return set.size;
+  };
+
+  const sumTxInRange = (type: string, status: string, start: string, end: string) => {
+    let total = 0;
+    (transactions || []).forEach(t => {
+      if (t.type === type && t.status === status && t.created_at >= start && t.created_at <= end) {
+        total += Number(t.amount) || 0;
+      }
+    });
+    return total;
+  };
+
+  const countGamesInRange = (start: string, end: string) =>
+    (games || []).filter(g => g.created_at >= start && g.created_at <= end).length;
+
+  const newUsersInRange = (start: string, end: string) =>
+    (profiles || []).filter(p => p.created_at >= start && p.created_at <= end).length;
+
+  const dauToday = uniqueUsersInRange(
+    (gamePlayers || []).filter(p => !p.is_watching),
+    today.start,
+    today.end
+  );
+  const dauYesterday = uniqueUsersInRange(
+    (gamePlayers || []).filter(p => !p.is_watching),
+    yesterday.start,
+    yesterday.end
+  );
+
+  const dailyChart = [];
+  for (let i = 6; i >= 0; i--) {
+    const day = ethDayBounds(i);
+    dailyChart.push({
+      date: day.label,
+      activeUsers: uniqueUsersInRange((gamePlayers || []).filter(p => !p.is_watching), day.start, day.end),
+      games: countGamesInRange(day.start, day.end),
+      deposits: sumTxInRange('deposit', 'completed', day.start, day.end),
+      bets: sumTxInRange('bet', 'completed', day.start, day.end),
+      newUsers: newUsersInRange(day.start, day.end),
+    });
+  }
+
+  const streakClaimsToday = streakRows.filter(s => s.last_claim_date === today.label).length;
+
+  return {
+    dauToday,
+    dauYesterday,
+    dauChange: dauYesterday > 0 ? Math.round(((dauToday - dauYesterday) / dauYesterday) * 100) : (dauToday > 0 ? 100 : 0),
+    newUsersToday: newUsersInRange(today.start, today.end),
+    gamesToday: countGamesInRange(today.start, today.end),
+    depositsToday: sumTxInRange('deposit', 'completed', today.start, today.end),
+    betsToday: sumTxInRange('bet', 'completed', today.start, today.end),
+    winsToday: sumTxInRange('win', 'completed', today.start, today.end),
+    streakClaimsToday,
+    totalUsers: profiles?.length || 0,
+    dailyChart,
+  };
+}
+
 // Get all users with their wallets
 export async function getUsers() {
   const { data: profiles } = await supabase
