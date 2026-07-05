@@ -23,7 +23,7 @@ type VirtualPlayer = {
   hasWon: boolean;
 };
 
-const VIRTUAL_NAMES = ['Abebe', 'Aster', 'Kebede', 'Almaz', 'Chala', 'Tigist', 'Sintayehu', 'Solomon', 'Marta', 'Biniam'];
+const VIRTUAL_NAMES = ['Abdu', 'Aster', 'Kebede', 'Almaz', 'Chala', 'Tigist', 'Sintayehu', 'Solomon', 'Marta', 'Biniam'];
 
 function isValidUUID(id: string | undefined): boolean {
   if (!id) return false;
