@@ -51,7 +51,7 @@ export default function HomeView({
             {appLogoPng ? <img src={appLogoPng} alt="Logo" className="h-7 w-7 object-contain inline-block" /> : appLogo} {appName}
           </span>
         </div>
-        <button onClick={onGoToWallet} className="flex items-center gap-1 text-white font-extrabold text-[11px] px-3.5 py-2 rounded-xl shadow-md transition-all cursor-pointer whitespace-nowrap" style={{ backgroundColor: themeColorDark, boxShadow: `0 4px 14px ${themeColor}44` }}>
+        <button onClick={onGoToWallet} className="flex items-center gap-1 font-extrabold text-[11px] px-3.5 py-2 rounded-xl shadow-md transition-all cursor-pointer whitespace-nowrap" style={{ color: themeColor, backgroundColor: themeColorDark, boxShadow: `0 4px 14px ${themeColor}44` }}>
           💰 {Number(walletBalance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ETB
         </button>
       </div>
@@ -113,7 +113,6 @@ export default function HomeView({
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom,rgba(35,60,102,0.04)_0%,transparent_80%)] pointer-events-none" />
         <div className="flex items-center justify-between border-b border-white/5 pb-2 mb-3">
           <span className="text-[9px] font-black uppercase tracking-wider text-gray-400 flex items-center gap-1.5">💳 WALLET BALANCE</span>
-          <span className="text-[10px] font-bold" style={{ color: themeColor }}>{t('birr')}</span>
         </div>
         <div className="space-y-2">
           <div className="flex justify-between items-center text-xs">

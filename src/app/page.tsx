@@ -463,81 +463,24 @@ function HomePage() {
     }
   }, [profile, autoMark, selectedCards]);
 
-  // ============ CARD TOGGLE ============
-  const toggleCard = useCallback(async (num: number) => {
+  // ============ CARD TOGGLE (local-only — no server reservation until bet) ============
+  const toggleCard = useCallback((num: number) => {
     if (!gameId || !profile?.id || !isValidUUID(profile.id)) return;
-    const uid = profile.id;
 
     const isSelected = selectedCards.includes(num);
 
-    // Limit check on client side
     if (!isSelected && selectedCards.length >= 2) {
       showToast(t ? t('max_2_cards') : 'Maximum of 2 cards allowed', 'error');
       return;
     }
 
-    // Capture previous states for optimistic fallback
-    const prevSelected = [...selectedCards];
-    const prevPreview = [...previewCard];
-    const prevTaken = [...takenCards];
-
-    // 1. Optimistic state updates
     const nextSelected = isSelected
-      ? prevSelected.filter(c => c !== num)
-      : [...prevSelected, num];
+      ? selectedCards.filter(c => c !== num)
+      : [...selectedCards, num];
 
     setSelectedCards(nextSelected);
     setPreviewCard(nextSelected.length > 0 ? getSeededCard(nextSelected[nextSelected.length - 1], gameId) : []);
-
-    try {
-      const res = await fetch('/api/public/game/lobby', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'toggle_card',
-          gameId,
-          userId: uid,
-          cardNumber: num,
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        // Revert to previous states
-        setSelectedCards(prevSelected);
-        setPreviewCard(prevPreview);
-        setTakenCards(prevTaken);
-
-        if (res.status === 409 || data.error?.includes('taken') || data.error?.includes('unique') || data.error?.includes('23505')) {
-          showToast(t ? t('card_taken') : 'This card was just taken by another player. Please choose a different one.', 'error');
-        } else if (res.status === 400 && data.error?.includes('Maximum')) {
-          showToast(t ? t('max_2_cards') : 'Maximum of 2 cards allowed', 'error');
-        } else {
-          console.error('Failed to toggle card:', data.error);
-          showToast(t ? t('something_went_wrong') : 'Something went wrong. Please try again.', 'error');
-        }
-        await refreshGameState(gameId);
-        return;
-      }
-
-      if (data.success) {
-        const reservations = data.reservations || [];
-        // Only update server-side data that can't be determined optimistically
-        const otherCards = reservations.filter((r: any) => r.user_id !== uid).map((r: any) => r.card_number);
-        const reservedCount = reservations.filter((r: any) => Number(r.card_number) > 0).length;
-        setTakenCards(otherCards.filter((n: number) => n > 0));
-        setLobbyPlayerCount(new Set(reservations.map((r: any) => r.user_id)).size);
-        setReservedCardCount(Math.max(reservedCount, nextSelected.filter(n => n > 0).length));
-      }
-    } catch (e) {
-      console.error('Error toggling card:', e);
-      // Revert to previous states
-      setSelectedCards(prevSelected);
-      setPreviewCard(prevPreview);
-      setTakenCards(prevTaken);
-      await refreshGameState(gameId);
-    }
-  }, [gameId, profile?.id, selectedCards, previewCard, takenCards, refreshGameState]);
+  }, [gameId, profile?.id, selectedCards]);
 
   // ============ START GAMEPLAY ============
   const startGameplay = useCallback(async (isSpectateMode: boolean) => {
@@ -729,6 +672,15 @@ function HomePage() {
           return;
         }
         // Virtual players no longer trigger loss — game continues
+      }
+
+      // Periodically check server for game completion by another player (every 5 draws)
+      if (nextIndex > 0 && nextIndex % 5 === 0 && !winInProgressRef.current) {
+        void supabase.from('games').select('status, winner_id').eq('code', gameId).maybeSingle().then(({ data }) => {
+          if (data && data.status === 'finished' && data.winner_id && data.winner_id !== profile?.id) {
+            setOpponentWinner('Another player');
+          }
+        });
       }
 
       if (!isWatching) {
@@ -926,6 +878,25 @@ function HomePage() {
     const stakeAmount = fee * selectedCards.length;
     const totalBal = (wallet?.main_balance || 0) + (wallet?.play_balance || 0);
     if (totalBal < stakeAmount) return;
+
+    // Reserve cards on server first (prevents double-booking by another user)
+    try {
+      const res = await fetch('/api/public/game/lobby', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reserve_cards', gameId, userId: profile?.id, selectedCards }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        showToast(t ? t('cards_taken') : (data.conflicts ? 'Some cards were just taken. Please choose different ones.' : 'Could not reserve cards. Please try again.'), 'error');
+        return;
+      }
+    } catch (e) {
+      console.warn('Card reservation failed:', e);
+      showToast(t ? t('something_went_wrong') : 'Something went wrong. Please try again.', 'error');
+      return;
+    }
+
     setIsRegistered(true);
     setReservedCardCount(Math.max(selectedCards.length, reservedCardCount));
     const playBal = wallet?.play_balance || 0;
@@ -939,10 +910,19 @@ function HomePage() {
     } catch (e) {
       console.warn('Balance deduction failed, reverting registration:', e);
       setIsRegistered(false);
+      // Release reserved cards
+      const uid = profile?.id;
+      if (gameId && uid && isValidUUID(uid)) {
+        fetch('/api/public/game/lobby', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'leave_game', gameId, userId: uid }),
+        }).catch(() => {});
+      }
       return;
     }
     await refreshWallet();
-  }, [selectedCards, selectedRoom, wallet, updateBalance, refreshWallet]);
+  }, [selectedCards, selectedRoom, wallet, updateBalance, refreshWallet, gameId, profile?.id, t]);
 
   const unregisterLobby = useCallback(async () => {
     if (isRegistered) {

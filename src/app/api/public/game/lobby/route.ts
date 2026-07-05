@@ -307,6 +307,35 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true });
     }
 
+    if (action === 'reserve_cards') {
+      if (!gameId || !userId || !Array.isArray(selectedCards) || selectedCards.length === 0) {
+        return NextResponse.json({ error: 'gameId, userId, and selectedCards array are required' }, { status: 400 });
+      }
+      // Check for conflicts — cards already reserved by OTHER users
+      const { data: existing } = await supabase
+        .from('game_card_reservations')
+        .select('card_number, user_id')
+        .eq('game_code', gameId)
+        .in('card_number', selectedCards);
+      const conflicts = (existing || []).filter((r: any) => r.user_id !== userId);
+      if (conflicts.length > 0) {
+        return NextResponse.json({
+          error: 'Some selected cards are already taken',
+          conflicts: conflicts.map((r: any) => r.card_number),
+        }, { status: 409 });
+      }
+      // Bulk upsert reservations for this user
+      const inserts = selectedCards.map((cardNum: number) =>
+        supabase.from('game_card_reservations').upsert({
+          game_code: gameId,
+          user_id: userId,
+          card_number: cardNum,
+        }, { onConflict: 'game_code,user_id,card_number' })
+      );
+      await Promise.all(inserts);
+      return NextResponse.json({ success: true });
+    }
+
     if (action === 'leave_game') {
       if (!gameId || !userId) {
         return NextResponse.json({ error: 'gameId and userId are required' }, { status: 400 });
@@ -453,6 +482,24 @@ export async function POST(request: NextRequest) {
             is_watching: isSpectator || false,
             auto_mark: autoMark || false,
           }, { onConflict: 'game_id,user_id' });
+      }
+
+      // Ensure card reservations exist for this user's selected cards
+      if (selectedCards && selectedCards.length > 0) {
+        const existingRes = await supabase
+          .from('game_card_reservations')
+          .select('card_number')
+          .eq('game_code', gameId)
+          .eq('user_id', userId);
+        const existingCards = new Set((existingRes.data || []).map((r: any) => r.card_number));
+        const toInsert = selectedCards.filter((n: number) => !existingCards.has(n));
+        for (const cardNum of toInsert) {
+          await supabase.from('game_card_reservations').upsert({
+            game_code: gameId,
+            user_id: userId,
+            card_number: cardNum,
+          }, { onConflict: 'game_code,user_id,card_number' });
+        }
       }
 
       // Update prize pool — commission is already stored on the game row (if set), so don't pass

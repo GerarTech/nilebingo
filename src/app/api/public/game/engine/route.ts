@@ -302,32 +302,20 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ win: false, error: 'No winning pattern found' }, { status: 400 });
       }
 
-      // Calculate win amount server-side using prize_pool from the game record
-      let winAmount = Number(gameByCode.prize_pool) || 0;
-      if (winAmount <= 0) {
-        const { data: stakeRow } = await supabase
-          .from('stakes')
-          .select('amount')
-          .eq('id', gameByCode.stake_id)
-          .maybeSingle();
-        const perCardStake = Number(stakeRow?.amount) || 10;
-        const { data: cardCountData } = await supabase
-          .from('game_card_reservations')
-          .select('id')
-          .eq('game_code', gameByCode.code)
-          .gt('card_number', 0);
-        // Only count the winning user's own cards to avoid over-crediting
-        const { data: myCards } = await supabase
-          .from('game_card_reservations')
-          .select('id')
-          .eq('game_code', gameByCode.code)
-          .eq('user_id', userId)
-          .gt('card_number', 0);
-        const myCardCount = Math.max(myCards?.length || 0, 1);
-        const totalCardCount = Math.max(cardCountData?.length || 1, 1);
-        // Prize should be based on total pool, not just user's cards
-        winAmount = perCardStake * totalCardCount * (1 - (effectiveCommission ?? 15) / 100);
-      }
+      // Calculate win amount from base principles: stake × total cards × (1 − commission)
+      const { data: stakeRow } = await supabase
+        .from('stakes')
+        .select('amount')
+        .eq('id', gameByCode.stake_id)
+        .maybeSingle();
+      const perCardStake = Number(stakeRow?.amount) || 10;
+      const { data: cardCountData } = await supabase
+        .from('game_card_reservations')
+        .select('id')
+        .eq('game_code', gameByCode.code)
+        .gt('card_number', 0);
+      const totalCardCount = Math.max(cardCountData?.length || 1, 1);
+      const winAmount = perCardStake * totalCardCount * (1 - (effectiveCommission ?? 15) / 100);
 
       const { data: profile } = await supabase.from('profiles').select('telegram_id, first_name').eq('id', userId).single();
 
@@ -346,19 +334,7 @@ export async function POST(request: NextRequest) {
         reference: `WIN-${gameId}`,
       });
 
-      const { data: stakeRow } = await supabase
-        .from('stakes')
-        .select('amount')
-        .eq('id', gameByCode.stake_id)
-        .maybeSingle();
-      const perCardStake = Number(stakeRow?.amount) || 10;
-      const { data: cardCountData } = await supabase
-        .from('game_card_reservations')
-        .select('id')
-        .eq('game_code', gameByCode.code)
-        .gt('card_number', 0);
-      const cardCount = Math.max(cardCountData?.length || 1, 1);
-      const totalStake = perCardStake * cardCount;
+      const totalStake = perCardStake * totalCardCount;
       const { data: existingHistory } = await supabase
         .from('game_history')
         .select('id')
@@ -450,12 +426,14 @@ export async function POST(request: NextRequest) {
         .eq('id', game.stake_id)
         .maybeSingle();
       const perCardStake = Number(stakeRow?.amount) || 10;
-      const { data: cardCountData } = await supabase
+      const { data: myCards } = await supabase
         .from('game_card_reservations')
         .select('id')
         .eq('game_code', game.code)
+        .eq('user_id', userId)
         .gt('card_number', 0);
-      const totalStake = perCardStake * Math.max(cardCountData?.length || 1, 1);
+      const myCardCount = Math.max(myCards?.length || 0, 1);
+      const totalStake = perCardStake * myCardCount;
 
       const existingHistory = await supabase
         .from('game_history')

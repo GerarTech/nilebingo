@@ -121,17 +121,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    let netOutcomeAmount = isWin ? totalStake : -totalStake;
-    if (game && isWin) {
-      try {
-        const { data: commissionRow } = await supabase.from('games').select('commission').eq('id', game.id).maybeSingle();
-        const commissionRate = Number(commissionRow?.commission ?? 15);
-        netOutcomeAmount = totalStake * (1 - commissionRate / 100);
-      } catch {}
-    }
-
     if (game) {
       try {
+        // For wins, use the game's prize_pool (already computed via update_game_prize_pool RPC)
+        // For losses, use the negative of the user's own stake
+        const winAmount = isWin
+          ? Number(game.prize_pool ?? totalStake * (1 - 15 / 100))
+          : -totalStake;
+        const effectiveStake = isWin ? totalStake : totalStake;
+
         const { data: existingHistory } = await supabase
           .from('game_history')
           .select('id')
@@ -142,8 +140,8 @@ export async function POST(request: NextRequest) {
         const historyPayload = {
           game_id: game.id,
           user_id: userId,
-          stake: totalStake || 0,
-          win_amount: netOutcomeAmount,
+          stake: effectiveStake || 0,
+          win_amount: winAmount,
           numbers_matched: Array.isArray(drawnNumbers) ? drawnNumbers.length : 0,
         };
 
