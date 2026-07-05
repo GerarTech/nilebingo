@@ -46,6 +46,12 @@ export default function RoomLobby({
   const isBalanceEligible = selectedCards.length > 0 && totalBalance >= fee * selectedCards.length;
 
   if (isRegistered) {
+    const totalLivePlayers = Math.max(lobbyPlayerCount, room.players);
+    const prizePool = fee * totalLivePlayers * (1 - commissionRate / 100);
+    const playersInPrize = totalLivePlayers;
+    const totalStake = fee * totalLivePlayers;
+    const commissionAmount = totalStake - prizePool;
+
     return (
       <div className="px-4 pt-4 animate-fade-in pb-24 font-sans bg-[#0c1322] min-h-screen text-white">
         <div className="space-y-4 animate-fade-in">
@@ -59,7 +65,52 @@ export default function RoomLobby({
             <p className="text-[10px] text-gray-400 mt-2">Game will start when countdown hits zero.</p>
           </div>
 
-             
+          {/* Prize Showcase */}
+          <div className="relative bg-gradient-to-br from-[#0f2a1a] via-[#0a1f14] to-[#06120b] border border-[#2ecc71]/25 rounded-3xl p-5 shadow-xl shadow-black/30 overflow-hidden">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(46,204,113,0.05)_0%,transparent_70%)] pointer-events-none" />
+            <div className="absolute top-0 right-0 text-[60px] opacity-[0.04] select-none leading-none">🏆</div>
+
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#2ecc71] to-[#1a9c54] flex items-center justify-center shadow-lg shadow-[#2ecc71]/20">
+                <span className="text-xs">🏆</span>
+              </div>
+              <span className="text-[10px] text-[#2ecc71] font-black uppercase tracking-widest">Prize Pool</span>
+            </div>
+
+            <div className="text-center mb-4">
+              <div className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-[#FEE800] via-[#FFD700] to-[#FEE800] drop-shadow-lg">
+                {prizePool.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {t('birr')}
+              </div>
+              <div className="text-[9px] text-gray-500 mt-0.5">estimated prize for winner</div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-2.5 text-center">
+                <div className="text-[8px] text-gray-500 uppercase font-bold tracking-wider">Stake</div>
+                <div className="text-xs font-extrabold text-white mt-1">{Number(fee).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              </div>
+              <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-2.5 text-center">
+                <div className="text-[8px] text-gray-500 uppercase font-bold tracking-wider">Players</div>
+                <div className="text-xs font-extrabold text-[#2ecc71] mt-1">{playersInPrize}</div>
+              </div>
+              <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-2.5 text-center">
+                <div className="text-[8px] text-gray-500 uppercase font-bold tracking-wider">Comm.</div>
+                <div className="text-xs font-extrabold text-amber-400 mt-1">{commissionRate}%</div>
+              </div>
+            </div>
+
+            <div className="mt-3 flex items-center justify-center gap-4 text-[9px] text-gray-500">
+              <span className="flex items-center gap-1">
+                <span className="text-white/60">Total in pot:</span>
+                <span className="font-bold text-white">{totalStake.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {t('birr')}</span>
+              </span>
+              <span className="text-white/10">|</span>
+              <span className="flex items-center gap-1">
+                <span className="text-white/60">Fee:</span>
+                <span className="font-bold text-amber-400">{commissionAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {t('birr')}</span>
+              </span>
+            </div>
+          </div>
 
           <div className="bg-[#142036]/40 border border-[#233c66]/30 rounded-2xl p-4 shadow-xl">
             <div className="text-[10px] text-amber-400 font-black uppercase tracking-widest mb-3 text-center">🎴 YOUR CARDS</div>

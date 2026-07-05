@@ -6,6 +6,7 @@ const hostUrl = process.env.HOST_URL || 'http://localhost:3002';
 const miniAppUrl = hostUrl;
 const adminChatId = process.env.ADMIN_CHAT_ID || '';
 const adminBotToken = process.env.ADMIN_BOT_TOKEN || '';
+const checkEtApiKey = process.env.CHECK_ET_API_KEY || '';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key';
@@ -194,6 +195,81 @@ async function sendAdminDepositAlert(text: string) {
     const body = plain.indexOf('\n\n') !== -1 ? plain.substring(plain.indexOf('\n\n') + 2) : plain;
     notifyEvent('deposit_pending', body);
   } catch (e) { /* ignore */ }
+}
+
+const CHECK_ET_BANK_CODES: Record<string, string> = {
+  cbe: 'cbe',
+  telebirr: 'telebirr',
+  dashen: 'dashen',
+  awash: 'awash',
+  boa: 'boa',
+  zemen: 'zemen',
+  cbebirr: 'cbebirr',
+  mpesa: 'mpesa',
+};
+
+async function verifyWithCheckET(bankCode: string, transactionNumber: string, accountNumber: string, expectedAmount: number): Promise<{ verified: boolean; reason?: string }> {
+  if (!checkEtApiKey) return { verified: false, reason: 'Check.et not configured' };
+  if (!bankCode || !transactionNumber) return { verified: false, reason: 'Missing bank code or transaction number' };
+
+  const body: Record<string, any> = {
+    bank: bankCode,
+    transaction_number: transactionNumber,
+  };
+  if (accountNumber && bankCode !== 'telebirr') {
+    body.account_number = accountNumber;
+  }
+
+  try {
+    const res = await fetch('https://api.check.et/api/v1/verify', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${checkEtApiKey}`,
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(15000),
+    });
+
+    if (!res.ok) {
+      if (res.status === 402) return { verified: false, reason: 'Check.et quota exceeded' };
+      if (res.status === 404) return { verified: false, reason: 'Transaction not found' };
+      return { verified: false, reason: `Check.et HTTP ${res.status}` };
+    }
+
+    const result = await res.json();
+    if (!result.success || !result.exists) {
+      return { verified: false, reason: 'Transaction not found in bank records' };
+    }
+
+    const receipt = result.data?.receipt;
+    if (!receipt) {
+      return { verified: false, reason: 'No receipt data returned' };
+    }
+
+    if (receipt.status !== 'completed') {
+      return { verified: false, reason: `Transaction status: ${receipt.status}` };
+    }
+
+    if (receipt.amount !== undefined) {
+      const verifiedAmount = Number(receipt.amount);
+      if (Math.abs(verifiedAmount - expectedAmount) > 0.01) {
+        return { verified: false, reason: `Amount mismatch: expected ${expectedAmount} ETB, found ${verifiedAmount} ETB` };
+      }
+    }
+
+    if (accountNumber && receipt.receiver_account) {
+      const cleanExpected = accountNumber.replace(/\D/g, '');
+      const cleanActual = String(receipt.receiver_account).replace(/\D/g, '');
+      if (cleanActual !== cleanExpected) {
+        return { verified: false, reason: `Receiver account mismatch` };
+      }
+    }
+
+    return { verified: true };
+  } catch (err: any) {
+    return { verified: false, reason: `Check.et error: ${err.message || 'Unknown'}` };
+  }
 }
 
 async function answerCallbackQuery(callbackQueryId: string, text?: string) {
@@ -1185,9 +1261,51 @@ export async function POST(request: NextRequest) {
             .replace('{txid}', txId);
           await sendMessage(chatId, msgText, { parse_mode: 'Markdown', ...getMainKeyboard(lang) });
 
-          // Direct admin alert via admin bot
-          const userName = userProfile.first_name || userProfile.username || 'Unknown';
-          sendAdminDepositAlert(`⏳ *New Deposit Request*\n\n👤 *User:* ${userName}\n📞 *Phone:* ${userProfile.phone || 'N/A'}\n💰 *Amount:* ${amount} ETB\n🏦 *Bank:* ${bankName}\n🆔 *TX ID:* \`${txId}\`\n\nApprove: /approve_${txId_full.slice(0, 8)}\nReject: /reject_${txId_full.slice(0, 8)}`);
+          const doAutoVerify = () => {
+            if (!checkEtApiKey || !commands.check_et_enabled) return false;
+            const bankCode = bank?.check_et_code || CHECK_ET_BANK_CODES[bankId] || '';
+            if (!bankCode) return false;
+            const accountNumber = bank?.account || (bankId === 'cbe' ? (commands.cbe_account || '') : '');
+            if (!accountNumber && bankCode !== 'telebirr') return false;
+            return { bankCode, accountNumber };
+          };
+
+          const autoVerify = doAutoVerify();
+          if (autoVerify) {
+            const vResult = await verifyWithCheckET(autoVerify.bankCode, txId, autoVerify.accountNumber, amount);
+            if (vResult.verified) {
+              const txAmount = Math.abs(Number(amount));
+              const newMain = await supabase.rpc('adjust_main_balance', { p_user_id: userProfile.id, p_amount: txAmount });
+              if (!newMain.error) {
+                await supabase.from('transactions').update({ status: 'completed' }).eq('id', txId_full);
+                await sendMessage(chatId, `✅ *Deposit Auto-Approved!*\n\nYour deposit of *${fm(amount)} ETB* has been verified and credited to your Main Wallet. Enjoy! 🎮`, { parse_mode: 'Markdown' });
+                sendAdminDepositAlert(`✅ *Auto-Approved Deposit*\n\n👤 *User:* ${userProfile.first_name || userProfile.username || 'Unknown'}\n📞 *Phone:* ${userProfile.phone || 'N/A'}\n💰 *Amount:* ${amount} ETB\n🏦 *Bank:* ${bankName}\n🆔 *TX ID:* \`${txId}\``);
+
+                const { data: prof } = await supabase.from('profiles').select('referred_by, referral_claimed, first_name').eq('id', userProfile.id).single();
+                if (prof?.referred_by && !prof.referral_claimed) {
+                  const refBonus = Number(commands.referral_bonus || 10);
+                  const refMinDep = Number(commands.referral_min_deposit || 50);
+                  const { data: allDeps } = await supabase.from('transactions').select('amount').eq('user_id', userProfile.id).eq('type', 'deposit').eq('status', 'completed');
+                  const totalDepsAmt = allDeps ? allDeps.reduce((acc, curr) => acc + Number(curr.amount), 0) : 0;
+                  if (totalDepsAmt >= refMinDep) {
+                    await supabase.from('profiles').update({ referral_claimed: true }).eq('id', userProfile.id);
+                    await supabase.rpc('adjust_play_balance', { p_user_id: prof.referred_by, p_amount: refBonus });
+                    const { data: refProfile } = await supabase.from('profiles').select('telegram_id').eq('id', prof.referred_by).single();
+                    if (refProfile?.telegram_id) {
+                      await sendMessage(refProfile.telegram_id, `🎉 *Referral Bonus Received!*\n\nYour friend *${prof.first_name || 'Player'}* completed their first deposit. You received *${refBonus} ETB* in your Play Wallet! 💰`, { parse_mode: 'Markdown' });
+                    }
+                  }
+                }
+                return NextResponse.json({ ok: true });
+              }
+            } else {
+              sendAdminDepositAlert(`⏳ *Deposit Pending (Check.et: ${vResult.reason})*\n\n👤 *User:* ${userProfile.first_name || userProfile.username || 'Unknown'}\n📞 *Phone:* ${userProfile.phone || 'N/A'}\n💰 *Amount:* ${amount} ETB\n🏦 *Bank:* ${bankName}\n🆔 *TX ID:* \`${txId}\`\n\nApprove: /approve_${txId_full.slice(0, 8)}\nReject: /reject_${txId_full.slice(0, 8)}`);
+            }
+          } else {
+            // Direct admin alert via admin bot
+            const userName = userProfile.first_name || userProfile.username || 'Unknown';
+            sendAdminDepositAlert(`⏳ *New Deposit Request*\n\n👤 *User:* ${userName}\n📞 *Phone:* ${userProfile.phone || 'N/A'}\n💰 *Amount:* ${amount} ETB\n🏦 *Bank:* ${bankName}\n🆔 *TX ID:* \`${txId}\`\n\nApprove: /approve_${txId_full.slice(0, 8)}\nReject: /reject_${txId_full.slice(0, 8)}`);
+          }
         }
         return NextResponse.json({ ok: true });
       }
@@ -1506,6 +1624,11 @@ export async function POST(request: NextRequest) {
 
       const reqGames = Number(commands.withdraw_required_games || 5);
       const minAmount = Number(commands.withdraw_min_amount || 50);
+
+      const infoMsg = getMsg('withdraw_info', 'withdraw_info')
+        .replace('{required_games}', String(reqGames))
+        .replace('{min_amount}', String(minAmount));
+      await sendMessage(chatId, infoMsg, { parse_mode: 'Markdown' });
 
       if (playedCount < reqGames) {
         const remaining = reqGames - playedCount;

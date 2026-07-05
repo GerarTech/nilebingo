@@ -700,7 +700,7 @@ function HomePage() {
         const res = await fetch('/api/public/game/engine', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'validate_win', gameId, userId: profile.id }),
+          body: JSON.stringify({ action: 'validate_win', gameId, userId: profile.id, drawnNumbers: drawn }),
         });
         const data = await res.json();
         if (data.success) {

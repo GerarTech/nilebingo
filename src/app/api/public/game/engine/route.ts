@@ -187,14 +187,22 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Spectators cannot win' }, { status: 400 });
       }
 
-      // Get drawn numbers
-      const { data: gameData } = await supabase
-        .from('games')
-        .select('drawn_numbers')
-        .eq('id', gameByCode.id)
-        .single();
+      // Accept drawn numbers from client (critical for web preview where sync bot doesn't run)
+      const clientDrawn: number[] | undefined = body.drawnNumbers;
+      let drawnNumbers: number[] = [];
 
-      const drawnNumbers: number[] = gameData?.drawn_numbers || [];
+      if (clientDrawn && Array.isArray(clientDrawn) && clientDrawn.length > 0) {
+        drawnNumbers = clientDrawn;
+        // Persist to DB so subsequent queries see the correct state
+        await supabase.from('games').update({ drawn_numbers: clientDrawn }).eq('id', gameByCode.id);
+      } else {
+        const { data: gameData } = await supabase
+          .from('games')
+          .select('drawn_numbers')
+          .eq('id', gameByCode.id)
+          .single();
+        drawnNumbers = gameData?.drawn_numbers || [];
+      }
       const card: number[][] = gamePlayer.card || [];
 
       if (!card || card.length === 0) {
@@ -342,7 +350,12 @@ export async function POST(request: NextRequest) {
         .eq('user_id', userId)
         .maybeSingle();
 
-      const drawnNumbers: number[] = game?.drawn_numbers || [];
+      // Accept drawn numbers from client (fall back to DB)
+      const clientDrawnLoss: number[] | undefined = body.drawnNumbers;
+      const drawnNumbers: number[] =
+        (clientDrawnLoss && Array.isArray(clientDrawnLoss) && clientDrawnLoss.length > 0)
+          ? clientDrawnLoss
+          : (game?.drawn_numbers || []);
       const card: number[][] = gamePlayer?.card || [];
       const numbersMatched = card
         .flat()
