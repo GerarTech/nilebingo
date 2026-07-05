@@ -143,6 +143,10 @@ function HomePage() {
   const refreshGameStateRef = useRef<any>(null);
   const refreshTakenCardsRef = useRef<any>(null);
   const tickReadyRef = useRef(false);
+  const gameRealtimeRef = useRef<any>(null);
+  const lockedGameIdRef = useRef<string | null>(null);
+  const gameIdRef = useRef('');
+  const gameStatusChannelRef = useRef<any>(null);
 
   // ============ DETERMINISTIC DRAW SEQUENCE ============
   const getDeterministicDrawSequence = useCallback((gId: string, targetCardNum?: number | null) => {
@@ -488,7 +492,7 @@ function HomePage() {
     if (startGameplayLockRef.current) { console.log('[startGameplay] already in progress, skipping'); return; }
     startGameplayLockRef.current = true;
     try {
-      const activeGameId = await getCurrentLobbyGameId(selectedRoom.id) || generateDeterministicGameId(selectedRoom.id, Math.floor(Date.now() / 1000 / getRoomPeriod(selectedRoom.id)));
+      const activeGameId = lockedGameIdRef.current || gameIdRef.current || await getCurrentLobbyGameId(selectedRoom.id) || generateDeterministicGameId(selectedRoom.id, Math.floor(Date.now() / 1000 / getRoomPeriod(selectedRoom.id)));
     const entryFee = selectedRoom.entry;
 
     // Set stake to total amount paid (entry fee × number of cards)
@@ -561,7 +565,8 @@ function HomePage() {
     selectedCardsRef.current = selectedCards;
     selectedRoomRef.current = selectedRoom;
     commissionRateRef.current = commissionRate;
-  }, [startGameplay, isRegistered, isSpectatingReady, inGame, selectedCards, selectedRoom, commissionRate]);
+    gameIdRef.current = gameId;
+  }, [startGameplay, isRegistered, isSpectatingReady, inGame, selectedCards, selectedRoom, commissionRate, gameId]);
 
   // ============ ROOM COUNTDOWN TICK ============
   useEffect(() => {
@@ -735,6 +740,27 @@ function HomePage() {
     return () => clearInterval(poll);
   }, [inGame, gameId, profile?.id]);
 
+  // ============ GAME STATUS REALTIME (cross-device game-end detection) ============
+  useEffect(() => {
+    if (!inGame || !gameId) {
+      if (gameStatusChannelRef.current) { supabase.removeChannel(gameStatusChannelRef.current); gameStatusChannelRef.current = null; }
+      return;
+    }
+    const channel = supabase.channel(`game-status-${gameId}`)
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'games', filter: `code=eq.${gameId}` },
+        (payload) => {
+          const record = payload.new as any;
+          if (record.status === 'finished' && record.winner_id && record.winner_id !== profile?.id) {
+            if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+            setOpponentWinner('Another player');
+          }
+        })
+      .subscribe();
+    gameStatusChannelRef.current = channel;
+    return () => { if (gameStatusChannelRef.current) { supabase.removeChannel(gameStatusChannelRef.current); gameStatusChannelRef.current = null; } };
+  }, [inGame, gameId, profile?.id]);
+
   // ============ CARD RESERVATION POLLING (1s fallback) ============
   const reservationPollRef = useRef<NodeJS.Timeout | null>(null);
   useEffect(() => {
@@ -874,6 +900,10 @@ function HomePage() {
 
   const playWithCard = useCallback(async () => {
     if (selectedCards.length === 0) return;
+
+    // Lock the current gameId so startGameplay uses the same ID
+    lockedGameIdRef.current = gameIdRef.current || gameId;
+
     const fee = selectedRoom ? selectedRoom.entry : 10;
     const stakeAmount = fee * selectedCards.length;
     const totalBal = (wallet?.main_balance || 0) + (wallet?.play_balance || 0);
@@ -945,6 +975,7 @@ function HomePage() {
         console.error('Failed to leave game on server:', e);
       }
     }
+    lockedGameIdRef.current = null;
     setIsSpectatingReady(false); setTakenCards([]); setLobbyPlayerCount(0);
   }, [isRegistered, selectedCards, selectedRoom, updateBalance, refreshWallet, gameId, profile?.id]);
 
@@ -963,6 +994,7 @@ function HomePage() {
         console.error('Failed to leave game on server:', e);
       }
     }
+    lockedGameIdRef.current = null;
     setInGame(false); setIsWatching(false); setGameCard([]); setDrawnNumbers([]);
     drawnRef.current = []; setSelectedStake(null); setSelectedCards([]); setRecentCalled([]);
     setShowWinModal(false); setWinningCard([]); setWinningCells([]);

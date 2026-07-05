@@ -325,13 +325,13 @@ export async function POST(request: NextRequest) {
         }, { status: 409 });
       }
       // Bulk upsert reservations for this user
-      const inserts = selectedCards.map((cardNum: number) =>
-        supabase.from('game_card_reservations').upsert({
-          game_code: gameId,
-          user_id: userId,
-          card_number: cardNum,
-        }, { onConflict: 'game_code,user_id,card_number' })
-      );
+        const inserts = selectedCards.map((cardNum: number) =>
+          supabase.from('game_card_reservations').upsert({
+            game_code: gameId,
+            user_id: userId,
+            card_number: cardNum,
+          }, { onConflict: 'game_code,card_number' })
+        );
       await Promise.all(inserts);
       return NextResponse.json({ success: true });
     }
@@ -498,7 +498,7 @@ export async function POST(request: NextRequest) {
             game_code: gameId,
             user_id: userId,
             card_number: cardNum,
-          }, { onConflict: 'game_code,user_id,card_number' });
+          }, { onConflict: 'game_code,card_number' });
         }
       }
 
