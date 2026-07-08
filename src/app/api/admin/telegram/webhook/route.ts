@@ -20,6 +20,8 @@ const ADMIN_BOT_COMMANDS = [
   { command: 'admin_pending', description: 'Pending transactions' },
   { command: 'admin_games', description: 'Active matches and winners' },
   { command: 'appoint', description: 'Appoint winner: /appoint <gameId> <cardNum> [afterBalls]' },
+  { command: 'approve', description: 'Approve transaction: /approve <txId>' },
+  { command: 'reject', description: 'Reject transaction: /reject <txId>' },
   { command: 'admin_help', description: 'Show all admin commands' },
 ];
 
@@ -167,32 +169,55 @@ async function handleAdminUsers(chatId: number) {
 }
 
 async function handleAdminPending(chatId: number) {
-  const commands = await getBotCommands();
-  const { data: txs } = await supabase
+  const { data: txs, error } = await supabase
     .from('transactions')
     .select('*, profiles!inner(first_name, username, phone, telegram_id)')
     .eq('status', 'pending')
     .order('created_at', { ascending: false })
     .limit(20);
 
+  if (error) {
+    await sendMessage(chatId, `❌ Error loading pending transactions: ${error.message}`);
+    return;
+  }
+
   if (!txs || txs.length === 0) {
     await sendMessage(chatId, 'No pending transactions.');
     return;
   }
 
-  const approvePrefix = commands.admin_approve || '/approve_';
-  const rejectPrefix = commands.admin_reject || '/reject_';
-  const list = txs.map((tx: any) => {
+  // Send each pending transaction as a separate message with inline Approve/Reject buttons
+  for (const tx of txs) {
     const prof = tx.profiles || {};
     const name = prof.first_name || prof.username || 'Unknown';
     const phone = prof.phone ? `📞 ${prof.phone}` : '';
     const userLink = prof.username ? `@${prof.username}` : `#${String(prof.telegram_id).slice(-4)}`;
     const bankName = tx.details?.bank_name || '-';
     const userRef = tx.reference || '-';
-    return `• *${tx.type.toUpperCase()}* | ${Number(tx.amount).toLocaleString()} ETB\n  👤 ${name} (${userLink}) ${phone}\n  🏦 ${bankName} | 🆔 \`${userRef}\`\n  🆔 \`${tx.id.slice(0, 8)}...\` | ${approvePrefix}${tx.id.slice(0, 8)} | ${rejectPrefix}${tx.id.slice(0, 8)}`;
-  }).join('\n\n');
+    const amountStr = Number(tx.amount).toLocaleString();
+    const txLabel = tx.type === 'deposit' ? 'Deposit' : 'Withdrawal';
+    const emoji = tx.type === 'deposit' ? '💳' : '💸';
 
-  await sendMessage(chatId, `*⏳ Pending Transactions*\n\n${list}`, { parse_mode: 'Markdown' });
+    const text =
+      `${emoji} *${txLabel.toUpperCase()} PENDING*\n\n` +
+      `👤 *User:* ${name} (${userLink}) ${phone}\n` +
+      `💰 *Amount:* ${amountStr} ETB\n` +
+      `🏦 *Bank:* ${bankName}\n` +
+      `🆔 *Reference:* \`${userRef}\`\n` +
+      `🆔 *Tx ID:* \`${tx.id.slice(0, 8)}...\``;
+
+    await sendMessage(chatId, text, {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: '✅ Approve', callback_data: `confirm_approve_${tx.id}` },
+            { text: '❌ Reject', callback_data: `confirm_reject_${tx.id}` },
+          ],
+        ],
+      },
+    });
+  }
 }
 
 async function handleAdminGames(chatId: number) {
@@ -344,13 +369,13 @@ async function handleAdminCommission(chatId: number) {
 }
 
 async function handleAdminApprove(chatId: number, txId: string) {
-  const { data: tx } = await supabase
+  const { data: tx, error } = await supabase
     .from('transactions')
     .select('*, profiles!inner(first_name, username, phone, telegram_id)')
     .eq('id', txId)
-    .single();
+    .maybeSingle();
 
-  if (!tx || tx.status !== 'pending') {
+  if (error || !tx || tx.status !== 'pending') {
     await sendMessage(chatId, 'Transaction not found or already processed.');
     return;
   }
@@ -388,53 +413,60 @@ async function handleAdminApprove(chatId: number, txId: string) {
 }
 
 async function handleAdminReject(chatId: number, txId: string) {
-  const { data: tx } = await supabase
+  const { data: tx, error } = await supabase
     .from('transactions')
     .select('*, profiles!inner(telegram_id, first_name, username)')
     .eq('id', txId)
-    .single();
+    .maybeSingle();
 
-  await supabase.from('transactions').update({ status: 'failed' }).eq('id', txId);
+  if (error || !tx) {
+    await sendMessage(chatId, 'Transaction not found.');
+    return;
+  }
 
-  if (tx) {
-    const prof = tx.profiles || {};
-    const bankName = tx.details?.bank_name || '-';
-    const userRef = tx.reference || '-';
-    const amountStr = Number(tx.amount).toLocaleString();
-    const txLabel = tx.type === 'deposit' ? 'Deposit' : 'Withdrawal';
+  const { error: updateError } = await supabase.from('transactions').update({ status: 'failed' }).eq('id', txId);
+  if (updateError) {
+    await sendMessage(chatId, `❌ Error rejecting transaction: ${updateError.message}`);
+    return;
+  }
 
-    // Notify user via user bot
-    if (prof.telegram_id && userBotToken) {
-      try {
-        await fetch(`https://api.telegram.org/bot${userBotToken}/sendMessage`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chat_id: prof.telegram_id,
-            text: `❌ *${txLabel} Rejected*\n\n💰 Amount: *${amountStr} ETB*\n🏦 Bank: *${bankName}*\n🆔 TX ID: \`${userRef}\`\n\nYour ${tx.type} has been rejected. Please contact support if you have questions.`,
-            parse_mode: 'Markdown',
-          }),
-          signal: AbortSignal.timeout(5000),
-        });
-      } catch (e) { /* ignore */ }
-    }
+  const prof = tx.profiles || {};
+  const bankName = tx.details?.bank_name || '-';
+  const userRef = tx.reference || '-';
+  const amountStr = Number(tx.amount).toLocaleString();
+  const txLabel = tx.type === 'deposit' ? 'Deposit' : 'Withdrawal';
 
-    // Route to channels
-    const eventName = tx.type === 'deposit' ? 'deposit_rejected' : 'withdraw_rejected';
-    const userName = prof.first_name || prof.username || 'Unknown';
-    const channelMsg =
-      `❌ *${txLabel.toUpperCase()} REJECTED*\n\n` +
-      `👤 *User:* ${userName}\n` +
-      `💰 *Amount:* ${amountStr} ETB\n` +
-      `🏦 *Bank:* ${bankName}\n` +
-      `🆔 *Reference:* \`${userRef}\`\n` +
-      `🆔 *Tx ID:* \`${tx.id.slice(0, 8)}...\``;
-
+  // Notify user via user bot
+  if (prof.telegram_id && userBotToken) {
     try {
-      const { notifyEvent } = await import('@/lib/server/admin');
-      notifyEvent(eventName as any, channelMsg);
+      await fetch(`https://api.telegram.org/bot${userBotToken}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: prof.telegram_id,
+          text: `❌ *${txLabel} Rejected*\n\n💰 Amount: *${amountStr} ETB*\n🏦 Bank: *${bankName}*\n🆔 TX ID: \`${userRef}\`\n\nYour ${tx.type} has been rejected. Please contact support if you have questions.`,
+          parse_mode: 'Markdown',
+        }),
+        signal: AbortSignal.timeout(5000),
+      });
     } catch (e) { /* ignore */ }
   }
+
+  // Route to channels
+  const eventName = tx.type === 'deposit' ? 'deposit_rejected' : 'withdraw_rejected';
+  const userName = prof.first_name || prof.username || 'Unknown';
+  const channelMsg =
+    `❌ *${txLabel.toUpperCase()} REJECTED*\n\n` +
+    `👤 *User:* ${userName}\n` +
+    `💰 *Amount:* ${amountStr} ETB\n` +
+    `🏦 *Bank:* ${bankName}\n` +
+    `🆔 *Reference:* \`${userRef}\`\n` +
+    `🆔 *Tx ID:* \`${tx.id.slice(0, 8)}...\``;
+
+  try {
+    const { notifyEvent } = await import('@/lib/server/admin');
+    await notifyEvent(eventName as any, channelMsg);
+  } catch (e) { /* ignore */ }
 
   await sendMessage(chatId, `❌ Transaction ${txId.slice(0, 8)} rejected.`);
 }
@@ -519,7 +551,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true });
     }
     if (text === '❓ Help') {
-      await sendMessage(chatId, `*🔐 Admin Bot Commands*\n\n${commands.admin_stats || '/admin_stats'} - Dashboard stats\n${commands.admin_users || '/admin_users'} - Recent users\n${commands.admin_commission || '/admin_commission'} - Commission report\n${commands.admin_pending || '/admin_pending'} - Pending transactions\n${commands.admin_games || '/admin_games'} - Matches & winners\n/appoint_<gameId>_<cardNum> - Assign winner card\n${commands.admin_approve}<tx_id> - Approve transaction\n${commands.admin_reject}<tx_id> - Reject transaction\n${commands.admin_help || '/admin_help'} - This help`, { parse_mode: 'Markdown' });
+      await sendMessage(chatId, `*🔐 Admin Bot Commands*\n\n${commands.admin_stats || '/admin_stats'} - Dashboard stats\n${commands.admin_users || '/admin_users'} - Recent users\n${commands.admin_commission || '/admin_commission'} - Commission report\n${commands.admin_pending || '/admin_pending'} - Pending transactions\n${commands.admin_games || '/admin_games'} - Matches & winners\n/appoint_<gameId>_<cardNum> - Assign winner card\n/approve <txId> - Approve transaction\n/reject <txId> - Reject transaction\n${commands.admin_help || '/admin_help'} - This help`, { parse_mode: 'Markdown' });
       return NextResponse.json({ ok: true });
     }
     
@@ -544,7 +576,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true });
     }
     if (isExactCommand(commandText, commands.admin_help)) {
-      await sendMessage(chatId, `*🔐 Admin Bot Commands*\n\n${commands.admin_stats || '/admin_stats'} - Dashboard stats\n${commands.admin_users || '/admin_users'} - Recent users\n${commands.admin_commission || '/admin_commission'} - Commission report\n${commands.admin_pending || '/admin_pending'} - Pending transactions\n${commands.admin_games || '/admin_games'} - Matches & winners\n/appoint_<gameId>_<cardNum> - Assign winner card\n${commands.admin_approve}<tx_id> - Approve transaction\n${commands.admin_reject}<tx_id> - Reject transaction\n${commands.admin_help || '/admin_help'} - This help`, { parse_mode: 'Markdown' });
+      await sendMessage(chatId, `*🔐 Admin Bot Commands*\n\n${commands.admin_stats || '/admin_stats'} - Dashboard stats\n${commands.admin_users || '/admin_users'} - Recent users\n${commands.admin_commission || '/admin_commission'} - Commission report\n${commands.admin_pending || '/admin_pending'} - Pending transactions\n${commands.admin_games || '/admin_games'} - Matches & winners\n/appoint_<gameId>_<cardNum> - Assign winner card\n/approve <txId> - Approve transaction\n/reject <txId> - Reject transaction\n${commands.admin_help || '/admin_help'} - This help`, { parse_mode: 'Markdown' });
       return NextResponse.json({ ok: true });
     }
     if (startsWithCommand(commandText, '/appoint')) {
@@ -598,35 +630,76 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    if (startsWithCommand(commandText, commands.admin_approve)) {
-      const shortId = commandText.replace(commands.admin_approve, '');
-      const { data: txs } = await supabase
+    // Handle /approve command (supports both /approve_<id> and /approve <id> formats)
+    if (startsWithCommand(commandText, '/approve') || startsWithCommand(commandText, commands.admin_approve)) {
+      let shortId = '';
+      if (commandText.startsWith('/approve_')) {
+        shortId = commandText.replace('/approve_', '').trim();
+      } else if (commandText.startsWith('/approve ')) {
+        shortId = commandText.replace('/approve ', '').trim();
+      } else if (commandText.startsWith(commands.admin_approve)) {
+        shortId = commandText.replace(commands.admin_approve, '').trim();
+      }
+
+      if (!shortId) {
+        await sendMessage(chatId, `❌ *Usage:* \`/approve <txId>\`\n\nUse \`/admin_pending\` to see pending transactions with their Tx IDs.`, { parse_mode: 'Markdown' });
+        return NextResponse.json({ ok: true });
+      }
+
+      const { data: txs, error: txError } = await supabase
         .from('transactions')
         .select('id')
         .eq('status', 'pending');
-      if (txs) {
+      if (txError) {
+        await sendMessage(chatId, `❌ Error fetching transactions: ${txError.message}`);
+        return NextResponse.json({ ok: true });
+      }
+      if (txs && txs.length > 0) {
         const match = txs.find((tx: any) => tx.id.startsWith(shortId));
         if (match) {
           await handleAdminApprove(chatId, match.id);
         } else {
-          await sendMessage(chatId, 'Transaction not found.');
+          await sendMessage(chatId, `❌ Transaction not found with ID \`${shortId}\`. Use \`/admin_pending\` to see valid IDs.`, { parse_mode: 'Markdown' });
         }
+      } else {
+        await sendMessage(chatId, 'No pending transactions to approve.');
       }
       return NextResponse.json({ ok: true });
     }
-    if (startsWithCommand(commandText, commands.admin_reject)) {
-      const shortId = commandText.replace(commands.admin_reject, '');
-      const { data: txs } = await supabase
+
+    // Handle /reject command (supports both /reject_<id> and /reject <id> formats)
+    if (startsWithCommand(commandText, '/reject') || startsWithCommand(commandText, commands.admin_reject)) {
+      let shortId = '';
+      if (commandText.startsWith('/reject_')) {
+        shortId = commandText.replace('/reject_', '').trim();
+      } else if (commandText.startsWith('/reject ')) {
+        shortId = commandText.replace('/reject ', '').trim();
+      } else if (commandText.startsWith(commands.admin_reject)) {
+        shortId = commandText.replace(commands.admin_reject, '').trim();
+      }
+
+      if (!shortId) {
+        await sendMessage(chatId, `❌ *Usage:* \`/reject <txId>\`\n\nUse \`/admin_pending\` to see pending transactions with their Tx IDs.`, { parse_mode: 'Markdown' });
+        return NextResponse.json({ ok: true });
+      }
+
+      const { data: txs, error: txError } = await supabase
         .from('transactions')
         .select('id')
         .eq('status', 'pending');
-      if (txs) {
+      if (txError) {
+        await sendMessage(chatId, `❌ Error fetching transactions: ${txError.message}`);
+        return NextResponse.json({ ok: true });
+      }
+      if (txs && txs.length > 0) {
         const match = txs.find((tx: any) => tx.id.startsWith(shortId));
         if (match) {
           await handleAdminReject(chatId, match.id);
         } else {
-          await sendMessage(chatId, 'Transaction not found.');
+          await sendMessage(chatId, `❌ Transaction not found with ID \`${shortId}\`. Use \`/admin_pending\` to see valid IDs.`, { parse_mode: 'Markdown' });
         }
+      } else {
+        await sendMessage(chatId, 'No pending transactions to reject.');
       }
       return NextResponse.json({ ok: true });
     }
@@ -640,9 +713,9 @@ export async function POST(request: NextRequest) {
         const txId = data.replace('confirm_approve_', '');
         // Answer the callback query immediately so the button doesn't show a loading spinner
         await tgCall('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: 'Processing approval...' });
-        const { data: tx } = await supabase.from('transactions').select('*').eq('id', txId).single();
-        if (!tx || tx.status !== 'pending') {
-          await sendMessage(chatId, 'Transaction already processed.');
+        const { data: tx, error: txFetchError } = await supabase.from('transactions').select('*').eq('id', txId).maybeSingle();
+        if (txFetchError || !tx || tx.status !== 'pending') {
+          await sendMessage(chatId, 'Transaction already processed or not found.');
           return NextResponse.json({ ok: true });
         }
 
@@ -682,7 +755,12 @@ export async function POST(request: NextRequest) {
         }
 
         // Mark transaction as completed AFTER balance is credited (correct order)
-        await supabase.from('transactions').update({ status: 'completed' }).eq('id', txId);
+        const { error: updateError } = await supabase.from('transactions').update({ status: 'completed' }).eq('id', txId);
+        if (updateError) {
+          console.error('Transaction status update error:', updateError);
+          await sendMessage(chatId, `⚠️ *Status update failed*: ${updateError.message}\n\nBalance was adjusted but transaction status could not be updated. Please check manually.`, { parse_mode: 'Markdown' });
+          return NextResponse.json({ ok: true });
+        }
 
         const bankName = tx.details?.bank_name || '-';
         const userRef = tx.reference || '-';
@@ -692,7 +770,7 @@ export async function POST(request: NextRequest) {
         // Notify the user via user bot
         if (userBotToken) {
           try {
-            const { data: prof } = await supabase.from('profiles').select('telegram_id, first_name, username').eq('id', tx.user_id).single();
+            const { data: prof } = await supabase.from('profiles').select('telegram_id, first_name, username').eq('id', tx.user_id).maybeSingle();
             if (prof?.telegram_id) {
               await fetch(`https://api.telegram.org/bot${userBotToken}/sendMessage`, {
                 method: 'POST',
@@ -706,7 +784,7 @@ export async function POST(request: NextRequest) {
 
         // Route to subscribed channels
         const eventName = tx.type === 'deposit' ? 'deposit_approved' : 'withdraw_approved';
-        const { data: prof2 } = await supabase.from('profiles').select('first_name, username').eq('id', tx.user_id).single();
+        const { data: prof2 } = await supabase.from('profiles').select('first_name, username').eq('id', tx.user_id).maybeSingle();
         const userName = prof2?.first_name || prof2?.username || 'Unknown';
         const channelMsg =
           `✅ *${txLabel.toUpperCase()} APPROVED*\n\n` +
@@ -717,7 +795,7 @@ export async function POST(request: NextRequest) {
           `🆔 *Tx ID:* \`${tx.id.slice(0, 8)}...\``;
         try {
           const { notifyEvent } = await import('@/lib/server/admin');
-          notifyEvent(eventName as any, channelMsg);
+          await notifyEvent(eventName as any, channelMsg);
         } catch (e) { /* ignore */ }
 
         // Edit original message to show done
@@ -747,7 +825,11 @@ export async function POST(request: NextRequest) {
           await sendMessage(chatId, 'Transaction rejected.');
           return NextResponse.json({ ok: true });
         }
-        await supabase.from('transactions').update({ status: 'failed' }).eq('id', txId);
+        const { error: rejectUpdateError } = await supabase.from('transactions').update({ status: 'failed' }).eq('id', txId);
+        if (rejectUpdateError) {
+          await sendMessage(chatId, `❌ Error rejecting transaction: ${rejectUpdateError.message}`);
+          return NextResponse.json({ ok: true });
+        }
         
         const bankName = tx?.details?.bank_name || '-';
         const userRef = tx?.reference || '-';
@@ -783,7 +865,7 @@ export async function POST(request: NextRequest) {
           `🆔 *Tx ID:* \`${txId.slice(0, 8)}...\``;
         try {
           const { notifyEvent } = await import('@/lib/server/admin');
-          notifyEvent(eventName as any, channelMsg);
+          await notifyEvent(eventName as any, channelMsg);
         } catch (e) { /* ignore */ }
 
         try {

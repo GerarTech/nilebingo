@@ -912,6 +912,65 @@ async function notifyUserBalanceChange(userId: string, amount: number, type: 'ma
   }
 }
 
+// Send a pending transaction notification to the admin bot with inline Approve/Reject buttons
+export async function notifyAdminPendingTransaction(
+  transactionId: string,
+  type: 'deposit' | 'withdraw',
+  amount: number,
+  bankName: string,
+  userRef: string,
+  userName: string,
+  userPhone?: string,
+  accountInfo?: string,
+) {
+  const adminBotToken = process.env.ADMIN_BOT_TOKEN;
+  const adminChatId = process.env.ADMIN_CHAT_ID;
+
+  if (!adminBotToken || !adminChatId) {
+    console.warn('Admin pending transaction notification skipped: ADMIN_BOT_TOKEN or ADMIN_CHAT_ID not configured');
+    return;
+  }
+
+  try {
+    const txLabel = type === 'deposit' ? 'Deposit' : 'Withdrawal';
+    const emoji = type === 'deposit' ? '💳' : '💸';
+    const text =
+      `${emoji} *NEW ${txLabel.toUpperCase()} REQUEST*\n\n` +
+      `👤 *User:* ${userName}\n` +
+      `💰 *Amount:* ${amount.toLocaleString()} ETB\n` +
+      `🏦 *Bank/Method:* ${bankName}\n` +
+      `🆔 *Reference:* \`${userRef}\`\n` +
+      (userPhone ? `📞 *Phone:* ${userPhone}\n` : '') +
+      (accountInfo ? `📱 *Account:* ${accountInfo}\n` : '') +
+      `🆔 *Tx ID:* \`${transactionId.slice(0, 8)}...\``;
+
+    const res = await fetch(`https://api.telegram.org/bot${adminBotToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: adminChatId,
+        text,
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: '✅ Approve', callback_data: `confirm_approve_${transactionId}` },
+              { text: '❌ Reject', callback_data: `confirm_reject_${transactionId}` },
+            ],
+          ],
+        },
+      }),
+      signal: AbortSignal.timeout(10000),
+    });
+    const json = await res.json();
+    if (!json.ok) {
+      console.error('notifyAdminPendingTransaction Telegram error:', json);
+    }
+  } catch (err) {
+    console.error('Error sending admin pending transaction notification:', err);
+  }
+}
+
 // Helper to send real-time notification to Admin Telegram Bot for completed transactions
 export async function notifyAdminTransactionCompleted(transactionId: string) {
   const adminBotToken = process.env.ADMIN_BOT_TOKEN;

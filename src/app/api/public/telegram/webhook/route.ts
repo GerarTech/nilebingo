@@ -164,7 +164,7 @@ async function sendPhoto(chatId: string | number, photoDataUrl: string, caption:
 }
 
 /** Send a deposit-pending alert to admin bot and notification channels */
-async function sendAdminDepositAlert(text: string) {
+async function sendAdminDepositAlert(text: string, txId?: string) {
   let finalText = text;
   try {
     const cmds = await getBotCommands();
@@ -175,6 +175,39 @@ async function sendAdminDepositAlert(text: string) {
 
   if (adminBotToken && adminChatId) {
     try {
+      // If we have a transaction ID, send with inline Approve/Reject buttons
+      if (txId) {
+        const res = await fetch(`https://api.telegram.org/bot${adminBotToken}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: adminChatId,
+            text: finalText,
+            parse_mode: 'Markdown',
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  { text: '✅ Approve', callback_data: `confirm_approve_${txId}` },
+                  { text: '❌ Reject', callback_data: `confirm_reject_${txId}` },
+                ],
+              ],
+            },
+          }),
+          signal: AbortSignal.timeout(10000),
+        });
+        const json = await res.json();
+        if (json.ok) {
+          // Successfully sent with buttons, also notify channels
+          try {
+            const { notifyEvent } = await import('@/lib/server/admin');
+            const plain = finalText.replace(/\*+/g, '');
+            const body = plain.indexOf('\n\n') !== -1 ? plain.substring(plain.indexOf('\n\n') + 2) : plain;
+            await notifyEvent('deposit_pending', body);
+          } catch (e) { /* ignore */ }
+          return;
+        }
+      }
+      // Fallback: send plain text without buttons
       await fetch(`https://api.telegram.org/bot${adminBotToken}/sendMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -187,7 +220,7 @@ async function sendAdminDepositAlert(text: string) {
     const { notifyEvent } = await import('@/lib/server/admin');
     const plain = finalText.replace(/\*+/g, '');
     const body = plain.indexOf('\n\n') !== -1 ? plain.substring(plain.indexOf('\n\n') + 2) : plain;
-    notifyEvent('deposit_pending', body);
+    await notifyEvent('deposit_pending', body);
   } catch (e) { /* ignore */ }
 }
 
@@ -1301,12 +1334,12 @@ export async function POST(request: NextRequest) {
                 return NextResponse.json({ ok: true });
               }
             } else {
-              sendAdminDepositAlert(`⏳ *Deposit Pending (Check.et: ${vResult.reason})*\n\n👤 *User:* ${userProfile.first_name || userProfile.username || 'Unknown'}\n📞 *Phone:* ${userProfile.phone || 'N/A'}\n💰 *Amount:* ${amount} ETB\n🏦 *Bank:* ${bankName}\n🆔 *TX ID:* \`${txId}\`\n\nApprove: /approve_${txId_full.slice(0, 8)}\nReject: /reject_${txId_full.slice(0, 8)}`);
+              sendAdminDepositAlert(`⏳ *Deposit Pending (Check.et: ${vResult.reason})*\n\n👤 *User:* ${userProfile.first_name || userProfile.username || 'Unknown'}\n📞 *Phone:* ${userProfile.phone || 'N/A'}\n💰 *Amount:* ${amount} ETB\n🏦 *Bank:* ${bankName}\n🆔 *TX ID:* \`${txId}\`\n\nApprove: /approve_${txId_full.slice(0, 8)}\nReject: /reject_${txId_full.slice(0, 8)}`, txId_full);
             }
           } else {
             // Direct admin alert via admin bot
             const userName = userProfile.first_name || userProfile.username || 'Unknown';
-            sendAdminDepositAlert(`⏳ *New Deposit Request*\n\n👤 *User:* ${userName}\n📞 *Phone:* ${userProfile.phone || 'N/A'}\n💰 *Amount:* ${amount} ETB\n🏦 *Bank:* ${bankName}\n🆔 *TX ID:* \`${txId}\`\n\nApprove: /approve_${txId_full.slice(0, 8)}\nReject: /reject_${txId_full.slice(0, 8)}`);
+            sendAdminDepositAlert(`⏳ *New Deposit Request*\n\n👤 *User:* ${userName}\n📞 *Phone:* ${userProfile.phone || 'N/A'}\n💰 *Amount:* ${amount} ETB\n🏦 *Bank:* ${bankName}\n🆔 *TX ID:* \`${txId}\`\n\nApprove: /approve_${txId_full.slice(0, 8)}\nReject: /reject_${txId_full.slice(0, 8)}`, txId_full);
           }
         }
         return NextResponse.json({ ok: true });
@@ -1331,7 +1364,7 @@ export async function POST(request: NextRequest) {
           if (tx) {
             await sendMessage(chatId, `⏳ *Deposit Submitted for Review*\n\nTransaction ID: \`${parsed.txId}\`\nAmount: *${parsed.amount.toLocaleString()} ETB*\n\nAn admin will verify and approve your deposit shortly.`, { parse_mode: 'Markdown', ...getMainKeyboard(lang) });
             const userName = userProfile.first_name || userProfile.username || 'Unknown';
-            sendAdminDepositAlert(`⏳ *New Deposit Request (SMS Auto)*\n\n👤 *User:* ${userName}\n💰 *Amount:* ${parsed.amount.toLocaleString()} ETB\n🏦 *Bank:* ${smsBankName}\n🆔 *TX ID:* \`${parsed.txId}\`\n\nApprove: /approve_${tx.id.slice(0, 8)}\nReject: /reject_${tx.id.slice(0, 8)}`);
+            sendAdminDepositAlert(`⏳ *New Deposit Request (SMS Auto)*\n\n👤 *User:* ${userName}\n💰 *Amount:* ${parsed.amount.toLocaleString()} ETB\n🏦 *Bank:* ${smsBankName}\n🆔 *TX ID:* \`${parsed.txId}\`\n\nApprove: /approve_${tx.id.slice(0, 8)}\nReject: /reject_${tx.id.slice(0, 8)}`, tx.id);
           }
         } else {
           const smsLabel = method === 'cbe' ? 'CBE' : 'Telebirr';
@@ -1339,7 +1372,7 @@ export async function POST(request: NextRequest) {
           if (tx) {
             await sendMessage(chatId, `⏳ *Deposit Pending Review*\n\nWe couldn't auto-verify your SMS. An admin will review it manually.`, { parse_mode: 'Markdown', ...getMainKeyboard(lang) });
             const userName = userProfile.first_name || userProfile.username || 'Unknown';
-            sendAdminDepositAlert(`⏳ *Manual Deposit Review*\n\n👤 *User:* ${userName}\n📝 *Raw:* \`${text}\`\n🏦 *Bank:* ${smsLabel}\n\nApprove: /approve_${tx.id.slice(0, 8)}\nReject: /reject_${tx.id.slice(0, 8)}`);
+            sendAdminDepositAlert(`⏳ *Manual Deposit Review*\n\n👤 *User:* ${userName}\n📝 *Raw:* \`${text}\`\n🏦 *Bank:* ${smsLabel}\n\nApprove: /approve_${tx.id.slice(0, 8)}\nReject: /reject_${tx.id.slice(0, 8)}`, tx.id);
           }
         }
         return NextResponse.json({ ok: true });
@@ -1420,7 +1453,7 @@ export async function POST(request: NextRequest) {
               await fetch(`https://api.telegram.org/bot${adminBotToken}/sendMessage`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ chat_id: adminChatId, text: adminAlert, parse_mode: 'Markdown' }),
+                body: JSON.stringify({ chat_id: adminChatId, text: adminAlert, parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: 'Approve', callback_data: `confirm_approve_${tx.id}` }, { text: 'Reject', callback_data: `confirm_reject_${tx.id}` }]] } }),
                 signal: AbortSignal.timeout(5000),
               });
             } catch (e) { /* ignore */ }
@@ -1430,7 +1463,7 @@ export async function POST(request: NextRequest) {
             const { notifyEvent } = await import('@/lib/server/admin');
             const plain = adminAlert.replace(/\*+/g, '');
             const body = plain.indexOf('\n\n') !== -1 ? plain.substring(plain.indexOf('\n\n') + 2) : plain;
-            notifyEvent('withdraw_pending', body);
+            await notifyEvent('withdraw_pending', body);
           } catch (e) { /* ignore */ }
         } else {
           await sendMessage(chatId, '❌ Failed to submit withdrawal request. Please try again later.', { parse_mode: 'Markdown', ...getMainKeyboard(lang) });

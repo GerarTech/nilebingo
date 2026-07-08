@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
         reference: `WTH-${Date.now()}`,
         details: { method, account_number: accountNumber, account_name: accountName },
       })
-      .select('id')
+      .select('id, reference')
       .single();
 
     if (txError || !txData) {
@@ -79,13 +79,29 @@ export async function POST(request: NextRequest) {
 
     // Route to notification channels (notifyEvent falls back to ADMIN env vars)
     try {
-      const { data: prof } = await supabase.from('profiles').select('first_name, username, telegram_id').eq('id', userId).single();
+      const { data: prof } = await supabase.from('profiles').select('first_name, username, telegram_id, phone').eq('id', userId).maybeSingle();
       const userName = prof?.first_name || prof?.username || 'Unknown';
       const userTelegramId = prof?.telegram_id;
+      const userPhone = prof?.phone || undefined;
       const methodLabel = method === 'telebirr' ? 'Telebirr' : 'CBE Birr';
+      const accountInfo = `${accountNumber} (${accountName})`;
       const channelMsg = `💸 *NEW WITHDRAWAL REQUEST*\n\n👤 *User:* ${userName}\n💰 *Amount:* ${withdrawAmount.toLocaleString()} ETB\n🏦 *Method:* ${methodLabel}\n📱 *Account:* ${accountNumber}\n👤 *Name:* ${accountName}\n🆔 *ID:* \`${txData.id.slice(0, 8)}...\``;
-      const { notifyEvent } = await import('@/lib/server/admin');
-      notifyEvent('withdraw_pending', channelMsg);
+      const { notifyEvent, notifyAdminPendingTransaction } = await import('@/lib/server/admin');
+
+      // Send to notification channels (await so it completes before function exits)
+      await notifyEvent('withdraw_pending', channelMsg);
+
+      // Send to admin bot with inline Approve/Reject buttons
+      await notifyAdminPendingTransaction(
+        txData.id,
+        'withdraw',
+        withdrawAmount,
+        methodLabel,
+        txData.reference,
+        userName,
+        userPhone,
+        accountInfo,
+      );
 
       if (userTelegramId) {
         const userBotToken = process.env.TELEGRAM_BOT_TOKEN;

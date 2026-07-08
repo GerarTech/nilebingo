@@ -110,11 +110,25 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-      const { data: prof } = await supabase.from('profiles').select('first_name, username, telegram_id').eq('id', userId).single();
+      const { data: prof } = await supabase.from('profiles').select('first_name, username, telegram_id, phone').eq('id', userId).maybeSingle();
       const userName = prof?.first_name || prof?.username || 'Unknown';
+      const userPhone = prof?.phone || undefined;
       const channelMsg = `💳 *NEW DEPOSIT (Web App)*\n\n👤 *User:* ${userName}\n💰 *Amount:* ${depositAmount.toLocaleString()} ETB\n🏦 *Method:* ${bankName}\n🆔 *Ref:* \`${txId}\`\n📋 *TX:* \`${transactionId.slice(0, 8)}...\``;
-      const { notifyEvent } = await import('@/lib/server/admin');
-      notifyEvent('deposit_pending', channelMsg);
+      const { notifyEvent, notifyAdminPendingTransaction } = await import('@/lib/server/admin');
+
+      // Send to notification channels (await so it completes before function exits)
+      await notifyEvent('deposit_pending', channelMsg);
+
+      // Send to admin bot with inline Approve/Reject buttons
+      await notifyAdminPendingTransaction(
+        transactionId,
+        'deposit',
+        depositAmount,
+        bankName,
+        txId,
+        userName,
+        userPhone,
+      );
 
       if (prof?.telegram_id && process.env.TELEGRAM_BOT_TOKEN) {
         await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
