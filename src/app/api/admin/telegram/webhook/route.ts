@@ -413,62 +413,16 @@ async function handleAdminApprove(chatId: number, txId: string) {
 }
 
 async function handleAdminReject(chatId: number, txId: string) {
-  const { data: tx, error } = await supabase
-    .from('transactions')
-    .select('*, profiles!inner(telegram_id, first_name, username)')
-    .eq('id', txId)
-    .maybeSingle();
+  // Use the proven rejectTransaction function from admin.ts (same as admin panel)
+  const { rejectTransaction } = await import('@/lib/server/admin');
+  const result = await rejectTransaction(txId);
 
-  if (error || !tx) {
-    await sendMessage(chatId, 'Transaction not found.');
-    return;
+  if (result.error) {
+    await sendMessage(chatId, `❌ Error: ${result.error}`, { parse_mode: 'Markdown' });
+  } else {
+    await sendMessage(chatId, `❌ Transaction ${txId.slice(0, 8)} rejected.`, { parse_mode: 'Markdown' });
   }
 
-  const { error: updateError } = await supabase.from('transactions').update({ status: 'failed' }).eq('id', txId);
-  if (updateError) {
-    await sendMessage(chatId, `❌ Error rejecting transaction: ${updateError.message}`);
-    return;
-  }
-
-  const prof = tx.profiles || {};
-  const bankName = tx.details?.bank_name || '-';
-  const userRef = tx.reference || '-';
-  const amountStr = Number(tx.amount).toLocaleString();
-  const txLabel = tx.type === 'deposit' ? 'Deposit' : 'Withdrawal';
-
-  // Notify user via user bot
-  if (prof.telegram_id && userBotToken) {
-    try {
-      await fetch(`https://api.telegram.org/bot${userBotToken}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: prof.telegram_id,
-          text: `❌ *${txLabel} Rejected*\n\n💰 Amount: *${amountStr} ETB*\n🏦 Bank: *${bankName}*\n🆔 TX ID: \`${userRef}\`\n\nYour ${tx.type} has been rejected. Please contact support if you have questions.`,
-          parse_mode: 'Markdown',
-        }),
-        signal: AbortSignal.timeout(5000),
-      });
-    } catch (e) { /* ignore */ }
-  }
-
-  // Route to channels
-  const eventName = tx.type === 'deposit' ? 'deposit_rejected' : 'withdraw_rejected';
-  const userName = prof.first_name || prof.username || 'Unknown';
-  const channelMsg =
-    `❌ *${txLabel.toUpperCase()} REJECTED*\n\n` +
-    `👤 *User:* ${userName}\n` +
-    `💰 *Amount:* ${amountStr} ETB\n` +
-    `🏦 *Bank:* ${bankName}\n` +
-    `🆔 *Reference:* \`${userRef}\`\n` +
-    `🆔 *Tx ID:* \`${tx.id.slice(0, 8)}...\``;
-
-  try {
-    const { notifyEvent } = await import('@/lib/server/admin');
-    await notifyEvent(eventName as any, channelMsg);
-  } catch (e) { /* ignore */ }
-
-  await sendMessage(chatId, `❌ Transaction ${txId.slice(0, 8)} rejected.`);
 }
 
 export async function POST(request: NextRequest) {
@@ -711,177 +665,59 @@ export async function POST(request: NextRequest) {
 
       if (data.startsWith('confirm_approve_')) {
         const txId = data.replace('confirm_approve_', '');
-        // Answer the callback query immediately so the button doesn't show a loading spinner
         await tgCall('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: 'Processing approval...' });
-        const { data: tx, error: txFetchError } = await supabase.from('transactions').select('*').eq('id', txId).maybeSingle();
-        if (txFetchError || !tx || tx.status !== 'pending') {
-          await sendMessage(chatId, 'Transaction already processed or not found.');
-          return NextResponse.json({ ok: true });
-        }
 
-        if (tx.type === 'deposit') {
-          // Ensure the wallet exists before crediting (adjust_main_balance raises if missing)
-          const { data: existingWallet } = await supabase
-            .from('wallets')
-            .select('id')
-            .eq('user_id', tx.user_id)
-            .maybeSingle();
-          if (!existingWallet) {
-            const { error: walletCreateError } = await supabase
-              .from('wallets')
-              .insert({ user_id: tx.user_id, main_balance: 0, play_balance: 0 });
-            if (walletCreateError) {
-              console.error('Wallet creation error:', walletCreateError);
-              await sendMessage(chatId, `⚠️ *Wallet setup failed*: ${walletCreateError.message}\n\nTransaction remains pending. Please retry.`, { parse_mode: 'Markdown' });
-              return NextResponse.json({ ok: true });
-            }
-          }
+        // Use the proven approveTransaction function from admin.ts (same as admin panel)
+        const { approveTransaction } = await import('@/lib/server/admin');
+        const result = await approveTransaction(txId, String(from?.id || 'admin'));
 
-          const { error: balanceError } = await supabase.rpc('adjust_main_balance', { p_user_id: tx.user_id, p_amount: Number(tx.amount) });
-          if (balanceError) {
-            console.error('adjust_main_balance error:', balanceError);
-            await sendMessage(chatId, `⚠️ *Balance credit failed*: ${balanceError.message}\n\nTransaction remains pending. Please check the wallet and retry.`, { parse_mode: 'Markdown' });
-            await sendMessage(chatId, `❌ Deposit approval aborted — wallet not credited.`);
-            return NextResponse.json({ ok: true });
-          }
-        } else if (tx.type === 'withdraw') {
-          const { error: balanceError } = await supabase.rpc('adjust_main_balance', { p_user_id: tx.user_id, p_amount: -Number(tx.amount) });
-          if (balanceError) {
-            console.error('adjust_main_balance error:', balanceError);
-            await sendMessage(chatId, `⚠️ *Balance deduction failed*: ${balanceError.message}\n\nTransaction remains pending. Please check the wallet and retry.`, { parse_mode: 'Markdown' });
-            await sendMessage(chatId, `❌ Withdrawal approval aborted — wallet not debited.`);
-            return NextResponse.json({ ok: true });
-          }
-        }
-
-        // Mark transaction as completed AFTER balance is credited (correct order)
-        const { error: updateError } = await supabase.from('transactions').update({ status: 'completed' }).eq('id', txId);
-        if (updateError) {
-          console.error('Transaction status update error:', updateError);
-          await sendMessage(chatId, `⚠️ *Status update failed*: ${updateError.message}\n\nBalance was adjusted but transaction status could not be updated. Please check manually.`, { parse_mode: 'Markdown' });
-          return NextResponse.json({ ok: true });
-        }
-
-        const bankName = tx.details?.bank_name || '-';
-        const userRef = tx.reference || '-';
-        const amountStr = Number(tx.amount).toLocaleString();
-        const txLabel = tx.type === 'deposit' ? 'Deposit' : 'Withdrawal';
-
-        // Notify the user via user bot
-        if (userBotToken) {
+        if (result.error) {
+          await sendMessage(chatId, `Warning: ${result.error}`, { parse_mode: 'Markdown' });
+        } else {
+          // Edit original message to show done
           try {
-            const { data: prof } = await supabase.from('profiles').select('telegram_id, first_name, username').eq('id', tx.user_id).maybeSingle();
-            if (prof?.telegram_id) {
-              await fetch(`https://api.telegram.org/bot${userBotToken}/sendMessage`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ chat_id: prof.telegram_id, text: `✅ *${txLabel} Approved!*\n\nYour ${tx.type} of *${amountStr} ETB* via *${bankName}* (TX ID: \`${userRef}\`) has been approved and credited to your wallet.`, parse_mode: 'Markdown' }),
-                signal: AbortSignal.timeout(5000),
-              });
-            }
+            await fetch(`${TG_API}/editMessageText`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                chat_id: chatId,
+                message_id: messageId,
+                text: `Approved! Transaction has been processed.`,
+                parse_mode: 'Markdown',
+              }),
+            });
           } catch (e) { /* ignore */ }
+          await sendMessage(chatId, `Transaction ${txId.slice(0, 8)} approved successfully.`, { parse_mode: 'Markdown' });
         }
-
-        // Route to subscribed channels
-        const eventName = tx.type === 'deposit' ? 'deposit_approved' : 'withdraw_approved';
-        const { data: prof2 } = await supabase.from('profiles').select('first_name, username').eq('id', tx.user_id).maybeSingle();
-        const userName = prof2?.first_name || prof2?.username || 'Unknown';
-        const channelMsg =
-          `✅ *${txLabel.toUpperCase()} APPROVED*\n\n` +
-          `👤 *User:* ${userName}\n` +
-          `💰 *Amount:* ${amountStr} ETB\n` +
-          `🏦 *Bank:* ${bankName}\n` +
-          `🆔 *Reference:* \`${userRef}\`\n` +
-          `🆔 *Tx ID:* \`${tx.id.slice(0, 8)}...\``;
-        try {
-          const { notifyEvent } = await import('@/lib/server/admin');
-          await notifyEvent(eventName as any, channelMsg);
-        } catch (e) { /* ignore */ }
-
-        // Edit original message to show done
-        try {
-          await fetch(`${TG_API}/editMessageText`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              chat_id: chatId,
-              message_id: messageId,
-              text: `✅ *Transaction Approved*\n\n${tx.type.toUpperCase()} ${amountStr} ETB via ${bankName}\nTX ID: \`${userRef}\`\nhas been approved.`,
-              parse_mode: 'Markdown',
-            }),
-          });
-        } catch (e) { /* ignore */ }
-
-        await sendMessage(chatId, `✅ ${tx.type.toUpperCase()} ${amountStr} ETB (${bankName}, TX: \`${userRef}\`) approved and credited.`);
         return NextResponse.json({ ok: true });
       }
 
       if (data.startsWith('confirm_reject_')) {
         const txId = data.replace('confirm_reject_', '');
         await tgCall('answerCallbackQuery', { callback_query_id: callbackQuery.id, text: 'Rejecting transaction...' });
-        const { data: tx, error: fetchError } = await supabase.from('transactions').select('*, profiles!inner(telegram_id, first_name, username)').eq('id', txId).maybeSingle();
-        if (fetchError || !tx) {
-          await supabase.from('transactions').update({ status: 'failed' }).eq('id', txId);
-          await sendMessage(chatId, 'Transaction rejected.');
-          return NextResponse.json({ ok: true });
-        }
-        const { error: rejectUpdateError } = await supabase.from('transactions').update({ status: 'failed' }).eq('id', txId);
-        if (rejectUpdateError) {
-          await sendMessage(chatId, `❌ Error rejecting transaction: ${rejectUpdateError.message}`);
-          return NextResponse.json({ ok: true });
-        }
-        
-        const bankName = tx?.details?.bank_name || '-';
-        const userRef = tx?.reference || '-';
-        const amountStr = Number(tx?.amount || 0).toLocaleString();
-        const txLabel = tx?.type === 'deposit' ? 'Deposit' : 'Withdrawal';
 
-        // Notify user via user bot
-        const prof = tx?.profiles || {};
-        if (prof.telegram_id && userBotToken) {
+        // Use the proven rejectTransaction function from admin.ts (same as admin panel)
+        const { rejectTransaction } = await import('@/lib/server/admin');
+        const result = await rejectTransaction(txId);
+
+        if (result.error) {
+          await sendMessage(chatId, `Warning: ${result.error}`, { parse_mode: 'Markdown' });
+        } else {
+          // Edit original message to show done
           try {
-            await fetch(`https://api.telegram.org/bot${userBotToken}/sendMessage`, {
+            await fetch(`${TG_API}/editMessageText`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                chat_id: prof.telegram_id,
-                text: `❌ *${txLabel} Rejected*\n\n💰 Amount: *${amountStr} ETB*\n🏦 Bank: *${bankName}*\n🆔 TX ID: \`${userRef}\`\n\nYour ${tx?.type} has been rejected. Please contact support if you have questions.`,
+                chat_id: chatId,
+                message_id: messageId,
+                text: `Rejected! Transaction has been rejected.`,
                 parse_mode: 'Markdown',
               }),
-              signal: AbortSignal.timeout(5000),
             });
           } catch (e) { /* ignore */ }
+          await sendMessage(chatId, `Transaction ${txId.slice(0, 8)} rejected successfully.`, { parse_mode: 'Markdown' });
         }
-
-        // Route to channels
-        const eventName = tx?.type === 'deposit' ? 'deposit_rejected' : 'withdraw_rejected';
-        const userName = prof.first_name || prof.username || 'Unknown';
-        const channelMsg =
-          `❌ *${txLabel.toUpperCase()} REJECTED*\n\n` +
-          `👤 *User:* ${userName}\n` +
-          `💰 *Amount:* ${amountStr} ETB\n` +
-          `🏦 *Bank:* ${bankName}\n` +
-          `🆔 *Reference:* \`${userRef}\`\n` +
-          `🆔 *Tx ID:* \`${txId.slice(0, 8)}...\``;
-        try {
-          const { notifyEvent } = await import('@/lib/server/admin');
-          await notifyEvent(eventName as any, channelMsg);
-        } catch (e) { /* ignore */ }
-
-        try {
-          await fetch(`${TG_API}/editMessageText`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              chat_id: chatId,
-              message_id: messageId,
-              text: `❌ *Transaction Rejected*\n\n${tx?.type?.toUpperCase() || ''} ${amountStr} ETB via ${bankName}\nTX ID: \`${userRef}\`\nhas been rejected.`,
-              parse_mode: 'Markdown',
-            }),
-          });
-        } catch (e) { /* ignore */ }
-
-        await sendMessage(chatId, `❌ ${tx?.type?.toUpperCase() || ''} ${amountStr} ETB (${bankName}, TX: \`${userRef}\`) rejected.`);
         return NextResponse.json({ ok: true });
       }
     }
