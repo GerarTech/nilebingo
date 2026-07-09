@@ -27,6 +27,7 @@ interface RoomLobbyProps {
   walletBalance: number;
   wallet?: { main_balance: number; play_balance: number } | null;
   t: (key: string) => string;
+  gameActive: boolean;
   onBack: () => void;
   onToggleCard: (num: number) => void;
   onPlay: () => void;
@@ -38,6 +39,7 @@ interface RoomLobbyProps {
 export default function RoomLobby({
   room, gameId, selectedCards, takenCards, lobbyPlayerCount, reservedCardCount,
   previewCard, isRegistered, walletBalance, wallet, t,
+  gameActive,
   onBack, onToggleCard, onPlay, onUnregister, onDeposit,
   commissionRate,
 }: RoomLobbyProps) {
@@ -46,6 +48,42 @@ export default function RoomLobby({
   const totalBalance = (wallet?.main_balance || 0) + (wallet?.play_balance || 0);
   const isBalanceEligible = selectedCards.length > 0 && totalBalance >= fee * selectedCards.length;
 
+  // ===== GAME IN PROGRESS WAIT SCREEN =====
+  if (gameActive && !isRegistered) {
+    return (
+      <div className="px-4 pt-4 animate-fade-in pb-24 font-sans bg-[#0c1322] min-h-screen text-white">
+        <div className="flex items-center justify-between mb-4 border-b border-[#233c66]/30 pb-3">
+          <button onClick={onBack}
+            className="flex items-center gap-1.5 text-xs text-gray-300 hover:text-white bg-[#141f33] px-3 py-1.5 rounded-xl border border-[#233c66]/40 font-bold transition-all cursor-pointer">
+            ⬅ Back
+          </button>
+          <div className="text-center">
+            <div className="text-sm font-extrabold text-gold uppercase tracking-wider flex items-center gap-1.5 justify-center">
+              <span>🎴</span> GAME ID: {gameId}
+            </div>
+          </div>
+        </div>
+
+        <div className="relative bg-gradient-to-b from-[#1c0d02] to-[#0c0500] border border-[#ff5a00]/30 p-8 rounded-3xl shadow-xl shadow-black/40 overflow-hidden text-center">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,90,0,0.04)_0%,transparent_80%)] pointer-events-none" />
+          <span className="text-[9px] text-[#ff7a22] font-black uppercase tracking-widest block mb-2 animate-pulse">⏰ GAME IN PROGRESS</span>
+          <div className="flex items-baseline justify-center gap-1.5 mt-2">
+            <span className="text-6xl font-extrabold tracking-tight text-[#ff5a00]">{room.countdown}</span>
+            <span className="text-lg font-black text-gray-400">S</span>
+          </div>
+          <p className="text-[10px] text-gray-400 mt-2">Please wait for the current game to finish.</p>
+        </div>
+
+        <div className="bg-[#142036]/40 border border-[#233c66]/30 rounded-2xl p-4 mt-4 text-center">
+          <div className="text-xs text-gray-400">
+            Card selection will be available when the current game ends.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ===== REGISTERED WAIT SCREEN =====
   if (isRegistered) {
     const totalCards = Math.max(reservedCardCount, selectedCards.length, 1);
     const prizePool = fee * totalCards * (1 - commissionRate / 100);
@@ -57,7 +95,8 @@ export default function RoomLobby({
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,90,0,0.04)_0%,transparent_80%)] pointer-events-none" />
             <span className="text-[9px] text-[#ff7a22] font-black uppercase tracking-widest block mb-2 animate-pulse">⏰ LOBBY OPEN</span>
             <div className="flex items-baseline justify-center gap-1.5 mt-2">
-              <span className="text-4xl font-extrabold tracking-tight text-[#2ecc71] animate-pulse">PLAYING</span>
+              <span className="text-6xl font-extrabold tracking-tight text-[#2ecc71]">{room.countdown}</span>
+              <span className="text-lg font-black text-gray-400">S</span>
             </div>
             <p className="text-[10px] text-gray-400 mt-2">Card selection in progress. Game starts shortly.</p>
           </div>
@@ -111,11 +150,12 @@ export default function RoomLobby({
     );
   }
 
+  // ===== CARD SELECTION =====
   return (
     <div className="px-4 pt-4 animate-fade-in pb-24 font-sans bg-[#0c1322] min-h-screen text-white">
       <div className="flex items-center justify-between mb-4 border-b border-[#233c66]/30 pb-3">
         <button onClick={onBack}
-          className="flex items-center gap-1.5 text-xs text-gray-300 hover:text-white bg-[#141f33] px-3 py-1.5 rounded-xl border border-[#233c66]/40 font-bold transition-all">
+          className="flex items-center gap-1.5 text-xs text-gray-300 hover:text-white bg-[#141f33] px-3 py-1.5 rounded-xl border border-[#233c66]/40 font-bold transition-all cursor-pointer">
           ⬅ Back
         </button>
         <div className="text-center">

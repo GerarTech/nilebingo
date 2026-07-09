@@ -81,7 +81,6 @@ function HomePage() {
   const [isWatching, setIsWatching] = useState(false);
   const [recentCalled, setRecentCalled] = useState<{ num: number; label: string }[]>([]);
   const [showRules, setShowRules] = useState(false);
-  const [cardPickerCountdown, setCardPickerCountdown] = useState(50);
   const [livePlayerCount, setLivePlayerCount] = useState(1);
   const [reservedCardCount, setReservedCardCount] = useState(0);
   const [prizePool, setPrizePool] = useState(0);
@@ -114,6 +113,7 @@ function HomePage() {
   const [botUsername, setBotUsername] = useState<string>('yenedating_bot');
   const [colorScheme, setColorScheme] = useState<string>('gold');
   const [rulesText, setRulesText] = useState<string>('');
+  const [selectedRoomActive, setSelectedRoomActive] = useState(false);
 
   const [rooms, setRooms] = useState<RoomConfig[]>([
     { id: 'bronze', name: 'Bronze Room', entry: 10, players: 10, maxPlayers: 100, commission: 15, winAmount: 85, status: 'starting_soon', countdown: 45 },
@@ -609,20 +609,21 @@ function HomePage() {
       const sg = startGameplayRef.current;
       const cr = commissionRateRef.current;
       const activeCodes = activeGameCodesRef.current;
+      const isSrPlaying = sr ? hasAnyActiveGameForRoom(sr.id, activeCodes) : false;
+      if (sr) setSelectedRoomActive(isSrPlaying);
       setRooms(prevRooms => prevRooms.map(r => {
         const period = getRoomPeriod(r.id);
         const remaining = getRoomCountdown(period);
         const isPlaying = hasAnyActiveGameForRoom(r.id, activeCodes);
-        if (!isPlaying && remaining <= 1 && sr && sr.id === r.id && !ig) {
+        if (!isPlaying && !isSrPlaying && remaining <= 1 && sr && sr.id === r.id && !ig) {
           if (ir) sg(false);
           else if (isr) sg(true);
         }
         const roomComm = r.commission ?? cr;
         return { ...r, status: isPlaying ? 'playing' : 'starting_soon', countdown: remaining, winAmount: (r.entry * r.players) * (1 - roomComm / 100) };
       }));
-      // Update game ID every tick based on the current cycle so the lobby always
-      // shows the correct game ID for the upcoming round.
-      if (sr && !ig && !ir) {
+      // Update game ID every tick — but skip when selected room has an active game
+      if (sr && !ig && !ir && !isSrPlaying) {
         void (async () => {
           const serverGameId = await getCurrentLobbyGameId(sr.id);
           if (serverGameId) {
@@ -1286,6 +1287,7 @@ function HomePage() {
           lobbyPlayerCount={lobbyPlayerCount} reservedCardCount={reservedCardCount} previewCard={previewCard}
           isRegistered={isRegistered} walletBalance={(wallet?.main_balance || 0) + (wallet?.play_balance || 0)}
           wallet={wallet} t={t}
+          gameActive={selectedRoomActive}
           onBack={() => { setSelectedRoom(null); setSelectedCards([]); setPreviewCard([]); }}
           onToggleCard={toggleCard}
           onPlay={playWithCard}
