@@ -31,7 +31,13 @@ interface GameViewProps {
   showWinModal: boolean;
   showLossModal: boolean;
   showLeaveModal: boolean;
-  winningCard: number[][];
+  winningCards: number[][][];
+  allWinners: any[];
+  isPendingWin: boolean;
+  winMessage: string;
+  finalWinAmount: number;
+  totalWinAmount: number;
+  winnerCount: number;
   winningCells: boolean[][];
   commissionRate: number;
   prizePool: number;
@@ -53,7 +59,8 @@ export default function GameView({
   profile, gameCard, playerCards, selectedCards, drawnNumbers,
   gameId, selectedStake, inGame, isWatching, autoMark, autoWin, userMarkedNumbers,
   language, livePlayerCount, recentCalled, opponentWinner, showWinModal, showLossModal, showLeaveModal,
-  winningCard, winningCells, commissionRate, prizePool, resultCountdown,
+  winningCards, allWinners, isPendingWin, winMessage, finalWinAmount, totalWinAmount, winnerCount,
+  winningCells, commissionRate, prizePool, resultCountdown,
   t, onSetAutoMark, onSetAutoWin, onManualDraw,
   onBingo, onLeave, onLeaveAttempt, onForfeitExit, onCancelLeave,
   onSkipResult, onMarkNumber,
@@ -208,11 +215,12 @@ export default function GameView({
 
       <WinModal
         show={showWinModal}
-        stake={selectedStake}
-        livePlayerCount={livePlayerCount}
-        commissionRate={commissionRate}
-        prizePool={prizePool}
-        cardNumber={selectedCards[0] || 0}
+        winners={allWinners}
+        winAmount={finalWinAmount}
+        totalWinAmount={totalWinAmount}
+        winnerCount={winnerCount}
+        isPending={isPendingWin}
+        message={winMessage}
         playerName={profile?.first_name || profile?.username || 'You'}
         countdown={resultCountdown}
         onSkip={onSkipResult}

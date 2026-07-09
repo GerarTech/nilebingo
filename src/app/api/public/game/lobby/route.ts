@@ -1,53 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getSeededCard } from '@/lib/server/bingo';
 
 export const dynamic = 'force-dynamic';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key';
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-// Helper function to generate seeded BINGO card
-function getSeededCard(cardNum: number, gameId: string): number[][] {
-  const columns: number[][] = [];
-  let gameSeed = 0;
-  for (let i = 0; i < gameId.length; i++) {
-    gameSeed = ((gameSeed * 31 + gameId.charCodeAt(i)) >>> 0);
-  }
-  const seed = ((cardNum * 7919 + gameSeed) >>> 0);
-
-  for (let col = 0; col < 5; col++) {
-    const min = [1, 16, 31, 46, 61][col];
-    const max = [15, 30, 45, 60, 75][col];
-    const nums = Array.from({ length: max - min + 1 }, (_, i) => min + i);
-    
-    // Seeded random generator
-    let s = ((seed + col) >>> 0) % 2147483647;
-    if (s <= 0) s = 1;
-    const random = () => {
-      s = (s * 16807) % 2147483647;
-      return s / 2147483647;
-    };
-
-    const shuffled = [...nums];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(random() * (i + 1));
-      if (j >= 0 && j < shuffled.length) {
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-      }
-    }
-    columns.push(shuffled.slice(0, 5));
-  }
-  const rows: number[][] = [];
-  for (let row = 0; row < 5; row++) {
-    const rowData: number[] = [];
-    for (let col = 0; col < 5; col++) {
-      rowData.push(row === 2 && col === 2 ? 0 : columns[col][row]);
-    }
-    rows.push(rowData);
-  }
-  return rows;
-}
 
 // Helper function to validate UUID
 function isValidUUID(id: string | null | undefined): boolean {
@@ -65,8 +24,7 @@ function hashUUIDToInteger(uuid: string): number {
 }
 
 function getRoomPeriod(roomId: string): number {
-  const periods: Record<string, number> = { bronze: 30, silver: 40, gold: 50, diamond: 60, premium: 75 };
-  return periods[roomId] || 90;
+  return 45;
 }
 
 function generateDeterministicGameId(roomId: string, cycle: number): string {
@@ -464,35 +422,12 @@ export async function POST(request: NextRequest) {
 
       // Prepare cards to play
       const cardsToStore = selectedCards && selectedCards.length > 0
-        ? selectedCards.map((num: number) => getSeededCard(num, gameId))
+        ? selectedCards.map((num: number) => getSeededCard(num))
         : [];
 
       if (cardsToStore.length === 0) {
-        // Fallback random card
-        const colSeed: number[][] = [];
-        const seed = Math.floor(Math.random() * 100000);
-        for (let col = 0; col < 5; col++) {
-          const min = [1, 16, 31, 46, 61][col];
-          const max = [15, 30, 45, 60, 75][col];
-          const nums = Array.from({ length: max - min + 1 }, (_, i) => min + i);
-          let s = seed + col;
-          const shuffled = [...nums];
-          for (let i = shuffled.length - 1; i > 0; i--) {
-            s = (s * 16807) % 2147483647;
-            const j = Math.floor(((s - 1) / 2147483646) * (i + 1));
-            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-          }
-          colSeed.push(shuffled.slice(0, 5));
-        }
-        const rowsSeed: number[][] = [];
-        for (let row = 0; row < 5; row++) {
-          const rowData: number[] = [];
-          for (let col = 0; col < 5; col++) {
-            rowData.push(row === 2 && col === 2 ? 0 : colSeed[col][row]);
-          }
-          rowsSeed.push(rowData);
-        }
-        cardsToStore.push(rowsSeed);
+        const fallbackNum = Math.floor(Math.random() * 300) + 1;
+        cardsToStore.push(getSeededCard(fallbackNum));
       }
 
       // Upsert the game player

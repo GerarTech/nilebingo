@@ -2,13 +2,21 @@
 
 import type { ReactNode } from 'react';
 
+interface WinnerInfo {
+  user_id: string;
+  name: string;
+  card: number[][];
+  won_at: string;
+}
+
 interface WinModalProps {
   show: boolean;
-  stake: number;
-  livePlayerCount: number;
-  commissionRate: number;
-  prizePool: number;
-  cardNumber: number;
+  winners: WinnerInfo[];
+  winAmount: number;
+  totalWinAmount: number;
+  winnerCount: number;
+  isPending: boolean;
+  message: string;
   playerName: string;
   countdown: number | null;
   onSkip: () => void;
@@ -17,12 +25,10 @@ interface WinModalProps {
 }
 
 export default function WinModal({
-  show, stake, livePlayerCount, commissionRate, prizePool,
-  cardNumber, playerName, countdown, onSkip, children, t,
+  show, winners, winAmount, totalWinAmount, winnerCount,
+  isPending, message, playerName, countdown, onSkip, children, t,
 }: WinModalProps) {
   if (!show) return null;
-
-  const singlePrize = prizePool > 0 ? prizePool : stake * livePlayerCount * (1 - commissionRate / 100);
 
   return (
     <div
@@ -46,28 +52,81 @@ export default function WinModal({
           <h1 className="text-3xl font-black text-[#FEE800] tracking-tight uppercase mt-1 drop-shadow-md">
             BINGO! 🎉
           </h1>
-          <div className="text-[10px] font-black uppercase text-[#8da0c4] mt-1.5 tracking-widest">
-            SINGLE WINNER (FULL POT CLAIMED)
-          </div>
-        </div>
-
-          <div className="space-y-2.5">
-          <div className="flex items-center justify-between bg-[#141f33]/80 border border-amber-500 px-5 py-4 rounded-2xl shadow-lg relative overflow-hidden">
-            <span className="font-extrabold text-[#FEE800] text-sm tracking-wide flex items-center gap-1.5">
-              <span>👑</span> {playerName}
-            </span>
-            <div className="text-right">
-              <span className="font-black text-amber-500 text-sm block">
-                +{singlePrize.toLocaleString()} {t('birr')}
-              </span>
+          {isPending && (
+            <div className="text-[10px] font-black uppercase text-[#8da0c4] mt-1.5 tracking-widest animate-pulse">
+              COLLECTING WINNERS...
             </div>
-          </div>
+          )}
+          {!isPending && winAmount > 0 && (
+            <div className="text-[10px] font-black uppercase text-[#8da0c4] mt-1.5 tracking-widest">
+              {winnerCount > 1 ? `${winnerCount} WINNERS — SHARED PRIZE` : 'SINGLE WINNER'}
+            </div>
+          )}
         </div>
 
-        {cardNumber > 0 && (
-          <div className="bg-[#141f33]/40 border border-[#233c66]/20 p-4 rounded-3xl shadow-xl text-center">
-            <div className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-1">Winning Card</div>
-            <div className="text-3xl font-black text-[#FEE800]">#{cardNumber}</div>
+        {isPending && (
+          <div className="bg-[#141f33]/60 border border-amber-500/30 px-5 py-4 rounded-2xl text-center">
+            <div className="text-sm font-bold text-amber-400 mb-1">{message}</div>
+            {winners.length > 0 && (
+              <div className="text-[11px] text-gray-400">
+                {winners.length} winner{winners.length > 1 ? 's' : ''} recorded so far
+              </div>
+            )}
+          </div>
+        )}
+
+        {!isPending && (
+          <>
+            <div className="space-y-2.5">
+              {winners.length > 0 ? (
+                winners.map((w, i) => (
+                  <div
+                    key={w.user_id || i}
+                    className="flex items-center justify-between bg-[#141f33]/80 border border-amber-500 px-5 py-4 rounded-2xl shadow-lg relative overflow-hidden"
+                  >
+                    <span className="font-extrabold text-[#FEE800] text-sm tracking-wide flex items-center gap-1.5">
+                      <span>👑</span> {w.name}
+                      {w.user_id === winners[0]?.user_id && winnerCount > 1 && (
+                        <span className="text-[9px] font-black text-amber-400/70 uppercase tracking-wider ml-1">Winner</span>
+                      )}
+                    </span>
+                    <div className="text-right">
+                      {winAmount > 0 && (
+                        <span className="font-black text-amber-500 text-sm block">
+                          +{winAmount.toLocaleString()} {t('birr')}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="flex items-center justify-between bg-[#141f33]/80 border border-amber-500 px-5 py-4 rounded-2xl shadow-lg">
+                  <span className="font-extrabold text-[#FEE800] text-sm tracking-wide flex items-center gap-1.5">
+                    <span>👑</span> {playerName}
+                  </span>
+                  <div className="text-right">
+                    <span className="font-black text-amber-500 text-sm block">
+                      +{(totalWinAmount > 0 ? totalWinAmount / Math.max(winnerCount, 1) : 0).toLocaleString()} {t('birr')}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {winnerCount > 1 && (
+              <div className="bg-[#141f33]/40 border border-[#233c66]/20 p-4 rounded-3xl text-center">
+                <div className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-1">Prize Split</div>
+                <div className="text-lg font-black text-[#FEE800]">
+                  {totalWinAmount.toLocaleString()} ETB ÷ {winnerCount} = {winAmount.toLocaleString()} ETB each
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {message && !isPending && (
+          <div className="bg-[#0a1f2e]/60 border border-emerald-500/20 px-5 py-3 rounded-2xl text-center">
+            <div className="text-xs font-bold text-emerald-400">{message}</div>
           </div>
         )}
       </div>

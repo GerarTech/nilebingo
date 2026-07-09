@@ -262,6 +262,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     refreshWallet().catch(() => {});
   }, [state.initialized, state.profile, state.wallet, refreshWallet]);
 
+  // Real-time wallet subscription for immediate balance updates (admin funding, etc.)
+  useEffect(() => {
+    const pid = state.profile?.id;
+    if (!pid || !isValidUUID(pid)) return;
+    const channel = supabase
+      .channel('wallet-changes')
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'wallets', filter: `user_id=eq.${pid}` },
+        (payload) => {
+          const newWallet = payload.new as Wallet;
+          if (newWallet) setState(prev => ({ ...prev, wallet: newWallet }));
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [state.profile?.id]);
+
   const setCurrentGame = useCallback((gameId: string | null) => {
     setState(prev => ({ ...prev, currentGameId: gameId }));
   }, []);

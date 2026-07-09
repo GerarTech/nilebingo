@@ -37,8 +37,7 @@ type RoomConfig = {
 };
 
 function getRoomPeriod(roomId: string): number {
-  const periods: Record<string, number> = { bronze: 30, silver: 40, gold: 50, diamond: 60, premium: 75 };
-  return periods[roomId] || 90;
+  return 45;
 }
 
 function generateDeterministicGameId(roomId: string, cycle: number): string {
@@ -71,7 +70,6 @@ function HomePage() {
   const [isWatching, setIsWatching] = useState(false);
   const [recentCalled, setRecentCalled] = useState<{ num: number; label: string }[]>([]);
   const [showRules, setShowRules] = useState(false);
-  const [cardPickerCountdown, setCardPickerCountdown] = useState(50);
   const [livePlayerCount, setLivePlayerCount] = useState(1);
   const [reservedCardCount, setReservedCardCount] = useState(0);
   const [prizePool, setPrizePool] = useState(0);
@@ -81,8 +79,14 @@ function HomePage() {
   const serverTimeOffsetRef = useRef<number | null>(null);
   const [showWinModal, setShowWinModal] = useState(false);
   const [resultCountdown, setResultCountdown] = useState<number | null>(null);
-  const [winningCard, setWinningCard] = useState<number[][]>([]);
+  const [winningCards, setWinningCards] = useState<number[][][]>([]);
   const [winningCells, setWinningCells] = useState<boolean[][]>([]);
+  const [allWinners, setAllWinners] = useState<any[]>([]);
+  const [isPendingWin, setIsPendingWin] = useState(false);
+  const [winMessage, setWinMessage] = useState('');
+  const [finalWinAmount, setFinalWinAmount] = useState(0);
+  const [totalWinAmount, setTotalWinAmount] = useState(0);
+  const [winnerCount, setWinnerCount] = useState(1);
   const drawnRef = useRef<number[]>([]);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const realtimeChannelRef = useRef<any>(null);
@@ -100,12 +104,12 @@ function HomePage() {
   const [rulesText, setRulesText] = useState<string>('');
 
   const [rooms, setRooms] = useState<RoomConfig[]>([
-    { id: 'bronze', name: 'Bronze Room', entry: 10, players: 10, maxPlayers: 100, commission: 15, winAmount: 85, status: 'starting_soon', countdown: 30 },
-    { id: 'silver', name: 'Silver Room', entry: 20, players: 12, maxPlayers: 100, commission: 15, winAmount: 204, status: 'starting_soon', countdown: 23 },
-    { id: 'gold', name: 'Gold Room', entry: 50, players: 15, maxPlayers: 100, commission: 15, winAmount: 638, status: 'starting_soon', countdown: 40 },
-    { id: 'diamond', name: 'Diamond Room', entry: 100, players: 20, maxPlayers: 100, commission: 15, winAmount: 1700, status: 'starting_soon', countdown: 58 },
-    { id: 'premium', name: 'Premium Room', entry: 200, players: 5, maxPlayers: 100, commission: 15, winAmount: 850, status: 'starting_soon', countdown: 15 },
-    { id: 'vip', name: 'VIP Room', entry: 500, players: 2, maxPlayers: 100, commission: 15, winAmount: 850, status: 'starting_soon', countdown: 95 },
+    { id: 'bronze', name: 'Bronze Room', entry: 10, players: 10, maxPlayers: 100, commission: 15, winAmount: 85, status: 'starting_soon', countdown: 45 },
+    { id: 'silver', name: 'Silver Room', entry: 20, players: 12, maxPlayers: 100, commission: 15, winAmount: 204, status: 'starting_soon', countdown: 45 },
+    { id: 'gold', name: 'Gold Room', entry: 50, players: 15, maxPlayers: 100, commission: 15, winAmount: 638, status: 'starting_soon', countdown: 45 },
+    { id: 'diamond', name: 'Diamond Room', entry: 100, players: 20, maxPlayers: 100, commission: 15, winAmount: 1700, status: 'starting_soon', countdown: 45 },
+    { id: 'premium', name: 'Premium Room', entry: 200, players: 5, maxPlayers: 100, commission: 15, winAmount: 850, status: 'starting_soon', countdown: 45 },
+    { id: 'vip', name: 'VIP Room', entry: 500, players: 2, maxPlayers: 100, commission: 15, winAmount: 850, status: 'starting_soon', countdown: 45 },
   ]);
 
   const [dbLeaderboard, setDbLeaderboard] = useState<any[]>([]);
@@ -148,16 +152,17 @@ function HomePage() {
   const gameIdRef = useRef('');
   const gameStatusChannelRef = useRef<any>(null);
   const opponentWinnerRef = useRef<string | null>(null);
+  const activeGameCodesRef = useRef<Set<string>>(new Set());
 
   // ============ DETERMINISTIC DRAW SEQUENCE ============
+  const FIXED_SEED = 12345;
   const getDeterministicDrawSequence = useCallback((gId: string, targetCardNum?: number | null) => {
-    let seed = 0;
-    for (let i = 0; i < gId.length; i++) seed = (seed * 31 + gId.charCodeAt(i)) & 0xffffffff;
+    let seed = FIXED_SEED;
     const rand = () => { seed = (seed * 1664525 + 1013904223) & 0xffffffff; return (seed >>> 0) / 0xffffffff; };
     const allBalls = Array.from({ length: 75 }, (_, i) => i + 1);
     const seq: number[] = [];
     if (targetCardNum && targetCardNum >= 1 && targetCardNum <= 200) {
-      const targetCard = getSeededCard(targetCardNum, gId);
+      const targetCard = getSeededCard(targetCardNum);
       const targetNumbers: number[] = [];
       targetCard.forEach(row => row.forEach(cell => { if (cell > 0) targetNumbers.push(cell); }));
       while (allBalls.length > 0) {
@@ -298,7 +303,7 @@ function HomePage() {
             players: Number(room.players) || 10, maxPlayers: Number(room.maxPlayers) || 100,
             commission: roomComm,
             winAmount: (Number(room.entry) * Number(room.players)) * (1 - roomComm / 100),
-            status: 'starting_soon' as const, countdown: 15 + i * 7,
+            status: 'starting_soon' as const, countdown: 45,
           };
         }));
       }
@@ -368,7 +373,7 @@ function HomePage() {
         const myRes = reservations.filter((r: any) => r.user_id === profile.id).map((r: any) => r.card_number);
         const activeMyRes = myRes.filter((n: number) => n > 0);
         setSelectedCards(activeMyRes);
-        setPreviewCard(activeMyRes.length > 0 ? getSeededCard(activeMyRes[activeMyRes.length - 1], gId) : []);
+        setPreviewCard(activeMyRes.length > 0 ? getSeededCard(activeMyRes[activeMyRes.length - 1]) : []);
       }
     } catch (e) {
       console.error('Failed to refresh game state:', e);
@@ -480,7 +485,7 @@ function HomePage() {
       : [...selectedCards, num];
 
     setSelectedCards(nextSelected);
-    setPreviewCard(nextSelected.length > 0 ? getSeededCard(nextSelected[nextSelected.length - 1], gameId) : []);
+    setPreviewCard(nextSelected.length > 0 ? getSeededCard(nextSelected[nextSelected.length - 1]) : []);
   }, [gameId, profile?.id, selectedCards]);
 
   // ============ START GAMEPLAY ============
@@ -497,10 +502,10 @@ function HomePage() {
 
     let cardsToPlay: number[][][] = [];
     if (isSpectateMode) {
-      const randomCard = generateCard(undefined, activeGameId); cardsToPlay = [randomCard];
+      const randomCard = generateCard(); cardsToPlay = [randomCard];
       setGameCard(randomCard); setPlayerCards([randomCard]); setSelectedStake(totalStake); setIsWatching(true);
     } else {
-      cardsToPlay = selectedCards.map(num => getSeededCard(num, activeGameId));
+      cardsToPlay = selectedCards.map(num => getSeededCard(num));
       setPlayerCards(cardsToPlay); setGameCard(cardsToPlay[0] || []); setSelectedStake(totalStake); setIsWatching(false);
     }
 
@@ -514,7 +519,7 @@ function HomePage() {
     const vRand = () => { seed = (seed * 1664525 + 1013904223) & 0xffffffff; return (seed >>> 0) / 0xffffffff; };
     for (let i = 0; i < selectedRoom.players - (isSpectateMode ? 0 : 1); i++) {
       const cardSeed = Math.floor(vRand() * 200) + 1;
-      virtualCompetitors.push({ username: VIRTUAL_NAMES[i % VIRTUAL_NAMES.length] + ` (#${cardSeed})`, card: getSeededCard(cardSeed, activeGameId), markedCount: 0, neededToWin: 5, hasWon: false });
+      virtualCompetitors.push({ username: VIRTUAL_NAMES[i % VIRTUAL_NAMES.length] + ` (#${cardSeed})`, card: getSeededCard(cardSeed), markedCount: 0, neededToWin: 5, hasWon: false });
     }
     setOtherPlayers(virtualCompetitors);
     setShowCardPicker(false); setInGame(true);
@@ -569,6 +574,19 @@ function HomePage() {
     opponentWinnerRef.current = opponentWinner;
   }, [startGameplay, isRegistered, isSpectatingReady, inGame, selectedCards, selectedRoom, commissionRate, gameId, opponentWinner]);
 
+  // ============ ACTIVE GAME POLLING ============
+  useEffect(() => {
+    const fetchActive = async () => {
+      try {
+        const { data } = await supabase.from('games').select('code').eq('status', 'active');
+        if (data) activeGameCodesRef.current = new Set(data.map(g => g.code));
+      } catch {}
+    };
+    fetchActive();
+    const interval = setInterval(fetchActive, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
   // ============ ROOM COUNTDOWN TICK ============
   useEffect(() => {
     const tick = setInterval(() => {
@@ -578,15 +596,22 @@ function HomePage() {
       const isr = isSpectatingReadyRef.current;
       const sg = startGameplayRef.current;
       const cr = commissionRateRef.current;
+      const activeCodes = activeGameCodesRef.current;
       setRooms(prevRooms => prevRooms.map(r => {
         const period = getRoomPeriod(r.id);
         const remaining = getRoomCountdown(period);
-        if (remaining <= 1 && sr && sr.id === r.id && !ig) {
+        const offset = serverTimeOffsetRef.current ?? 0;
+        const nowMs = Date.now() + offset;
+        const currentSec = Math.floor(nowMs / 1000);
+        const cycle = Math.floor(currentSec / period);
+        const gameCode = generateDeterministicGameId(r.id, cycle);
+        const isPlaying = activeCodes.has(gameCode);
+        if (!isPlaying && remaining <= 1 && sr && sr.id === r.id && !ig) {
           if (ir) sg(false);
           else if (isr) sg(true);
         }
         const roomComm = r.commission ?? cr;
-        return { ...r, status: 'starting_soon' as const, countdown: remaining, winAmount: (r.entry * r.players) * (1 - roomComm / 100) };
+        return { ...r, status: isPlaying ? 'playing' : 'starting_soon', countdown: remaining, winAmount: (r.entry * r.players) * (1 - roomComm / 100) };
       }));
       // Update game ID every tick based on the current cycle so the lobby always
       // shows the correct game ID for the upcoming round.
@@ -659,27 +684,27 @@ function HomePage() {
       setRecentCalled(prev => [{ num, label: `${getColumnLabel(num)}-${num}` }, ...prev].slice(0, 10));
 
       if (autoWin && !isWatching && playerCards.length > 0 && !winInProgressRef.current) {
-        const wonCard = playerCards.find(c => checkWin(c, newDrawn));
-        if (wonCard) {
+        const wonCards = playerCards.filter(c => checkWin(c, newDrawn));
+        if (wonCards.length > 0) {
           if (autoWin && !autoMark) {
             const allMatches = [0];
             playerCards.forEach(card => { card.forEach(row => { row.forEach(n => { if (newDrawn.includes(n)) allMatches.push(n); }); }); });
             setUserMarkedNumbers(allMatches);
           }
-          triggerWin(wonCard, newDrawn);
+          triggerWin(wonCards, newDrawn);
           return;
         }
       }
 
       // Appointed winner: force win after N balls
       if (appointedCard && newDrawn.length >= appointedCard.afterBalls && !isWatching && playerCards.length > 0) {
-        const appointedGrid = getSeededCard(appointedCard.cardNumber, gameId);
+        const appointedGrid = getSeededCard(appointedCard.cardNumber);
         const playerHasAppointed = playerCards.some(c => JSON.stringify(c) === JSON.stringify(appointedGrid));
         if (playerHasAppointed) {
           let allMatches = [0];
           playerCards.forEach(card => { card.forEach(row => { row.forEach(n => { if (newDrawn.includes(n)) allMatches.push(n); }); }); });
           setUserMarkedNumbers(allMatches);
-          triggerWin(appointedGrid, newDrawn, true);
+          triggerWin([appointedGrid], newDrawn, true);
           return;
         }
         // Virtual players no longer trigger loss — game continues
@@ -832,25 +857,25 @@ function HomePage() {
   useEffect(() => {
     if (winInProgressRef.current) return;
     if (autoWin && inGame && !isWatching && playerCards.length > 0) {
-      const wonCard = playerCards.find(c => checkWin(c, drawnNumbers));
-      if (wonCard) {
+      const wonCards = playerCards.filter(c => checkWin(c, drawnNumbers));
+      if (wonCards.length > 0) {
         const allMatches = [0];
         playerCards.forEach(card => { card.forEach(row => { row.forEach(num => { if (drawnNumbers.includes(num)) allMatches.push(num); }); }); });
         setUserMarkedNumbers(allMatches);
-        triggerWin(wonCard, drawnNumbers);
+        triggerWin(wonCards, drawnNumbers);
       }
     }
   }, [autoWin, inGame, isWatching, playerCards, drawnNumbers]);
 
-  // ============ TRIGGER WIN (with re-entrancy guard) ============
-  const triggerWin = useCallback(async (card: number[][], drawn: number[], isAppointed?: boolean) => {
+  // ============ TRIGGER WIN (with re-entrancy guard, multi-winner support) ============
+  const triggerWin = useCallback(async (cards: number[][][], drawn: number[], isAppointed?: boolean) => {
     if (winInProgressRef.current) return;
     winInProgressRef.current = true;
     try {
       if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
-      setWinningCard(card);
+      setWinningCards(cards);
       // For appointed wins, mark all drawn numbers as winning cells (pattern may not exist yet)
-      setWinningCells(isAppointed ? card.map(row => row.map(n => n === 0 || drawn.includes(n))) : getWinningCells(card, drawn));
+      setWinningCells(isAppointed && cards[0] ? cards[0].map(row => row.map(n => n === 0 || drawn.includes(n))) : getWinningCells(cards[0] || [], drawn));
       setShowWinModal(true);
 
       if (profile?.id) {
@@ -862,11 +887,59 @@ function HomePage() {
           });
           const data = await res.json();
           if (data.success) {
-            const cardCount = selectedCardsRef.current.length || 1;
-            const totalUserStake = selectedStake || (selectedRoom?.entry || 10) * cardCount;
-            // Store net profit (win minus stake) so history shows what was actually added to wallet
-            const netWin = data.winAmount - totalUserStake;
-            addGameToHistory(gameId, totalUserStake, netWin >= 0 ? 'win' : 'loss', netWin);
+            if (data.pending) {
+              // Collection window — record winners info and schedule finalization
+              setIsPendingWin(true);
+              setAllWinners(data.winners || []);
+              setWinnerCount(data.winnerCount || 1);
+              setWinMessage(data.message || 'Winner recorded! Prize will be finalized shortly.');
+              // Schedule finalization after the 5s collection window
+              setTimeout(async () => {
+                try {
+                  const finalRes = await fetch('/api/public/game/engine', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'validate_win', gameId, userId: profile.id, drawnNumbers: drawn, isAppointed: !!isAppointed, finalize: true }),
+                  });
+                  const finalData = await finalRes.json();
+                  if (finalData.success) {
+                    setIsPendingWin(false);
+                    setAllWinners(finalData.winners || []);
+                    setWinnerCount(finalData.winnerCount || 1);
+                    setFinalWinAmount(finalData.winAmount || 0);
+                    setTotalWinAmount(finalData.totalWinAmount || 0);
+                    setWinMessage(finalData.message || '');
+                    const totalUserStake = selectedStake || (selectedRoom?.entry || 10) * (selectedCardsRef.current.length || 1);
+                    const netWin = finalData.winAmount - totalUserStake;
+                    addGameToHistory(gameId, totalUserStake, netWin >= 0 ? 'win' : 'loss', netWin);
+                  } else if (finalData.error === 'Game already finished') {
+                    setIsPendingWin(false);
+                    if (finalData.winners) { setAllWinners(finalData.winners); setWinnerCount(finalData.winners.length); }
+                    if (finalData.winner_id === profile.id) {
+                      const cc = selectedCardsRef.current.length || 1;
+                      addGameToHistory(gameId, selectedStake || (selectedRoom?.entry || 10) * cc, 'win');
+                    } else {
+                      setShowWinModal(false);
+                      setOpponentWinner(finalData.winner_name || 'Opponent');
+                    }
+                  }
+                } catch {}
+                await refreshWallet();
+                setTimeout(() => { void refreshWallet(); }, 500);
+              }, 5500);
+            } else {
+              // Immediate finalization
+              setIsPendingWin(false);
+              setAllWinners(data.winners || []);
+              setWinnerCount(data.winnerCount || 1);
+              setFinalWinAmount(data.winAmount || 0);
+              setTotalWinAmount(data.totalWinAmount || 0);
+              setWinMessage(data.message || '');
+              const cardCount = selectedCardsRef.current.length || 1;
+              const totalUserStake = selectedStake || (selectedRoom?.entry || 10) * cardCount;
+              const netWin = data.winAmount - totalUserStake;
+              addGameToHistory(gameId, totalUserStake, netWin >= 0 ? 'win' : 'loss', netWin);
+            }
           } else if (data.error === 'Game already finished') {
             if (data.winner_id === profile.id) {
               const cc = selectedCardsRef.current.length || 1;
@@ -900,6 +973,15 @@ function HomePage() {
   }, []);
 
   const handleJoinRoom = useCallback(async (room: RoomConfig) => {
+    // Check if room has an active game
+    const offset = serverTimeOffsetRef.current ?? 0;
+    const currentSec = Math.floor((Date.now() + offset) / 1000);
+    const cycle = Math.floor(currentSec / getRoomPeriod(room.id));
+    const gameCode = generateDeterministicGameId(room.id, cycle);
+    if (activeGameCodesRef.current.has(gameCode)) {
+      showToast('Game in progress. Please wait for the current game to finish.', 'info');
+      return;
+    }
     const currentGameId = await getCurrentLobbyGameId(room.id) || generateDeterministicGameId(room.id, Math.floor(Date.now() / 1000 / getRoomPeriod(room.id)));
     setSelectedRoom(room);
     setSelectedStake(room.entry);
@@ -933,8 +1015,15 @@ function HomePage() {
   const playWithCard = useCallback(async () => {
     if (selectedCards.length === 0) return;
 
+    // Check if a game is already active for this room
+    const gId = gameIdRef.current || gameId;
+    if (gId && activeGameCodesRef.current.has(gId)) {
+      showToast('Game already in progress. Please wait for the current game to finish.', 'info');
+      return;
+    }
+
     // Lock the current gameId so startGameplay uses the same ID
-    lockedGameIdRef.current = gameIdRef.current || gameId;
+    lockedGameIdRef.current = gId;
 
     const fee = selectedRoom ? selectedRoom.entry : 10;
     const stakeAmount = fee * selectedCards.length;
@@ -1023,7 +1112,8 @@ function HomePage() {
     lockedGameIdRef.current = null;
     setInGame(false); setIsWatching(false); setGameCard([]); setDrawnNumbers([]);
     drawnRef.current = []; setSelectedStake(null); setSelectedCards([]); setRecentCalled([]);
-    setShowWinModal(false); setWinningCard([]); setWinningCells([]);
+    setShowWinModal(false); setWinningCards([]); setWinningCells([]); setAllWinners([]);
+    setIsPendingWin(false); setWinMessage(''); setFinalWinAmount(0); setTotalWinAmount(0); setWinnerCount(1);
     setOtherPlayers([]); setOpponentWinner(null);
     if (shouldRecordLoss) addGameToHistory(gameId, selectedStake || 10, 'loss');
     const uid = profile?.id;
@@ -1057,15 +1147,15 @@ function HomePage() {
     const newDrawn = [...currentDrawn, num];
     drawnRef.current = newDrawn; setDrawnNumbers(newDrawn);
     setRecentCalled(prev => [{ num, label: `${getColumnLabel(num)}-${num}` }, ...prev].slice(0, 10));
-    if (autoWin && gameCard.length > 0 && !isWatching && checkWin(gameCard, newDrawn)) triggerWin(gameCard, newDrawn);
+    if (autoWin && gameCard.length > 0 && !isWatching && checkWin(gameCard, newDrawn)) triggerWin([gameCard], newDrawn);
   }, [autoWin, language, gameCard, isWatching]);
 
   // ============ BINGO CLAIM ============
   const handleBingo = useCallback(() => {
     if (playerCards.length > 0) {
       const checkAgainst = autoMark ? drawnRef.current : userMarkedNumbers;
-      const wonCard = playerCards.find(c => checkWin(c, checkAgainst));
-      if (wonCard) { triggerWin(wonCard, drawnRef.current); }
+      const wonCards = playerCards.filter(c => checkWin(c, checkAgainst));
+      if (wonCards.length > 0) { triggerWin(wonCards, drawnRef.current); }
       else { showToast(language === 'en' ? 'Not a valid BINGO yet!' : 'ትክክለኛ ቢንጎ የለም!', 'error'); }
     }
   }, [playerCards, autoMark, userMarkedNumbers, language]);
@@ -1151,7 +1241,7 @@ function HomePage() {
   const renderContent = () => {
     if (activeTab === 'scores') return <ScoresTab profile={profile} wallet={wallet} dbLeaderboard={dbLeaderboard} t={t} />;
     if (activeTab === 'history') return <HistoryTab stakeHistory={stakeHistory} t={t} />;
-    if (activeTab === 'wallet') return <WalletTab wallet={wallet} walletView={walletView} onSetWalletView={setWalletView} botUsername={botUsername} referralEnabled={referralEnabled} referralBonus={referralBonus} referralCount={referralCount} inviteLink={inviteLink} copiedLink={copiedLink} withdrawMinAmount={withdrawMinAmount} withdrawRequiredGames={withdrawRequiredGames} t={t} onCopyRefLink={copyRefLink} onSimulateReferral={simulateReferralJoin} />;
+    if (activeTab === 'wallet') return <WalletTab wallet={wallet} walletView={walletView} onSetWalletView={setWalletView} botUsername={botUsername} referralEnabled={referralEnabled} referralBonus={referralBonus} referralCount={referralCount} inviteLink={inviteLink} copiedLink={copiedLink} withdrawMinAmount={withdrawMinAmount} withdrawRequiredGames={withdrawRequiredGames} t={t} onCopyRefLink={copyRefLink} onSimulateReferral={simulateReferralJoin} onRefreshWallet={refreshWallet} />;
     if (activeTab === 'profile') return <ProfileTab profile={profile} wallet={wallet} stakeHistory={stakeHistory} language={language} t={t} onSetLanguage={setLanguage} onUpdateAvatar={updateAvatar} />;
 
     // Game tab
@@ -1169,7 +1259,10 @@ function HomePage() {
             language={language} livePlayerCount={livePlayerCount}
             recentCalled={recentCalled} opponentWinner={opponentWinner}
             showWinModal={showWinModal} showLossModal={opponentWinner !== null} showLeaveModal={showLeaveModal}
-            winningCard={winningCard} winningCells={winningCells} commissionRate={effectiveComm}
+            winningCards={winningCards} allWinners={allWinners}
+            isPendingWin={isPendingWin} winMessage={winMessage}
+            finalWinAmount={finalWinAmount} totalWinAmount={totalWinAmount} winnerCount={winnerCount}
+            winningCells={winningCells} commissionRate={effectiveComm}
             prizePool={prizePool} resultCountdown={resultCountdown} t={t}
             onSetAutoMark={setAutoMark} onSetAutoWin={setAutoWin}
             onManualDraw={manualDraw} onBingo={handleBingo} onLeave={leaveGame}

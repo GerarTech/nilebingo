@@ -55,12 +55,11 @@ export default function RoomLobby({
         <div className="space-y-4 animate-fade-in">
           <div className="relative bg-gradient-to-b from-[#1c0d02] to-[#0c0500] border border-[#ff5a00]/30 p-5 rounded-3xl shadow-xl shadow-black/40 overflow-hidden text-center">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,90,0,0.04)_0%,transparent_80%)] pointer-events-none" />
-            <span className="text-[9px] text-[#ff7a22] font-black uppercase tracking-widest block mb-2 animate-pulse">⏰ WAITING FOR GAME START</span>
+            <span className="text-[9px] text-[#ff7a22] font-black uppercase tracking-widest block mb-2 animate-pulse">⏰ LOBBY OPEN</span>
             <div className="flex items-baseline justify-center gap-1.5 mt-2">
-              <span className="text-4xl font-extrabold tracking-tight text-white">{room.countdown}</span>
-              <span className="text-sm font-bold text-[#ff7a22] uppercase">seconds</span>
+              <span className="text-4xl font-extrabold tracking-tight text-[#2ecc71] animate-pulse">PLAYING</span>
             </div>
-            <p className="text-[10px] text-gray-400 mt-2">Game will start when countdown hits zero.</p>
+            <p className="text-[10px] text-gray-400 mt-2">Card selection in progress. Game starts shortly.</p>
           </div>
 
           {/* Prize Showcase */}
@@ -97,7 +96,7 @@ export default function RoomLobby({
               {selectedCards.map((cardNum) => (
                 <div key={cardNum} className="bg-gradient-to-b from-[#142036] to-[#0e1726] rounded-xl p-3 border border-[#233c66]/55 shadow-md">
                   <div className="text-[10px] font-black tracking-wider text-amber-400 text-center mb-2">CARD #{cardNum}</div>
-                  <BingoGrid card={getSeededCard(cardNum, gameId)} drawnNumbers={[]} compact={true} />
+                  <BingoGrid card={getSeededCard(cardNum)} drawnNumbers={[]} compact={true} />
                 </div>
               ))}
             </div>
@@ -195,7 +194,7 @@ export default function RoomLobby({
                   <span className="text-[9px] font-black tracking-wider text-[#8da0c4]">CARD #{cardNum}</span>
                   <span className="text-[7.5px] font-black text-amber-400 bg-amber-400/10 px-1 rounded uppercase">Selected</span>
                 </div>
-                <BingoGrid card={getSeededCard(cardNum, gameId)} drawnNumbers={[]} compact={true} />
+                <BingoGrid card={getSeededCard(cardNum)} drawnNumbers={[]} compact={true} />
               </div>
             ))}
           </div>

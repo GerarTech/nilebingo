@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getSeededCard } from '@/lib/server/bingo';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -110,14 +111,22 @@ export async function POST(request: NextRequest) {
       }
 
       const drawnNumbers: number[] = game.drawn_numbers || [];
-      const allNumbers = Array.from({ length: 75 }, (_, i) => i + 1);
-      const remaining = allNumbers.filter(n => !drawnNumbers.includes(n));
+
+      // Generate deterministic sequence from fixed seed
+      let seed = 12345;
+      const rand = () => { seed = (seed * 1664525 + 1013904223) & 0xffffffff; return (seed >>> 0) / 0xffffffff; };
+      const allBallsSorted = Array.from({ length: 75 }, (_, i) => i + 1);
+      const seq: number[] = [];
+      const pool = [...allBallsSorted];
+      while (pool.length > 0) { const idx = Math.floor(rand() * pool.length); seq.push(pool.splice(idx, 1)[0]); }
+
+      const remaining = seq.filter(n => !drawnNumbers.includes(n));
 
       if (remaining.length === 0) {
         return NextResponse.json({ error: 'All numbers drawn' }, { status: 400 });
       }
 
-      const nextNumber = remaining[Math.floor(Math.random() * remaining.length)];
+      const nextNumber = remaining[0];
       const newDrawnNumbers = [...drawnNumbers, nextNumber];
 
       const { data: updatedGame, error: updateError } = await supabase
@@ -150,12 +159,12 @@ export async function POST(request: NextRequest) {
       }
 
       const isAppointed = body.isAppointed === true;
+      const finalizeRequested = body.finalize === true;
 
       // Look up game by code (gameId from client is the code, not UUID)
-      // Query ALL games with this code to handle possible duplicate rows
       const { data: allGamesByCode } = await supabase
         .from('games')
-        .select('id, status, prize_pool, code, winner_id, stake_id')
+        .select('id, status, prize_pool, code, winner_id, stake_id, winners, winner_collect_until')
         .eq('code', gameId);
 
       if (!allGamesByCode || allGamesByCode.length === 0) {
@@ -164,7 +173,6 @@ export async function POST(request: NextRequest) {
 
       let gameByCode = allGamesByCode[0];
       if (allGamesByCode.length > 1) {
-        // Multiple game rows with same code — find the one this user belongs to
         const gameIds = allGamesByCode.map(g => g.id);
         const { data: userGame } = await supabase
           .from('game_players')
@@ -178,7 +186,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Fetch commission: prefer games.commission (if column exists), fall back to bot_config
+      // Fetch commission
       let effectiveCommission: number | null = null;
       try {
         const { data: commRow } = await supabase
@@ -199,18 +207,22 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // If game already finished, return the winner
+      // If game already finished, return winner info
       if (gameByCode.status === 'finished') {
-        const { data: winnerProfile } = await supabase
-          .from('profiles')
-          .select('first_name, username')
-          .eq('id', gameByCode.winner_id)
-          .maybeSingle();
+        const gameWinners: any[] = (gameByCode as any).winners || [];
+        const firstWinner = gameWinners[0];
+        const winnerId = gameByCode.winner_id || firstWinner?.user_id;
+        let winnerName: string | null = null;
+        if (winnerId) {
+          const { data: wp } = await supabase.from('profiles').select('first_name, username').eq('id', winnerId).maybeSingle();
+          winnerName = wp?.first_name || wp?.username || null;
+        }
         return NextResponse.json({
           win: false,
           error: 'Game already finished',
-          winner_id: gameByCode.winner_id,
-          winner_name: winnerProfile?.first_name || winnerProfile?.username || null,
+          winner_id: winnerId,
+          winner_name: winnerName,
+          winners: gameWinners,
         }, { status: 400 });
       }
 
@@ -230,198 +242,188 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Spectators cannot win' }, { status: 400 });
       }
 
-      // Accept drawn numbers from client (critical for web preview where sync bot doesn't run)
+      // Accept drawn numbers from client or fall back to DB
       const clientDrawn: number[] | undefined = body.drawnNumbers;
       let drawnNumbers: number[] = [];
-
       if (clientDrawn && Array.isArray(clientDrawn) && clientDrawn.length > 0) {
         drawnNumbers = clientDrawn;
-        // Persist to DB so subsequent queries see the correct state
         await supabase.from('games').update({ drawn_numbers: clientDrawn }).eq('id', gameByCode.id);
       } else {
-        const { data: gameData } = await supabase
-          .from('games')
-          .select('drawn_numbers')
-          .eq('id', gameByCode.id)
-          .single();
+        const { data: gameData } = await supabase.from('games').select('drawn_numbers').eq('id', gameByCode.id).single();
         drawnNumbers = gameData?.drawn_numbers || [];
       }
       const card: number[][] = gamePlayer.card || [];
-
       if (!card || card.length === 0) {
         return NextResponse.json({ error: 'No card found' }, { status: 400 });
       }
 
-      // Skip pattern validation for appointed wins (admin override)
+      // Skip pattern validation for appointed wins
       if (!isAppointed) {
-        // Validate win: check if any row, column, or diagonal is fully marked
         let hasWin = false;
-
-        // Check rows
         for (let row = 0; row < card.length; row++) {
           let complete = true;
           for (let col = 0; col < card[row].length; col++) {
             const cell = card[row][col];
             if (cell === 0) continue;
-            if (!drawnNumbers.includes(cell)) {
-              complete = false;
-              break;
-            }
+            if (!drawnNumbers.includes(cell)) { complete = false; break; }
           }
           if (complete) { hasWin = true; break; }
         }
-
-        // Check columns
         if (!hasWin) {
           for (let col = 0; col < 5; col++) {
             let complete = true;
             for (let row = 0; row < card.length; row++) {
               const cell = card[row]?.[col];
               if (cell === 0) continue;
-              if (cell === undefined || !drawnNumbers.includes(cell)) {
-                complete = false;
-                break;
-              }
+              if (cell === undefined || !drawnNumbers.includes(cell)) { complete = false; break; }
             }
             if (complete) { hasWin = true; break; }
           }
         }
-
-        // Check main diagonal (top-left to bottom-right)
         if (!hasWin) {
           let complete = true;
           for (let i = 0; i < 5; i++) {
             const cell = card[i]?.[i];
             if (cell === 0) continue;
-            if (cell === undefined || !drawnNumbers.includes(cell)) {
-              complete = false;
-              break;
-            }
+            if (cell === undefined || !drawnNumbers.includes(cell)) { complete = false; break; }
           }
           if (complete) hasWin = true;
         }
-
-        // Check anti diagonal (top-right to bottom-left)
         if (!hasWin) {
           let complete = true;
           for (let i = 0; i < 5; i++) {
             const cell = card[i]?.[4 - i];
             if (cell === 0) continue;
-            if (cell === undefined || !drawnNumbers.includes(cell)) {
-              complete = false;
-              break;
-            }
+            if (cell === undefined || !drawnNumbers.includes(cell)) { complete = false; break; }
           }
           if (complete) hasWin = true;
         }
-
         if (!hasWin) {
           return NextResponse.json({ win: false, error: 'No winning pattern found' }, { status: 400 });
         }
       }
 
-      // Look up the per-card stake from the stakes table
-      const { data: stakeRow } = await supabase
-        .from('stakes')
-        .select('amount')
-        .eq('id', gameByCode.stake_id)
-        .maybeSingle();
+      // Calculate prize pool
+      const { data: stakeRow } = await supabase.from('stakes').select('amount').eq('id', gameByCode.stake_id).maybeSingle();
       const perCardStake = Number(stakeRow?.amount) || 10;
-
-      // Count actual card reservations (positive card numbers = player-chosen cards)
-      const { data: cardCountData } = await supabase
-        .from('game_card_reservations')
-        .select('id')
-        .eq('game_code', gameByCode.code)
-        .gt('card_number', 0);
+      const { data: cardCountData } = await supabase.from('game_card_reservations').select('id').eq('game_code', gameByCode.code).gt('card_number', 0);
       const totalCardCount = Math.max(cardCountData?.length || 1, 1);
       const totalBet = perCardStake * totalCardCount;
-
-      // Update prize pool via the same RPC used everywhere (authoritative prize calculation)
       try {
-        await supabase.rpc('update_game_prize_pool', {
-          p_game_code: gameByCode.code,
-          p_stake_amt: perCardStake,
-          p_commission: effectiveCommission ?? 15,
-        });
+        await supabase.rpc('update_game_prize_pool', { p_game_code: gameByCode.code, p_stake_amt: perCardStake, p_commission: effectiveCommission ?? 15 });
       } catch {
-        // Old RPC version only accepts 2 args (no p_commission), try that
-        try {
-          await supabase.rpc('update_game_prize_pool', {
-            p_game_code: gameByCode.code,
-            p_stake_amt: perCardStake,
-          });
-        } catch {}
+        try { await supabase.rpc('update_game_prize_pool', { p_game_code: gameByCode.code, p_stake_amt: perCardStake }); } catch {}
       }
-
-      // Read the authoritative prize pool from the games table
-      const { data: freshGame } = await supabase
-        .from('games')
-        .select('prize_pool')
-        .eq('id', gameByCode.id)
-        .maybeSingle();
+      const { data: freshGame } = await supabase.from('games').select('prize_pool').eq('id', gameByCode.id).maybeSingle();
       const winAmount = Number(freshGame?.prize_pool) || (totalBet * (1 - (effectiveCommission ?? 15) / 100));
 
-      const { data: profile } = await supabase.from('profiles').select('telegram_id, first_name').eq('id', userId).single();
+      // ------- MULTI-WINNER LOGIC -------
+      const existingWinners: any[] = (gameByCode as any).winners || [];
+      const isAlreadyWinner = existingWinners.some((w: any) => w.user_id === userId);
 
-      console.log(`[validate_win] Crediting ${winAmount} to user ${userId} for game ${gameId}`);
-      const newMain = await supabase.rpc('adjust_main_balance', { p_user_id: userId, p_amount: winAmount });
-      if (newMain.error) {
-        console.error('adjust_main_balance error:', newMain.error);
-        return NextResponse.json({ success: false, error: 'Failed to credit winnings. Please contact support.' }, { status: 500 });
+      if (!isAlreadyWinner) {
+        const { data: profile } = await supabase.from('profiles').select('first_name, username').eq('id', userId).single();
+        const winnerEntry = {
+          user_id: userId,
+          name: profile?.first_name || profile?.username || 'Player',
+          card: card,
+          won_at: new Date().toISOString(),
+        };
+        existingWinners.push(winnerEntry);
       }
 
-      await supabase.from('transactions').insert({
-        user_id: userId,
-        type: 'win',
-        amount: winAmount,
-        status: 'completed',
-        reference: `WIN-${gameId}`,
-      });
+      const winnerCollectUntil = (gameByCode as any).winner_collect_until;
+      const now = new Date();
+      const collectionExpired = winnerCollectUntil && now >= new Date(winnerCollectUntil);
+      const shouldFinalize = finalizeRequested || (existingWinners.length > 0 && collectionExpired);
 
-      const { data: existingHistory } = await supabase
-        .from('game_history')
-        .select('id')
-        .eq('game_id', gameByCode.id)
-        .eq('user_id', userId)
-        .maybeSingle();
-      const historyPayload = {
-        game_id: gameByCode.id,
-        user_id: userId,
-        stake: totalBet,
-        win_amount: winAmount,
-        numbers_matched: drawnNumbers.filter((n: number) => n > 0).length,
-      };
-      if (existingHistory) {
-        await supabase.from('game_history').update(historyPayload).eq('id', existingHistory.id);
+      if (shouldFinalize) {
+        // Finalize: split prize among all recorded winners and finish game
+        const realWinners = existingWinners.filter((w: any) => w.user_id);
+        const winnerCount = Math.max(realWinners.length, 1);
+        const sharePerWinner = Math.floor(winAmount / winnerCount);
+
+        for (const w of realWinners) {
+          const uid = w.user_id;
+          const bal = await supabase.rpc('adjust_main_balance', { p_user_id: uid, p_amount: sharePerWinner });
+          if (bal.error) {
+            console.error(`adjust_main_balance error for ${uid}:`, bal.error);
+            continue;
+          }
+          await supabase.from('transactions').insert({
+            user_id: uid,
+            type: 'win',
+            amount: sharePerWinner,
+            status: 'completed',
+            reference: `WIN-${gameId}`,
+          });
+          const { data: existingHistory } = await supabase.from('game_history').select('id').eq('game_id', gameByCode.id).eq('user_id', uid).maybeSingle();
+          const historyPayload = { game_id: gameByCode.id, user_id: uid, stake: totalBet, win_amount: sharePerWinner, numbers_matched: drawnNumbers.filter((n: number) => n > 0).length };
+          if (existingHistory) {
+            await supabase.from('game_history').update(historyPayload).eq('id', existingHistory.id);
+          } else {
+            await supabase.from('game_history').insert(historyPayload);
+          }
+          await supabase.from('game_players').update({ auto_mark: true }).eq('game_id', gameByCode.id).eq('user_id', uid);
+
+          // TG notification for this winner
+          if (botToken && uid === userId) {
+            try {
+              const { data: p2 } = await supabase.from('profiles').select('telegram_id, first_name').eq('id', uid).single();
+              if (p2?.telegram_id) {
+                const shareText = winnerCount > 1 ? ` (shared with ${winnerCount - 1} other winner${winnerCount > 2 ? 's' : ''})` : '';
+                await tgSend(botToken, p2.telegram_id, `🎉 *BINGO WIN!*\n\nCongratulations ${p2.first_name || 'Player'}! You won *${sharePerWinner.toLocaleString()} ETB*${shareText}!\n\nKeep playing and winning! 🍀`);
+              }
+            } catch {}
+          }
+        }
+
+        // Finalize game
+        const finalWinnerId = realWinners.length === 1 ? realWinners[0].user_id : null;
+        const updateData: any = { status: 'finished', winners: existingWinners };
+        if (finalWinnerId) updateData.winner_id = finalWinnerId;
+        await supabase.from('games').update(updateData).eq('id', gameByCode.id);
+
+        if (botToken) {
+          await sendGameStats(botToken, gameByCode.id);
+        }
+        await supabase.from('game_card_reservations').delete().eq('game_code', gameByCode.code);
+
+        // Return this caller's share
+        const callerWin = existingWinners.find((w: any) => w.user_id === userId);
+        const callerShare = callerWin ? sharePerWinner : 0;
+
+        return NextResponse.json({
+          success: true,
+          win: true,
+          winAmount: callerShare,
+          totalWinAmount: winAmount,
+          winnerCount,
+          winners: existingWinners,
+          message: winnerCount > 1
+            ? `You won ${callerShare.toLocaleString()} ETB (shared with ${winnerCount - 1} other winner${winnerCount > 2 ? 's' : ''})!`
+            : `You won ${callerShare.toLocaleString()} ETB!`,
+        });
       } else {
-        await supabase.from('game_history').insert(historyPayload);
+        // Not finalizing yet — record this winner, set collection window, keep game active
+        if (!winnerCollectUntil || existingWinners.length === 0) {
+          const collectUntil = new Date(Date.now() + 5000).toISOString();
+          await supabase.from('games').update({ winners: existingWinners, winner_collect_until: collectUntil }).eq('id', gameByCode.id);
+        } else {
+          await supabase.from('games').update({ winners: existingWinners }).eq('id', gameByCode.id);
+        }
+
+        return NextResponse.json({
+          success: true,
+          win: true,
+          winAmount: 0,
+          pending: true,
+          winnerCount: existingWinners.length,
+          winners: existingWinners,
+          collectUntil: winnerCollectUntil || new Date(Date.now() + 5000).toISOString(),
+          message: `Winner recorded! Prize will be finalized shortly.`,
+        });
       }
-
-      // Mark game as finished with winner
-      await supabase.from('games').update({ status: 'finished', winner_id: userId }).eq('id', gameByCode.id);
-
-      await supabase.from('game_players').update({ auto_mark: true }).eq('game_id', gameByCode.id).eq('user_id', userId);
-
-      if (profile?.telegram_id && botToken) {
-        await tgSend(botToken, profile.telegram_id, `🎉 *BINGO WIN!*\n\nCongratulations ${profile.first_name || 'Player'}! You won *${winAmount.toLocaleString()} ETB*!\n\nKeep playing and winning! 🍀`);
-      }
-
-      // Send stats BEFORE deleting reservations so sendGameStats can read actual card count
-      if (botToken) {
-        await sendGameStats(botToken, gameByCode.id);
-      }
-
-      // Clean up card reservations AFTER stats are sent
-      await supabase.from('game_card_reservations').delete().eq('game_code', gameByCode.code);
-
-      return NextResponse.json({
-        success: true,
-        win: true,
-        winAmount,
-        numbersMatched: 0,
-        message: `You won ${winAmount.toLocaleString()} ETB!`,
-      });
     }
 
     if (action === 'record_loss') {
@@ -618,32 +620,7 @@ export async function POST(request: NextRequest) {
         reference: `BET-${code}`,
       });
 
-      const cardsList: number[][][] = cardNumbers.map((cardNum: number) => {
-        const columns: number[][] = [];
-        const seed = cardNum * 7919;
-        for (let col = 0; col < 5; col++) {
-          const min = [1, 16, 31, 46, 61][col];
-          const max = [15, 30, 45, 60, 75][col];
-          const nums = Array.from({ length: max - min + 1 }, (_, i) => min + i);
-          let s = seed + col;
-          const shuffled = [...nums];
-          for (let i = shuffled.length - 1; i > 0; i--) {
-            s = (s * 16807) % 2147483647;
-            const j = Math.floor(((s - 1) / 2147483646) * (i + 1));
-            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-          }
-          columns.push(shuffled.slice(0, 5));
-        }
-        const rows: number[][] = [];
-        for (let row = 0; row < 5; row++) {
-          const rowData: number[] = [];
-          for (let col = 0; col < 5; col++) {
-            rowData.push(row === 2 && col === 2 ? 0 : columns[col][row]);
-          }
-          rows.push(rowData);
-        }
-        return rows;
-      });
+      const cardsList: number[][][] = cardNumbers.map((cardNum: number) => getSeededCard(cardNum));
 
       const playerInserts = cardsList.map(card =>
         supabase.from('game_players').insert({
