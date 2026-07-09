@@ -70,6 +70,7 @@ function HomePage() {
   const [isWatching, setIsWatching] = useState(false);
   const [recentCalled, setRecentCalled] = useState<{ num: number; label: string }[]>([]);
   const [showRules, setShowRules] = useState(false);
+  const [cardPickerCountdown, setCardPickerCountdown] = useState(50);
   const [livePlayerCount, setLivePlayerCount] = useState(1);
   const [reservedCardCount, setReservedCardCount] = useState(0);
   const [prizePool, setPrizePool] = useState(0);
