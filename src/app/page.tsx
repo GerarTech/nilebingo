@@ -54,6 +54,17 @@ function generateDeterministicGameId(roomId: string, cycle: number): string {
   return result;
 }
 
+function hasAnyActiveGameForRoom(roomId: string, activeCodes: Set<string>): boolean {
+  const currentSec = Math.floor(Date.now() / 1000);
+  const period = getRoomPeriod(roomId);
+  const currentCycle = Math.floor(currentSec / period);
+  for (let i = 0; i < 3; i++) {
+    const code = generateDeterministicGameId(roomId, currentCycle - i);
+    if (activeCodes.has(code)) return true;
+  }
+  return false;
+}
+
 function HomePage() {
   const { profile, wallet, language, activeTab, loading, t, setActiveTab, setLanguage, initialize, updateBalance, updateAvatar, refreshWallet } = useApp();
 
@@ -601,12 +612,7 @@ function HomePage() {
       setRooms(prevRooms => prevRooms.map(r => {
         const period = getRoomPeriod(r.id);
         const remaining = getRoomCountdown(period);
-        const offset = serverTimeOffsetRef.current ?? 0;
-        const nowMs = Date.now() + offset;
-        const currentSec = Math.floor(nowMs / 1000);
-        const cycle = Math.floor(currentSec / period);
-        const gameCode = generateDeterministicGameId(r.id, cycle);
-        const isPlaying = activeCodes.has(gameCode);
+        const isPlaying = hasAnyActiveGameForRoom(r.id, activeCodes);
         if (!isPlaying && remaining <= 1 && sr && sr.id === r.id && !ig) {
           if (ir) sg(false);
           else if (isr) sg(true);
@@ -911,8 +917,7 @@ function HomePage() {
                     setTotalWinAmount(finalData.totalWinAmount || 0);
                     setWinMessage(finalData.message || '');
                     const totalUserStake = selectedStake || (selectedRoom?.entry || 10) * (selectedCardsRef.current.length || 1);
-                    const netWin = finalData.winAmount - totalUserStake;
-                    addGameToHistory(gameId, totalUserStake, netWin >= 0 ? 'win' : 'loss', netWin);
+                    addGameToHistory(gameId, totalUserStake, 'win', finalData.winAmount);
                   } else if (finalData.error === 'Game already finished') {
                     setIsPendingWin(false);
                     if (finalData.winners) { setAllWinners(finalData.winners); setWinnerCount(finalData.winners.length); }
@@ -938,8 +943,7 @@ function HomePage() {
               setWinMessage(data.message || '');
               const cardCount = selectedCardsRef.current.length || 1;
               const totalUserStake = selectedStake || (selectedRoom?.entry || 10) * cardCount;
-              const netWin = data.winAmount - totalUserStake;
-              addGameToHistory(gameId, totalUserStake, netWin >= 0 ? 'win' : 'loss', netWin);
+              addGameToHistory(gameId, totalUserStake, 'win', data.winAmount);
             }
           } else if (data.error === 'Game already finished') {
             if (data.winner_id === profile.id) {
@@ -970,16 +974,12 @@ function HomePage() {
 
   // ============ SELECT STAKE / ROOM ============
   const selectStake = useCallback((stake: number) => {
-    setSelectedStake(stake); setSelectedCards([]); setPreviewCard([]); setCardPickerCountdown(50); setShowCardPicker(true);
+    setSelectedStake(stake); setSelectedCards([]); setPreviewCard([]); setShowCardPicker(true);
   }, []);
 
   const handleJoinRoom = useCallback(async (room: RoomConfig) => {
-    // Check if room has an active game
-    const offset = serverTimeOffsetRef.current ?? 0;
-    const currentSec = Math.floor((Date.now() + offset) / 1000);
-    const cycle = Math.floor(currentSec / getRoomPeriod(room.id));
-    const gameCode = generateDeterministicGameId(room.id, cycle);
-    if (activeGameCodesRef.current.has(gameCode)) {
+    // Check if room has an active game (any recent cycle)
+    if (hasAnyActiveGameForRoom(room.id, activeGameCodesRef.current)) {
       showToast('Game in progress. Please wait for the current game to finish.', 'info');
       return;
     }
@@ -1016,15 +1016,15 @@ function HomePage() {
   const playWithCard = useCallback(async () => {
     if (selectedCards.length === 0) return;
 
-    // Check if a game is already active for this room
-    const gId = gameIdRef.current || gameId;
-    if (gId && activeGameCodesRef.current.has(gId)) {
+    // Check if a game is already active for this room (any recent cycle)
+    const roomForCheck = selectedRoomRef.current;
+    if (roomForCheck && hasAnyActiveGameForRoom(roomForCheck.id, activeGameCodesRef.current)) {
       showToast('Game already in progress. Please wait for the current game to finish.', 'info');
       return;
     }
 
     // Lock the current gameId so startGameplay uses the same ID
-    lockedGameIdRef.current = gId;
+    lockedGameIdRef.current = gameIdRef.current || gameId;
 
     const fee = selectedRoom ? selectedRoom.entry : 10;
     const stakeAmount = fee * selectedCards.length;
