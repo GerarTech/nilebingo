@@ -117,12 +117,12 @@ function HomePage() {
   const [telegramAvailable, setTelegramAvailable] = useState<boolean | null>(null);
 
   const [rooms, setRooms] = useState<RoomConfig[]>([
-    { id: 'bronze', name: 'Bronze Room', entry: 10, players: 10, maxPlayers: 100, commission: 15, winAmount: 85, status: 'starting_soon', countdown: 45 },
-    { id: 'silver', name: 'Silver Room', entry: 20, players: 12, maxPlayers: 100, commission: 15, winAmount: 204, status: 'starting_soon', countdown: 45 },
-    { id: 'gold', name: 'Gold Room', entry: 50, players: 15, maxPlayers: 100, commission: 15, winAmount: 638, status: 'starting_soon', countdown: 45 },
-    { id: 'diamond', name: 'Diamond Room', entry: 100, players: 20, maxPlayers: 100, commission: 15, winAmount: 1700, status: 'starting_soon', countdown: 45 },
-    { id: 'premium', name: 'Premium Room', entry: 200, players: 5, maxPlayers: 100, commission: 15, winAmount: 850, status: 'starting_soon', countdown: 45 },
-    { id: 'vip', name: 'VIP Room', entry: 500, players: 2, maxPlayers: 100, commission: 15, winAmount: 850, status: 'starting_soon', countdown: 45 },
+    { id: 'bronze', name: 'Bronze Room', entry: 10, players: 10, maxPlayers: 100, commission: 15, winAmount: 85, status: 'starting_soon', countdown: 50 },
+    { id: 'silver', name: 'Silver Room', entry: 20, players: 12, maxPlayers: 100, commission: 15, winAmount: 204, status: 'starting_soon', countdown: 50 },
+    { id: 'gold', name: 'Gold Room', entry: 50, players: 15, maxPlayers: 100, commission: 15, winAmount: 638, status: 'starting_soon', countdown: 50 },
+    { id: 'diamond', name: 'Diamond Room', entry: 100, players: 20, maxPlayers: 100, commission: 15, winAmount: 1700, status: 'starting_soon', countdown: 50 },
+    { id: 'premium', name: 'Premium Room', entry: 200, players: 5, maxPlayers: 100, commission: 15, winAmount: 850, status: 'starting_soon', countdown: 50 },
+    { id: 'vip', name: 'VIP Room', entry: 500, players: 2, maxPlayers: 100, commission: 15, winAmount: 850, status: 'starting_soon', countdown: 50 },
   ]);
 
   const [dbLeaderboard, setDbLeaderboard] = useState<any[]>([]);
@@ -319,7 +319,7 @@ function HomePage() {
             players: Number(room.players) || 10, maxPlayers: Number(room.maxPlayers) || 100,
             commission: roomComm,
             winAmount: (Number(room.entry) * Number(room.players)) * (1 - roomComm / 100),
-            status: 'starting_soon' as const, countdown: 45,
+            status: 'starting_soon' as const, countdown: 50,
           };
         }));
       }
@@ -626,7 +626,7 @@ function HomePage() {
 
         // Detect active→inactive transition: start 45s card selection timer
         if (prev[r.id] === true && !isPlaying) {
-          timers[r.id] = now + 45000;
+          timers[r.id] = now + 50000;
         }
         prev[r.id] = isPlaying;
 
@@ -1161,7 +1161,7 @@ function HomePage() {
     drawnRef.current = []; setSelectedStake(null); setSelectedCards([]); setRecentCalled([]);
     setShowWinModal(false); setWinningCards([]); setWinningCells([]); setAllWinners([]);
     setIsPendingWin(false); setWinMessage(''); setFinalWinAmount(0); setTotalWinAmount(0); setWinnerCount(1);
-    setOtherPlayers([]); setOpponentWinner(null);
+    setOtherPlayers([]); setOpponentWinner(null); setSelectedRoom(null);
     if (shouldRecordLoss) addGameToHistory(gameId, selectedStake || 10, 'loss');
     const uid = profile?.id;
     if (gameId && isValidUUID(uid)) {
