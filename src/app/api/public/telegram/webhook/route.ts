@@ -980,11 +980,13 @@ export async function POST(request: NextRequest) {
       const username = from.username;
 
       // Extract deep linked referrer if present
+      const commandsForRefCheck = await getBotCommands();
+      const referralEnabled = commandsForRefCheck.referralEnabled !== false;
       let referredByUUID: string | null = null;
-      if (text.includes('ref_')) {
+      if (text.includes('ref_') && referralEnabled) {
         const refParts = text.split('ref_');
         const referrerTelegramId = refParts[1]?.trim();
-        if (referrerTelegramId) {
+        if (referrerTelegramId && referrerTelegramId !== String(from.id)) {
           const { data: refProf } = await supabase
             .from('profiles')
             .select('id')
@@ -1316,21 +1318,6 @@ export async function POST(request: NextRequest) {
                 await sendMessage(chatId, `✅ *Deposit Auto-Approved!*\n\nYour deposit of *${fm(amount)} ETB* has been verified and credited to your Main Wallet. Enjoy! 🎮`, { parse_mode: 'Markdown' });
                 sendAdminDepositAlert(`✅ *Auto-Approved Deposit*\n\n👤 *User:* ${userProfile.first_name || userProfile.username || 'Unknown'}\n📞 *Phone:* ${userProfile.phone || 'N/A'}\n💰 *Amount:* ${amount} ETB\n🏦 *Bank:* ${bankName}\n🆔 *TX ID:* \`${txId}\``);
 
-                const { data: prof } = await supabase.from('profiles').select('referred_by, referral_claimed, first_name').eq('id', userProfile.id).single();
-                if (prof?.referred_by && !prof.referral_claimed) {
-                  const refBonus = Number(commands.referral_bonus || 10);
-                  const refMinDep = Number(commands.referral_min_deposit || 50);
-                  const { data: allDeps } = await supabase.from('transactions').select('amount').eq('user_id', userProfile.id).eq('type', 'deposit').eq('status', 'completed');
-                  const totalDepsAmt = allDeps ? allDeps.reduce((acc, curr) => acc + Number(curr.amount), 0) : 0;
-                  if (totalDepsAmt >= refMinDep) {
-                    await supabase.from('profiles').update({ referral_claimed: true }).eq('id', userProfile.id);
-                    await supabase.rpc('adjust_play_balance', { p_user_id: prof.referred_by, p_amount: refBonus });
-                    const { data: refProfile } = await supabase.from('profiles').select('telegram_id').eq('id', prof.referred_by).single();
-                    if (refProfile?.telegram_id) {
-                      await sendMessage(refProfile.telegram_id, `🎉 *Referral Bonus Received!*\n\nYour friend *${prof.first_name || 'Player'}* completed their first deposit. You received *${refBonus} ETB* in your Play Wallet! 💰`, { parse_mode: 'Markdown' });
-                    }
-                  }
-                }
                 return NextResponse.json({ ok: true });
               }
             } else {
@@ -1734,12 +1721,10 @@ export async function POST(request: NextRequest) {
       const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'YOUR_BOT_USERNAME';
       const refLink = `https://t.me/${botUsername}?start=ref_${from.id}`;
       const refBonus = commands.referral_bonus || 10;
-      const refMinDep = commands.referral_min_deposit || 50;
 
       const inviteMsg = getMsg('invite', 'invite')
         .replace(/{refLink}/g, refLink)
-        .replace(/{refBonus}/g, String(refBonus))
-        .replace(/{refMinDep}/g, String(refMinDep));
+        .replace(/{refBonus}/g, String(refBonus));
 
       await sendMessage(chatId, inviteMsg, {
         parse_mode: 'Markdown',

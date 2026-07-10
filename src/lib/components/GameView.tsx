@@ -8,7 +8,8 @@ import { getColumnLabel, getWinningCells, checkWin, getNumbersAwayFromWin } from
 import WinModal from './WinModal';
 import LossModal from './LossModal';
 import LeaveModal from './LeaveModal';
-import { Play } from 'lucide-react';
+import { Play, Volume2, VolumeX } from 'lucide-react';
+import { useBingoAudio } from '@/lib/hooks/useBingoAudio';
 import type { Profile } from '../types';
 
 interface GameViewProps {
@@ -65,6 +66,18 @@ export default function GameView({
   onBingo, onLeave, onLeaveAttempt, onForfeitExit, onCancelLeave,
   onSkipResult, onMarkNumber,
 }: GameViewProps) {
+  const { soundEnabled, toggleSound, enqueue, playBingo } = useBingoAudio(language);
+
+  useEffect(() => {
+    if (recentCalled.length > 0) {
+      enqueue(recentCalled[0].num);
+    }
+  }, [recentCalled.length > 0 ? recentCalled[0].num : null, enqueue]);
+
+  useEffect(() => {
+    if (showWinModal) playBingo();
+  }, [showWinModal, playBingo]);
+
   // When autoMark is ON, the grid shows all drawn numbers (auto-marked).
   // When autoMark is OFF, the grid only shows numbers the user has manually marked.
   const markedNumbers = autoMark ? drawnNumbers : userMarkedNumbers;
@@ -85,6 +98,9 @@ export default function GameView({
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <button onClick={toggleSound} className="text-[10px] text-gray-400 hover:text-gold transition-colors p-1.5 rounded-lg hover:bg-gold/10" title={soundEnabled ? 'Mute' : 'Unmute'}>
+              {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+            </button>
             <div className="text-[10px] text-gray-300 bg-gold/10 border border-gold/30 px-3 py-1.5 rounded-lg">
               STAKE: <span className="text-gold font-black">{selectedStake} ETB</span>
             </div>

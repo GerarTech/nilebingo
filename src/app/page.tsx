@@ -176,7 +176,7 @@ function HomePage() {
     const rand = () => { seed = (seed * 1664525 + 1013904223) & 0xffffffff; return (seed >>> 0) / 0xffffffff; };
     const allBalls = Array.from({ length: 75 }, (_, i) => i + 1);
     const seq: number[] = [];
-    if (targetCardNum && targetCardNum >= 1 && targetCardNum <= 200) {
+      if (targetCardNum && targetCardNum >= 1 && targetCardNum <= 400) {
       const targetCard = getSeededCard(targetCardNum);
       const targetNumbers: number[] = [];
       targetCard.forEach(row => row.forEach(cell => { if (cell > 0) targetNumbers.push(cell); }));
@@ -493,8 +493,8 @@ function HomePage() {
 
     const isSelected = selectedCards.includes(num);
 
-    if (!isSelected && selectedCards.length >= 2) {
-      showToast(t ? t('max_2_cards') : 'Maximum of 2 cards allowed', 'error');
+    if (!isSelected && selectedCards.length >= 5) {
+      showToast(t ? t('max_5_cards') : 'Maximum of 5 cards allowed', 'error');
       return;
     }
 

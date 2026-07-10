@@ -9,9 +9,9 @@ export function generateCard(cardNumber?: number): number[][] {
   return getSeededCard(randomCard);
 }
 
-// Get all available card numbers (1-300)
+// Get all available card numbers (1-400)
 export function getAvailableCards(): number[] {
-  return Array.from({ length: 300 }, (_, i) => i + 1);
+  return Array.from({ length: 400 }, (_, i) => i + 1);
 }
 
 // Get a specific card by number using seeded randomness

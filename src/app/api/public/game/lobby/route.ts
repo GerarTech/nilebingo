@@ -193,7 +193,7 @@ export async function POST(request: NextRequest) {
           console.warn('Prize pool update after delete failed:', e);
         }
       } else {
-        // Limit to max 2 selected cards
+        // Limit to max 5 selected cards
         const { data: userCurrent } = await supabase
           .from('game_card_reservations')
           .select('card_number')
@@ -201,8 +201,8 @@ export async function POST(request: NextRequest) {
           .eq('user_id', userId);
 
         const currentActiveCount = (userCurrent || []).filter(r => r.card_number > 0).length;
-        if (currentActiveCount >= 2) {
-          return NextResponse.json({ error: 'Maximum of 2 cards allowed' }, { status: 400 });
+        if (currentActiveCount >= 5) {
+          return NextResponse.json({ error: 'Maximum of 5 cards allowed' }, { status: 400 });
         }
 
         // Try to insert new reservation
@@ -430,8 +430,9 @@ export async function POST(request: NextRequest) {
         cardsToStore.push(getSeededCard(fallbackNum));
       }
 
-      // Upsert the game player
-      for (let i = 0; i < Math.min(cardsToStore.length, 1); i++) {
+      // Upsert the game player with all selected cards
+      // Store first card as primary, all cards available in the player's selectedCards
+      for (let i = 0; i < Math.min(cardsToStore.length, 5); i++) {
         await supabase
           .from('game_players')
           .upsert({

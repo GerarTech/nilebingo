@@ -43,7 +43,7 @@ export default function RoomLobby({
   onBack, onToggleCard, onPlay, onUnregister, onDeposit,
   commissionRate,
 }: RoomLobbyProps) {
-  const cards = Array.from({ length: 200 }, (_, i) => i + 1);
+  const cards = Array.from({ length: 400 }, (_, i) => i + 1);
   const fee = room.entry;
   const totalBalance = (wallet?.main_balance || 0) + (wallet?.play_balance || 0);
   const isBalanceEligible = selectedCards.length > 0 && totalBalance >= fee * selectedCards.length;
@@ -196,7 +196,7 @@ export default function RoomLobby({
           <span className="font-bold text-gray-300 text-[11px] uppercase tracking-wider">MY CARDS</span>
         </div>
         <div className="text-xs font-black text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-md">
-          Selected: {selectedCards.length}/2
+          Selected: {selectedCards.length}/5
         </div>
       </div>
 
