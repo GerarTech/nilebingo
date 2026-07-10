@@ -640,8 +640,7 @@ function HomePage() {
           remaining = getRoomCountdown(period);
         }
 
-        const hasTimer = timerEnd && timerEnd > now;
-        if (!isPlaying && !hasTimer && remaining <= 1 && sr && sr.id === r.id && !ig) {
+        if (!isPlaying && remaining <= 1 && sr && sr.id === r.id && !ig) {
           if (ir) sg(false);
           else if (isr) sg(true);
         }

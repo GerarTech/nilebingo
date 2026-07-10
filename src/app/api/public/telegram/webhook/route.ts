@@ -380,7 +380,7 @@ const EN = {
   admin_no_pending: 'No pending transactions at the moment.',
   admin_no_users: 'No users found yet.',
   admin_help: '*🔐 Admin Commands*\n\n/admin_stats — Dashboard statistics\n/admin_users — Recent 10 users\n/admin_pending — View pending transactions\n/approve_<tx_id> — Approve a transaction\n/reject_<tx_id> — Reject a transaction\n/broadcast <message> — Send message to all users\n/admin_help — Show this help',
-  invite: '🎉 *Invite Friends & Earn!*\n\nHere\'s your exclusive invite link:\n{refLink}\n\n*How it works:*\n• Share your link with friends\n• They join and share their phone number\n• You instantly get *{refBonus} ETB* in your Play Wallet\n\nNo minimum deposit required — just invite and play! 🚀',
+  invite: '🎉 *Invite Friends & Earn!*\n\nHere\'s your exclusive invite link:\n<{refLink}>\n\n*How it works:*\n• Share your link with friends\n• They join and share their phone number\n• You instantly get *{refBonus} ETB* in your Play Wallet\n\nNo minimum deposit required — just invite and play! 🚀',
 };
 
 const AM = {
@@ -418,7 +418,7 @@ const AM = {
   transactions_empty: '📒 *ግብይቶች*\n\nእስካሁን ምንም ግብይት የለም። መጫወት ይጀምሩ!',
   broadcast_usage: '📢 *መልእክት ማሰራጫ*\n\nአጠቃቀም: `/broadcast መልእክትዎ`\n\nለሁሉም ተመዝጋቢዎች መልእክት ይላኩ።',
   broadcast_done: '✅ መልእክት ለ{count} ተጠቃሚዎች ተልኳል።',
-  invite: '🎉 *Invite Friends & Earn!*\n\nHere\'s your exclusive invite link:\n{refLink}\n\n*How it works:*\n• Share your link with friends\n• They join and share their phone number\n• You instantly get *{refBonus} ETB* in your Play Wallet\n\nNo minimum deposit required — just invite and play! 🚀',
+  invite: '🎉 *ጓደኞችን ጋብዙ እና ያግኙ!*\n\nየእርስዎ ልዩ የግብዣ አገናኝ ይኸውና:\n<{refLink}>\n\n*እንዴት እንደሚሰራ:*\n• አገናኝዎን ከጓደኞችዎ ጋር ያጋሩ\n• ይቀላቀላሉ እና ስልክ ቁጥራቸውን ያጋራሉ\n• ወዲያውኑ *{refBonus} ETB* በጨዋታ ቦርሳዎ ውስጥ ያገኛሉ\n\nምንም ዝቅተኛ ተቀማጭ አያስፈልግም — ይጋብዙ እና ይጫወቱ! 🚀',
 };
 
 function getText(lang: 'en' | 'am', key: string): string {
@@ -1726,7 +1726,7 @@ export async function POST(request: NextRequest) {
         .replace(/{refLink}/g, refLink)
         .replace(/{refBonus}/g, String(refBonus));
 
-      await sendMessage(chatId, inviteMsg, {
+      const result = await sendMessage(chatId, inviteMsg, {
         parse_mode: 'Markdown',
         reply_markup: {
           inline_keyboard: [[
@@ -1737,6 +1737,7 @@ export async function POST(request: NextRequest) {
           ]]
         }
       });
+      if (!result?.ok) console.error('sendMessage /invite failed:', JSON.stringify(result));
     } else if (matchesCommand(userCommands.winning_patterns, plainCommands.winning_patterns)) {
       await sendMessage(chatId, getMsg('winning_patterns_info', 'winning_patterns_info'), { parse_mode: 'Markdown' });
     } else if (matchesCommand(userCommands.language, plainCommands.language)) {
