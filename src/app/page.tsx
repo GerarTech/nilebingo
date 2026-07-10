@@ -54,15 +54,16 @@ function generateDeterministicGameId(roomId: string, cycle: number): string {
   return result;
 }
 
-function hasAnyActiveGameForRoom(roomId: string, activeCodes: Set<string>): boolean {
+function hasActiveCurrentCycle(roomId: string, activeCodes: Set<string>): boolean {
   const currentSec = Math.floor(Date.now() / 1000);
   const period = getRoomPeriod(roomId);
   const currentCycle = Math.floor(currentSec / period);
-  for (let i = 0; i < 3; i++) {
-    const code = generateDeterministicGameId(roomId, currentCycle - i);
-    if (activeCodes.has(code)) return true;
-  }
-  return false;
+  return activeCodes.has(generateDeterministicGameId(roomId, currentCycle));
+}
+
+// Old function kept for backward reference but now only checks current cycle
+function hasAnyActiveGameForRoom(roomId: string, activeCodes: Set<string>): boolean {
+  return hasActiveCurrentCycle(roomId, activeCodes);
 }
 
 function HomePage() {
@@ -1043,12 +1044,15 @@ function HomePage() {
   }, []);
 
   const handleJoinRoom = useCallback(async (room: RoomConfig) => {
-    // Check if room has an active game (any recent cycle)
-    if (hasAnyActiveGameForRoom(room.id, activeGameCodesRef.current)) {
-      showToast('Game in progress. Please wait for the current game to finish.', 'info');
+    const currentSec = Math.floor(Date.now() / 1000);
+    const period = getRoomPeriod(room.id);
+    const currentCycle = Math.floor(currentSec / period);
+    const currentGameCode = generateDeterministicGameId(room.id, currentCycle);
+    // Only block if current cycle's game is actually active (not a stale game from a previous cycle)
+    if (activeGameCodesRef.current.has(currentGameCode)) {
+      showToast('Game in progress. Please wait for it to finish.', 'info');
       return;
     }
-    const currentGameId = await getCurrentLobbyGameId(room.id) || generateDeterministicGameId(room.id, Math.floor(Date.now() / 1000 / getRoomPeriod(room.id)));
     setSelectedRoom(room);
     setSelectedStake(room.entry);
     setSelectedCards([]);
@@ -1058,8 +1062,8 @@ function HomePage() {
     setReservedCardCount(0);
     setIsRegistered(false);
     setIsSpectatingReady(false);
-    setGameId(currentGameId);
-  }, [getCurrentLobbyGameId]);
+    setGameId(currentGameCode);
+  }, []);
 
   // ============ PLAY / REGISTER / LEAVE ============
   const watchGame = useCallback(async () => {
