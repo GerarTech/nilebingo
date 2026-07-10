@@ -717,7 +717,7 @@ function HomePage() {
       setDrawnNumbers(newDrawn);
       setRecentCalled(prev => [{ num, label: `${getColumnLabel(num)}-${num}` }, ...prev].slice(0, 10));
 
-      if (autoWin && !isWatching && playerCards.length > 0 && !winInProgressRef.current) {
+      if (autoWin && !isWatching && playerCards.length > 0 && !winInProgressRef.current && !opponentWinnerRef.current) {
         const wonCards = playerCards.filter(c => checkWin(c, newDrawn));
         if (wonCards.length > 0) {
           if (autoWin && !autoMark) {
@@ -731,7 +731,7 @@ function HomePage() {
       }
 
       // Appointed winner: force win after N balls
-      if (appointedCard && newDrawn.length >= appointedCard.afterBalls && !isWatching && playerCards.length > 0) {
+      if (appointedCard && newDrawn.length >= appointedCard.afterBalls && !isWatching && playerCards.length > 0 && !opponentWinnerRef.current) {
         const appointedGrid = getSeededCard(appointedCard.cardNumber);
         const playerHasAppointed = playerCards.some(c => JSON.stringify(c) === JSON.stringify(appointedGrid));
         if (playerHasAppointed) {
@@ -802,7 +802,7 @@ function HomePage() {
       try {
         const res = await fetch(`/api/public/game/status?gameCode=${gameId}`);
         const data = await res.json();
-        if (data.finished && data.winner_id && data.winner_id !== profile?.id) {
+        if (data.winner_id && data.winner_id !== profile?.id) {
           if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
           setOpponentWinner(data.winner_name || 'Opponent');
         }
@@ -822,7 +822,15 @@ function HomePage() {
         { event: 'UPDATE', schema: 'public', table: 'games', filter: `code=eq.${gameId}` },
         async (payload) => {
           const record = payload.new as any;
-          if (record.status === 'finished' && record.winner_id && record.winner_id !== profile?.id) {
+          const currentUserId = profile?.id;
+          if (!currentUserId) return;
+
+          const winners: any[] = record.winners || [];
+          const isWinner = winners.some((w: any) => w.user_id === currentUserId);
+          const otherFirstWinner = winners.find((w: any) => w.user_id !== currentUserId);
+
+          // Game finished, opponent won
+          if (record.status === 'finished' && record.winner_id && record.winner_id !== currentUserId) {
             if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
             try {
               const { data: winnerProfile } = await supabase.from('profiles').select('first_name, username').eq('id', record.winner_id).maybeSingle();
@@ -830,6 +838,13 @@ function HomePage() {
             } catch {
               setOpponentWinner('Another player');
             }
+            return;
+          }
+
+          // Game still active but another player claimed a win (collection window) — stop immediately
+          if (record.status === 'active' && !isWinner && otherFirstWinner) {
+            if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+            setOpponentWinner(otherFirstWinner.name || 'Another player');
           }
         })
       .subscribe();
@@ -889,7 +904,7 @@ function HomePage() {
 
   // ============ AUTO-WIN ============
   useEffect(() => {
-    if (winInProgressRef.current) return;
+    if (winInProgressRef.current || opponentWinnerRef.current) return;
     if (autoWin && inGame && !isWatching && playerCards.length > 0) {
       const wonCards = playerCards.filter(c => checkWin(c, drawnNumbers));
       if (wonCards.length > 0) {
@@ -899,11 +914,11 @@ function HomePage() {
         triggerWin(wonCards, drawnNumbers);
       }
     }
-  }, [autoWin, inGame, isWatching, playerCards, drawnNumbers]);
+  }, [autoWin, inGame, isWatching, playerCards, drawnNumbers, opponentWinner]);
 
   // ============ TRIGGER WIN (with re-entrancy guard, multi-winner support) ============
   const triggerWin = useCallback(async (cards: number[][][], drawn: number[], isAppointed?: boolean) => {
-    if (winInProgressRef.current) return;
+    if (winInProgressRef.current || opponentWinnerRef.current) return;
     winInProgressRef.current = true;
     try {
       if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
@@ -1168,6 +1183,7 @@ function HomePage() {
 
   // ============ MANUAL DRAW ============
    const manualDraw = useCallback(() => {
+    if (opponentWinnerRef.current) return;
     const currentDrawn = drawnRef.current;
     if (currentDrawn.length >= 75) return;
     const rem = Array.from({ length: 75 }, (_, i) => i + 1).filter(n => !currentDrawn.includes(n));
@@ -1175,11 +1191,15 @@ function HomePage() {
     const newDrawn = [...currentDrawn, num];
     drawnRef.current = newDrawn; setDrawnNumbers(newDrawn);
     setRecentCalled(prev => [{ num, label: `${getColumnLabel(num)}-${num}` }, ...prev].slice(0, 10));
-    if (autoWin && gameCard.length > 0 && !isWatching && checkWin(gameCard, newDrawn)) triggerWin([gameCard], newDrawn);
+    if (autoWin && gameCard.length > 0 && !isWatching && !opponentWinnerRef.current && checkWin(gameCard, newDrawn)) triggerWin([gameCard], newDrawn);
   }, [autoWin, language, gameCard, isWatching]);
 
   // ============ BINGO CLAIM ============
   const handleBingo = useCallback(() => {
+    if (opponentWinnerRef.current) {
+      showToast(language === 'en' ? 'Game already ended' : 'ጨዋታው ተጠናቋል', 'error');
+      return;
+    }
     if (playerCards.length > 0) {
       const checkAgainst = autoMark ? drawnRef.current : userMarkedNumbers;
       const wonCards = playerCards.filter(c => checkWin(c, checkAgainst));
