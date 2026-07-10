@@ -302,6 +302,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true });
     }
 
+    if (action === 'finish_game') {
+      const gameCode = body.gameCode || gameId;
+      if (!gameCode) {
+        return NextResponse.json({ error: 'gameCode is required' }, { status: 400 });
+      }
+      await supabase
+        .from('games')
+        .update({ status: 'finished' })
+        .eq('code', gameCode)
+        .eq('status', 'active');
+      await supabase
+        .from('game_card_reservations')
+        .delete()
+        .eq('game_code', gameCode);
+      return NextResponse.json({ success: true });
+    }
+
     if (action === 'leave_game') {
       if (!gameId || !userId) {
         return NextResponse.json({ error: 'gameId and userId are required' }, { status: 400 });

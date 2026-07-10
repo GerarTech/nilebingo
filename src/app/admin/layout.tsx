@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
-  LayoutDashboard, Users, Wallet, Gamepad2, Coins, Phone, Send, Settings, LogOut, Menu, X, PlusCircle, DollarSign
+  LayoutDashboard, Users, Wallet, Gamepad2, Coins, Phone, Send, Settings, LogOut, Menu, X, PlusCircle, DollarSign, Shield
 } from 'lucide-react';
 
 const navItems = [
@@ -17,6 +17,7 @@ const navItems = [
   { href: '/admin/commission', label: 'Commission', icon: DollarSign },
   { href: '/admin/contacts', label: 'Contacts', icon: Phone },
   { href: '/admin/broadcast', label: 'Broadcast', icon: Send },
+  { href: '/admin/admin-users', label: 'Admin Users', icon: Shield },
   { href: '/admin/settings', label: 'Settings', icon: Settings },
 ];
 

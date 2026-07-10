@@ -154,6 +154,15 @@ export default function SettingsPage() {
 
   const [streakEnabled, setStreakEnabled] = useState(true);
   const [streakRewards, setStreakRewards] = useState('5,5,5,10,10,15,25');
+  const [comboEnabled, setComboEnabled] = useState(true);
+  const [comboBonus, setComboBonus] = useState(10);
+
+  const [jackpotEnabled, setJackpotEnabled] = useState(false);
+  const [jackpotPercent, setJackpotPercent] = useState(5);
+  const [jackpotPoolAmount, setJackpotPoolAmount] = useState(0);
+
+  const [miniGamesEnabled, setMiniGamesEnabled] = useState(false);
+  const [miniGameMultiplier, setMiniGameMultiplier] = useState(2);
 
   const [loading, setLoading] = useState(true);
 
@@ -221,6 +230,22 @@ export default function SettingsPage() {
           const ds = config.daily_streak;
           setStreakEnabled(ds.enabled !== false);
           if (Array.isArray(ds.rewards)) setStreakRewards(ds.rewards.join(','));
+        }
+        if (config.win_combo) {
+          const wc = config.win_combo;
+          setComboEnabled(wc.enabled !== false);
+          if (typeof wc.bonus === 'number') setComboBonus(wc.bonus);
+        }
+        if (config.jackpot) {
+          const jp = config.jackpot;
+          setJackpotEnabled(jp.enabled === true);
+          if (typeof jp.percent === 'number') setJackpotPercent(jp.percent);
+          if (typeof jp.pool === 'number') setJackpotPoolAmount(jp.pool);
+        }
+        if (config.mini_games) {
+          const mg = config.mini_games;
+          setMiniGamesEnabled(mg.enabled === true);
+          if (typeof mg.multiplier === 'number') setMiniGameMultiplier(mg.multiplier);
         }
         
         // Gateways loading
@@ -292,6 +317,19 @@ export default function SettingsPage() {
       daily_streak: {
         enabled: streakEnabled,
         rewards: streakRewards.split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n) && n > 0),
+      },
+      win_combo: {
+        enabled: comboEnabled,
+        bonus: comboBonus,
+      },
+      jackpot: {
+        enabled: jackpotEnabled,
+        percent: jackpotPercent,
+        pool: jackpotPoolAmount,
+      },
+      mini_games: {
+        enabled: miniGamesEnabled,
+        multiplier: miniGameMultiplier,
       },
       banks,
       admin_chat_ids: adminChatIds.split(/[\s,]+/).filter(Boolean),
@@ -854,6 +892,66 @@ export default function SettingsPage() {
               {saved ? 'Saved!' : 'Save Game Configuration'}
             </button>
 
+            {/* Jackpot Settings */}
+            <div className="p-3 bg-navy-light rounded-xl border border-white/5 space-y-3">
+              <h4 className="text-xs font-semibold text-white flex items-center gap-1.5">
+                <Trophy size={12} className="text-gold" />
+                Progressive Jackpot
+              </h4>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-gray-400">Enable Jackpot</span>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" checked={jackpotEnabled} onChange={e => setJackpotEnabled(e.target.checked)} className="sr-only peer" />
+                  <div className="w-8 h-4 bg-gray-600 rounded-full peer peer-checked:bg-gold peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all"></div>
+                </label>
+              </div>
+              {jackpotEnabled && (
+                <div className="space-y-2 ml-2 border-l-2 border-gold/30 pl-3">
+                  <div>
+                    <label className="text-[10px] text-gray-400 block mb-0.5">Pool Feed % (from each stake)</label>
+                    <input
+                      type="number" step="0.1" min="0" max="100"
+                      value={jackpotPercent}
+                      onChange={e => setJackpotPercent(parseFloat(e.target.value) || 0)}
+                      className="w-full bg-navy border border-white/10 rounded-md px-2.5 py-1.5 text-white text-xs"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between bg-navy rounded-md px-3 py-2">
+                    <span className="text-[10px] text-gray-400">Current Pool</span>
+                    <span className="text-sm font-bold text-gold">{jackpotPoolAmount.toFixed(2)} ETB</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Mini-Games Settings */}
+            <div className="p-3 bg-navy-light rounded-xl border border-white/5 space-y-3">
+              <h4 className="text-xs font-semibold text-white flex items-center gap-1.5">
+                <Trophy size={12} className="text-gold" />
+                Mini-Games (Inter-round)
+              </h4>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-gray-400">Enable Mini-Games</span>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" checked={miniGamesEnabled} onChange={e => setMiniGamesEnabled(e.target.checked)} className="sr-only peer" />
+                  <div className="w-8 h-4 bg-gray-600 rounded-full peer peer-checked:bg-gold peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all"></div>
+                </label>
+              </div>
+              {miniGamesEnabled && (
+                <div className="space-y-2 ml-2 border-l-2 border-gold/30 pl-3">
+                  <div>
+                    <label className="text-[10px] text-gray-400 block mb-0.5">Payout Multiplier</label>
+                    <input
+                      type="number" step="0.1" min="1" max="10"
+                      value={miniGameMultiplier}
+                      onChange={e => setMiniGameMultiplier(parseFloat(e.target.value) || 1)}
+                      className="w-full bg-navy border border-white/10 rounded-md px-2.5 py-1.5 text-white text-xs"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="p-3 bg-navy-light rounded-xl border border-white/5 space-y-2">
               <label className="text-[10px] text-gray-400 uppercase block">Game Rules (How to Play)</label>
               <p className="text-[8.5px] text-gray-500">Displayed in the web app Rules modal. Leave empty to use default translated rules.</p>
@@ -997,6 +1095,134 @@ export default function SettingsPage() {
               <Save size={14} />
               {saved ? 'Saved!' : 'Save Branding Settings'}
             </button>
+          </div>
+        )}
+
+        {/* Promotions Tab */}
+        {activeTab === 'promotions' && (
+          <div className="p-3 bg-navy rounded-xl space-y-5">
+            <h3 className="text-xs font-semibold text-white flex items-center gap-1.5">
+              <Trophy size={14} className="text-gold" />
+              Promotions & Rewards
+            </h3>
+
+            {/* Daily Streak */}
+            <div className="p-3 bg-navy-light rounded-xl border border-white/5 space-y-3">
+              <h4 className="text-xs font-semibold text-white">Daily Win Streak</h4>
+              <p className="text-[9px] text-gray-500">Reward players with increasing bonuses for consecutive daily wins.</p>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-gray-400">Enabled</span>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" checked={streakEnabled} onChange={e => setStreakEnabled(e.target.checked)} className="sr-only peer" />
+                  <div className="w-8 h-4 bg-gray-600 rounded-full peer peer-checked:bg-gold peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all"></div>
+                </label>
+              </div>
+              {streakEnabled && (
+                <div className="space-y-2 ml-2 border-l-2 border-gold/30 pl-3">
+                  <div>
+                    <label className="text-[10px] text-gray-400 block mb-0.5">Replay Chain Rewards (comma-separated amounts in ETB)</label>
+                    <input
+                      type="text"
+                      value={streakRewards}
+                      onChange={e => setStreakRewards(e.target.value)}
+                      className="w-full bg-navy border border-white/10 rounded-md px-2.5 py-1.5 text-white text-xs"
+                      placeholder="e.g., 5,5,5,10,10,15,25"
+                    />
+                    <p className="text-[8px] text-gray-500 mt-0.5">Day 1, Day 2, Day 3, ... Day 7+ reward. Each entry = the bonus amount for that consecutive win day.</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 3-Win Combo */}
+            <div className="p-3 bg-navy-light rounded-xl border border-white/5 space-y-3">
+              <h4 className="text-xs font-semibold text-white">3-Win Combo Bonus</h4>
+              <p className="text-[9px] text-gray-500">A bonus reward when a player wins 3 consecutive games within the same session.</p>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-gray-400">Enabled</span>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" checked={comboEnabled} onChange={e => setComboEnabled(e.target.checked)} className="sr-only peer" />
+                  <div className="w-8 h-4 bg-gray-600 rounded-full peer peer-checked:bg-gold peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all"></div>
+                </label>
+              </div>
+              {comboEnabled && (
+                <div className="space-y-2 ml-2 border-l-2 border-gold/30 pl-3">
+                  <div>
+                    <label className="text-[10px] text-gray-400 block mb-0.5">Bonus Amount (ETB)</label>
+                    <input
+                      type="number" step="1" min="0"
+                      value={comboBonus}
+                      onChange={e => setComboBonus(parseFloat(e.target.value) || 0)}
+                      className="w-full bg-navy border border-white/10 rounded-md px-2.5 py-1.5 text-white text-xs"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Happy Hour */}
+            <div className="p-3 bg-navy-light rounded-xl border border-white/5 space-y-3">
+              <h4 className="text-xs font-semibold text-white">Happy Hour</h4>
+              <p className="text-[9px] text-gray-500">Override commission % during a specific daily time window. Players see a special label.</p>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-gray-400">Enabled</span>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" checked={happyHourEnabled} onChange={e => setHappyHourEnabled(e.target.checked)} className="sr-only peer" />
+                  <div className="w-8 h-4 bg-gray-600 rounded-full peer peer-checked:bg-gold peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all"></div>
+                </label>
+              </div>
+              {happyHourEnabled && (
+                <div className="space-y-3 ml-2 border-l-2 border-gold/30 pl-3">
+                  <div>
+                    <label className="text-[10px] text-gray-400 block mb-0.5">Room (targeted)</label>
+                    <select value={happyHourRoom} onChange={e => setHappyHourRoom(e.target.value)} className="w-full bg-navy border border-white/10 rounded-md px-2.5 py-1.5 text-white text-xs">
+                      {roomsList.map(r => (
+                        <option key={r.name} value={r.name.toLowerCase()}>{r.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-gray-400 block mb-0.5">Label (shown to players)</label>
+                    <input
+                      type="text"
+                      value={happyHourLabel}
+                      onChange={e => setHappyHourLabel(e.target.value)}
+                      className="w-full bg-navy border border-white/10 rounded-md px-2.5 py-1.5 text-white text-xs"
+                      placeholder="e.g., Happy Hour 🎉"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] text-gray-400 block mb-0.5">Start Hour (0–23)</label>
+                      <input
+                        type="number" min="0" max="23" step="1"
+                        value={happyHourStart}
+                        onChange={e => setHappyHourStart(Math.max(0, Math.min(23, parseInt(e.target.value) || 0)))}
+                        className="w-full bg-navy border border-white/10 rounded-md px-2.5 py-1.5 text-white text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-gray-400 block mb-0.5">End Hour (0–23)</label>
+                      <input
+                        type="number" min="0" max="23" step="1"
+                        value={happyHourEnd}
+                        onChange={e => setHappyHourEnd(Math.max(0, Math.min(23, parseInt(e.target.value) || 0)))}
+                        className="w-full bg-navy border border-white/10 rounded-md px-2.5 py-1.5 text-white text-xs"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-gray-400 block mb-0.5">Commission Override (%)</label>
+                    <input
+                      type="number" step="0.1" min="0" max="100"
+                      value={happyHourCommission}
+                      onChange={e => setHappyHourCommission(parseFloat(e.target.value) || 0)}
+                      className="w-full bg-navy border border-white/10 rounded-md px-2.5 py-1.5 text-white text-xs"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
 

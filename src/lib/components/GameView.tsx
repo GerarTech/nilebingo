@@ -70,6 +70,7 @@ export default function GameView({
 
   useEffect(() => {
     if (recentCalled.length > 0) {
+      console.log('[GameView] enqueue ball:', recentCalled[0].num);
       enqueue(recentCalled[0].num);
     }
   }, [recentCalled.length > 0 ? recentCalled[0].num : null, enqueue]);

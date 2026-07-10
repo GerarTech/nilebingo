@@ -122,6 +122,23 @@ export default function GamesPage() {
                 <div><span className="text-gray-500">Created:</span> <span className="text-white">{new Date(selectedGame.created_at).toLocaleString()}</span></div>
               </div>
 
+              {selectedGame.status !== 'finished' && (
+                <button
+                  onClick={async () => {
+                    if (!confirm('Mark this game as finished?')) return;
+                    await fetch('/api/admin/data', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ action: 'finish_game', gameId: selectedGame.id }),
+                    });
+                    loadGames(search);
+                    setSelectedGame(null);
+                  }}
+                  className="mt-4 w-full py-2 rounded-xl text-xs font-bold bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 transition-all cursor-pointer"
+                >
+                  Mark as Finished
+                </button>
+              )}
               {selectedGame.players && selectedGame.players.length > 0 && (
                 <div className="mt-4">
                   <h4 className="text-xs font-semibold text-white mb-2 flex items-center gap-1"><Users size={12} /> Players ({selectedGame.players.length})</h4>

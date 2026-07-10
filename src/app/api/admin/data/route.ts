@@ -220,6 +220,14 @@ export async function POST(request: NextRequest) {
         const result = await updateBotMessages(body.messages);
         return NextResponse.json(result);
       }
+      case 'finish_game': {
+        const { data, error } = await supabase
+          .from('games')
+          .update({ status: 'finished' })
+          .eq('id', body.gameId);
+        if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ success: true });
+      }
       case 'cleanup_guest_users': {
         const { data: allProfiles } = await supabase
           .from('profiles')

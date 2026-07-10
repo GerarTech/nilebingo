@@ -707,6 +707,11 @@ function HomePage() {
       if (nextIndex >= 75) {
         if (intervalRef.current) clearInterval(intervalRef.current);
         addGameToHistory(gameId, selectedStake || 10, 'loss');
+        fetch('/api/public/game/lobby', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'finish_game', gameCode: gameId }),
+        }).catch(() => {});
         return;
       }
       const num = deterministicSequence[nextIndex];

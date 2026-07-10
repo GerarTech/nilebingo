@@ -2,74 +2,69 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 
-export function useBingoAudio(language: 'en' | 'am') {
-  const [soundEnabled, setSoundEnabled] = useState(true);
-  const queueRef = useRef<number[]>([]);
-  const playingRef = useRef(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const langRef = useRef(language);
-  const soundEnabledRef = useRef(soundEnabled);
-  langRef.current = language;
-  soundEnabledRef.current = soundEnabled;
+let audioUnlocked = false;
 
-  const done = useCallback(() => {
-    playingRef.current = false;
-    if (queueRef.current.length === 0) return;
-    playingRef.current = true;
-    const num = queueRef.current.shift()!;
-    const audio = new Audio(`/audio/${langRef.current}/${num}.mp3`);
+function unlockAudio() {
+  if (audioUnlocked) return;
+  audioUnlocked = true;
+  try {
+    const AC = window.AudioContext || (window as any).webkitAudioContext;
+    const ctx = new AC();
+    ctx.resume().catch(() => {});
+    const osc = ctx.createOscillator();
+    osc.connect(ctx.destination);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.001);
+  } catch {}
+  try { const a = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA='); a.volume = 0; a.play().catch(() => {}); } catch {}
+}
+
+export function useBingoAudio(_language: 'en' | 'am') {
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const enabledRef = useRef(true);
+  enabledRef.current = soundEnabled;
+
+  const play = useCallback((num: number) => {
+    if (!enabledRef.current || !num || num < 1 || num > 75) return;
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+    const path = `/audio/am/${num}.mp3`;
+    console.log('[Audio] play:', path);
+    const audio = new Audio(path);
+    audio.playbackRate = 1.8;
     audioRef.current = audio;
-    let handled = false;
-    const next = () => { if (handled) return; handled = true; done(); };
-    audio.onended = next;
-    audio.onerror = () => { console.warn(`Missing audio: ${num}.mp3`); next(); };
-    audio.play().catch(next);
+    audio.onended = () => { console.log('[Audio] ended:', path); audioRef.current = null; };
+    audio.onerror = () => { console.warn('[Audio] error:', path); audioRef.current = null; };
+    audio.play().then(() => console.log('[Audio] playing:', path)).catch(e => { console.warn('[Audio] rejected:', e.message); audioRef.current = null; });
   }, []);
 
-  const enqueue = useCallback((num: number) => {
-    if (!soundEnabledRef.current || !num || num < 1 || num > 75) return;
-    queueRef.current.push(num);
-    if (!playingRef.current) done();
-  }, [done]);
-
   const playBingo = useCallback(() => {
-    if (!soundEnabledRef.current) return;
-    playingRef.current = true;
-    const audio = new Audio(`/audio/${langRef.current}/Bingo.mp3`);
+    if (!enabledRef.current) return;
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+    const path = '/audio/am/Bingo.mp3';
+    console.log('[Audio] playBingo:', path);
+    const audio = new Audio(path);
+    audio.playbackRate = 1.8;
     audioRef.current = audio;
-    let handled = false;
-    const next = () => { if (handled) return; handled = true; playingRef.current = false; done(); };
-    audio.onended = next;
-    audio.onerror = next;
-    audio.play().catch(next);
-  }, [done]);
+    audio.onended = () => { console.log('[Audio] bingo ended:', path); audioRef.current = null; };
+    audio.onerror = () => { console.warn('[Audio] bingo error:', path); audioRef.current = null; };
+    audio.play().then(() => console.log('[Audio] bingo playing:', path)).catch(e => { console.warn('[Audio] bingo rejected:', e.message); audioRef.current = null; });
+  }, []);
 
   const toggleSound = useCallback(() => {
-    setSoundEnabled(prev => {
-      const next = !prev;
-      soundEnabledRef.current = next;
-      if (!next) {
-        queueRef.current = [];
-        if (audioRef.current) {
-          audioRef.current.pause();
-          audioRef.current = null;
-        }
-        playingRef.current = false;
-      }
-      return next;
-    });
+    unlockAudio();
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+    setSoundEnabled(p => { enabledRef.current = !p; return !p; });
   }, []);
 
   useEffect(() => {
+    const handler = () => { unlockAudio(); document.removeEventListener('click', handler, true); };
+    document.addEventListener('click', handler, true);
     return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
-      queueRef.current = [];
-      playingRef.current = false;
+      document.removeEventListener('click', handler, true);
+      if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
     };
   }, []);
 
-  return { soundEnabled, toggleSound, enqueue, playBingo };
+  return { soundEnabled, toggleSound, enqueue: play, playBingo };
 }
