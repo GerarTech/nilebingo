@@ -114,6 +114,7 @@ function HomePage() {
   const [colorScheme, setColorScheme] = useState<string>('gold');
   const [rulesText, setRulesText] = useState<string>('');
   const [selectedRoomActive, setSelectedRoomActive] = useState(false);
+  const [telegramAvailable, setTelegramAvailable] = useState<boolean | null>(null);
 
   const [rooms, setRooms] = useState<RoomConfig[]>([
     { id: 'bronze', name: 'Bronze Room', entry: 10, players: 10, maxPlayers: 100, commission: 15, winAmount: 85, status: 'starting_soon', countdown: 45 },
@@ -441,23 +442,12 @@ function HomePage() {
       const telegramUser = tg?.initDataUnsafe?.user;
       const telegramId = telegramUser?.id ? String(telegramUser.id) : null;
       if (telegramId) {
+        setTelegramAvailable(true);
         tg?.ready();
         tg?.expand();
         initialize(telegramId, telegramUser?.first_name, telegramUser?.username);
       } else {
-        const guestId = (() => {
-          try {
-            let id = localStorage.getItem('fallback_user_id');
-            if (!id) {
-              id = `guest_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-              localStorage.setItem('fallback_user_id', id);
-            }
-            return id;
-          } catch {
-            return `guest_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-          }
-        })();
-        initialize(guestId);
+        setTelegramAvailable(false);
       }
     }
   }, [initialize]);
@@ -1356,6 +1346,20 @@ function HomePage() {
     const map: Record<string, string> = { emerald: 'rgba(16,185,129,0.3)', ruby: 'rgba(239,68,68,0.3)', sapphire: 'rgba(59,130,246,0.3)', amethyst: 'rgba(168,85,247,0.3)' };
     return map[colorScheme] || 'rgba(254,232,0,0.3)';
   };
+
+  if (telegramAvailable === false) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#0c1322] p-8">
+        <div className="text-center max-w-sm">
+          <div className="text-6xl mb-6">📱</div>
+          <h1 className="text-lg font-black text-white mb-4 leading-relaxed">ቴሌግራም ያስፈልጋል</h1>
+          <p className="text-sm text-gray-300 leading-relaxed mb-6">ለመቀጠል እባክዎ ይህንን መተግበሪያ ከቴሌግራም ሚኒ አፕ (Telegram Mini App) ይክፈቱ።</p>
+          <div className="w-12 h-0.5 bg-[#ff5a00]/50 mx-auto mb-6" />
+          <p className="text-xs text-gray-500">This app should only be opened from Telegram Mini App.</p>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="text-center">{appLogoPng ? <img src={appLogoPng} alt="Logo" className="h-12 w-12 object-contain mx-auto mb-4" /> : <div className="text-4xl font-black mb-4 animate-pulse" style={{ color: getThemeColor() }}>{appLogo}</div>}<div className="text-4xl font-black mb-4 animate-pulse" style={{ color: getThemeColor() }}>{appName}</div><div className="text-gray-400 text-sm">{t('loading')}</div></div></div>;
 
