@@ -9,7 +9,7 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { code: providedCode, userId, stakeAmount, prizePool, outcome, drawnNumbers, roomName } = body;
+    const { code: providedCode, userId, stakeAmount, prizePool, outcome, drawnNumbers, roomName, prize } = body;
 
     if (!userId) {
       return NextResponse.json({ error: 'userId is required' }, { status: 400 });
@@ -123,10 +123,10 @@ export async function POST(request: NextRequest) {
 
     if (game) {
       try {
-        // For wins, use the game's prize_pool (already computed via update_game_prize_pool RPC)
+        // For wins, use the provided prize (individual win amount) if available, otherwise fall back to game's prize_pool
         // For losses, use the negative of the user's own stake
         const winAmount = isWin
-          ? Number(game.prize_pool ?? totalStake * (1 - 15 / 100))
+          ? Number(prize ?? game.prize_pool ?? totalStake * (1 - 15 / 100))
           : -totalStake;
         const effectiveStake = isWin ? totalStake : totalStake;
 

@@ -55,10 +55,10 @@ export default function HistoryTab({ stakeHistory, t }: HistoryTabProps) {
               </div>
                 <div className="text-right">
                 <div className="text-[10px] text-gray-400">
-                  Stake: <span className="text-white font-semibold">{Number(item.stake || 0).toLocaleString()} {t('birr')}</span>
+                  Stake: <span className="text-white font-semibold">{Number(item.stake || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })} {t('birr')}</span>
                 </div>
                 <div className={`text-xs font-black ${isWin ? 'text-[#10b981]' : 'text-red-400'}`}>
-                  {isWin ? '+' : '-'}{Math.abs(Number(item.prize ?? item.stake ?? 0)).toLocaleString()} {t('birr')}
+                  {isWin ? '+' : '-'}{Math.abs(Number(item.prize ?? item.stake ?? 0)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })} {t('birr')}
                 </div>
                 <span className={`inline-block text-[8.5px] px-2 py-0.5 mt-0.5 rounded-full font-bold uppercase ${isWin ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/15 text-red-400 border border-red-500/20'}`}>
                   {isWin ? 'Win' : 'Loss'}

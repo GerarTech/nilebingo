@@ -81,9 +81,9 @@ export default function HomeView({
               {room.name && (
                 <span className="text-[9px] font-black uppercase tracking-widest text-gray-300 block mb-1">{room.name}</span>
               )}
-              {room.status === 'playing' ? (
-                <span className="absolute -top-1.5 -right-1.5 text-white text-[7px] font-black px-1.5 py-0.5 rounded-full shadow-md select-none uppercase tracking-tighter bg-[#ff5a00] shadow-[#ff5a00]/40 animate-pulse">
-                  {room.countdown}S
+              {room.status === 'playing' && room.countdown > 0 ? (
+                <span className="absolute -top-1.5 -right-1.5 text-white text-[7px] font-black px-1.5 py-0.5 rounded-full shadow-md select-none uppercase tracking-tighter bg-red-500 shadow-red-500/40 animate-pulse">
+                  PLAYING
                 </span>
               ) : (
                 <span className="absolute -top-1.5 -right-1.5 text-navy text-[7.5px] font-black px-1.5 py-0.5 rounded-full shadow-md select-none uppercase tracking-tighter" style={{ backgroundColor: themeColor, boxShadow: `0 2px 8px ${themeColor}55` }}>

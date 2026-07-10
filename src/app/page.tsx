@@ -165,6 +165,8 @@ function HomePage() {
   const gameStatusChannelRef = useRef<any>(null);
   const opponentWinnerRef = useRef<string | null>(null);
   const activeGameCodesRef = useRef<Set<string>>(new Set());
+  const gameEndTimersRef = useRef<Record<string, number>>({});
+  const prevIsPlayingRef = useRef<Record<string, boolean>>({});
 
   // ============ DETERMINISTIC DRAW SEQUENCE ============
   const FIXED_SEED = 12345;
@@ -278,15 +280,16 @@ function HomePage() {
       fetch('/api/public/games/record', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          code: gId,
-          userId: profile.id,
-          stakeAmount: stakePerCard,
-          cardCount,
-          outcome,
-          drawnNumbers: drawnRef.current || [],
-          roomName: selectedRoom?.name || 'Quick Lobby',
-        })
+          body: JSON.stringify({
+            code: gId,
+            userId: profile.id,
+            stakeAmount: stakePerCard,
+            cardCount,
+            outcome,
+            drawnNumbers: drawnRef.current || [],
+            roomName: selectedRoom?.name || 'Quick Lobby',
+            prize: outcome === 'win' ? actualPrize : undefined,
+          })
       }).catch(() => {});
     }
   }, [isWatching, profile?.id, selectedRoom, selectedStake, commissionRate]);
@@ -349,7 +352,7 @@ function HomePage() {
               gameId: h.gameCode,
               stake: h.stake,
               result: h.result,
-              prize: h.result === 'win' ? h.winAmount - h.stake : h.winAmount,
+              prize: h.winAmount,
               timestamp: h.createdAt,
             }));
             const merged = [...serverEntries];
@@ -611,11 +614,31 @@ function HomePage() {
       const activeCodes = activeGameCodesRef.current;
       const isSrPlaying = sr ? hasAnyActiveGameForRoom(sr.id, activeCodes) : false;
       if (sr) setSelectedRoomActive(isSrPlaying);
+      const now = Date.now();
+      const timers = gameEndTimersRef.current;
+      const prev = prevIsPlayingRef.current;
       setRooms(prevRooms => prevRooms.map(r => {
         const period = getRoomPeriod(r.id);
-        const remaining = getRoomCountdown(period);
         const isPlaying = hasAnyActiveGameForRoom(r.id, activeCodes);
-        if (!isPlaying && !isSrPlaying && remaining <= 1 && sr && sr.id === r.id && !ig) {
+
+        // Detect active→inactive transition: start 45s card selection timer
+        if (prev[r.id] === true && !isPlaying) {
+          timers[r.id] = now + 45000;
+        }
+        prev[r.id] = isPlaying;
+
+        // Compute countdown: use forced timer if active, else cycle-based
+        let remaining: number;
+        const timerEnd = timers[r.id];
+        if (timerEnd && timerEnd > now) {
+          remaining = Math.max(1, Math.ceil((timerEnd - now) / 1000));
+        } else {
+          if (timerEnd) delete timers[r.id];
+          remaining = getRoomCountdown(period);
+        }
+
+        const hasTimer = timerEnd && timerEnd > now;
+        if (!isPlaying && !hasTimer && remaining <= 1 && sr && sr.id === r.id && !ig) {
           if (ir) sg(false);
           else if (isr) sg(true);
         }
