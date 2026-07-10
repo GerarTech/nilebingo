@@ -31,7 +31,7 @@ export function useBingoAudio(_language: 'en' | 'am') {
     const path = `/audio/am/${num}.mp3`;
     console.log('[Audio] play:', path);
     const audio = new Audio(path);
-    audio.playbackRate = 1.8;
+    audio.playbackRate = 1.0;
     audioRef.current = audio;
     audio.onended = () => { console.log('[Audio] ended:', path); audioRef.current = null; };
     audio.onerror = () => { console.warn('[Audio] error:', path); audioRef.current = null; };
@@ -44,7 +44,7 @@ export function useBingoAudio(_language: 'en' | 'am') {
     const path = '/audio/am/Bingo.mp3';
     console.log('[Audio] playBingo:', path);
     const audio = new Audio(path);
-    audio.playbackRate = 1.8;
+    audio.playbackRate = 1.0;
     audioRef.current = audio;
     audio.onended = () => { console.log('[Audio] bingo ended:', path); audioRef.current = null; };
     audio.onerror = () => { console.warn('[Audio] bingo error:', path); audioRef.current = null; };

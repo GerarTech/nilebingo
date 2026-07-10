@@ -762,7 +762,7 @@ function HomePage() {
           return updated;
         });
       }
-    }, 2000);
+    }, 2100);
     return () => { if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; } };
   }, [inGame, opponentWinner, showWinModal, language, isWatching, gameId, selectedStake, addGameToHistory, playerCards, autoMark, autoWin, deterministicSequence, appointedCard]);
 
