@@ -437,8 +437,10 @@ function HomePage() {
   // ============ INIT & VOICE ============
   useEffect(() => { if (typeof window !== 'undefined' && window.speechSynthesis) window.speechSynthesis.getVoices(); }, []);
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window === 'undefined') return;
+    const tryTelegram = () => {
       const tg = (window as any).Telegram?.WebApp;
+      if (!tg) return false;
       const telegramUser = tg?.initDataUnsafe?.user;
       const telegramId = telegramUser?.id ? String(telegramUser.id) : null;
       if (telegramId) {
@@ -446,9 +448,20 @@ function HomePage() {
         tg?.ready();
         tg?.expand();
         initialize(telegramId, telegramUser?.first_name, telegramUser?.username);
-      } else {
-        setTelegramAvailable(false);
+        return true;
       }
+      return false;
+    };
+    if (!tryTelegram()) {
+      // Script loads asynchronously — poll for up to 5s
+      let attempts = 0;
+      const iv = setInterval(() => {
+        attempts++;
+        if (tryTelegram() || attempts >= 10) {
+          clearInterval(iv);
+          if (!(window as any).Telegram?.WebApp) setTelegramAvailable(false);
+        }
+      }, 500);
     }
   }, [initialize]);
 
