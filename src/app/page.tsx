@@ -592,10 +592,27 @@ function HomePage() {
     opponentWinnerRef.current = opponentWinner;
   }, [startGameplay, isRegistered, isSpectatingReady, inGame, selectedCards, selectedRoom, commissionRate, gameId, opponentWinner]);
 
-  // ============ ACTIVE GAME POLLING ============
+  // ============ CONNECTION STATUS ============
+  const [isOnline, setIsOnline] = useState(true);
+  useEffect(() => {
+    const goOnline = () => setIsOnline(true);
+    const goOffline = () => setIsOnline(false);
+    window.addEventListener('online', goOnline);
+    window.addEventListener('offline', goOffline);
+    setIsOnline(navigator.onLine);
+    return () => { window.removeEventListener('online', goOnline); window.removeEventListener('offline', goOffline); };
+  }, []);
+
+  // ============ ACTIVE GAME POLLING & STALE CLEANUP ============
   useEffect(() => {
     const fetchActive = async () => {
       try {
+        // Auto-finish games stuck active for over 10 minutes (connection drop, etc.)
+        await supabase
+          .from('games')
+          .update({ status: 'finished' })
+          .eq('status', 'active')
+          .lt('created_at', new Date(Date.now() - 10 * 60 * 1000).toISOString());
         const { data } = await supabase.from('games').select('code').eq('status', 'active');
         if (data) activeGameCodesRef.current = new Set(data.map(g => g.code));
       } catch {}
@@ -1414,6 +1431,11 @@ function HomePage() {
         .bg-gold { background-color: var(--theme-gold) !important; }
         .border-gold { border-color: var(--theme-gold) !important; }
       ` }} />
+      {!isOnline && (
+        <div className="fixed top-0 left-0 right-0 z-[9999] bg-red-600/90 backdrop-blur text-white text-[10px] font-bold text-center py-1.5 px-3">
+          No internet connection — game actions may not work
+        </div>
+      )}
       {renderContent()}
       <TabBar activeTab={activeTab} onTabChange={handleTabChange} inGame={inGame} themeColor={getThemeColor()} />
 
