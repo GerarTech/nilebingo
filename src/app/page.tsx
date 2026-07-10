@@ -601,7 +601,7 @@ function HomePage() {
       } catch {}
     };
     fetchActive();
-    const interval = setInterval(fetchActive, 3000);
+    const interval = setInterval(fetchActive, 500);
     return () => clearInterval(interval);
   }, []);
 
@@ -706,6 +706,7 @@ function HomePage() {
       const nextIndex = currentDrawn.length;
       if (nextIndex >= 75) {
         if (intervalRef.current) clearInterval(intervalRef.current);
+        activeGameCodesRef.current.delete(gameId);
         addGameToHistory(gameId, selectedStake || 10, 'loss');
         fetch('/api/public/game/lobby', {
           method: 'POST',
@@ -926,6 +927,7 @@ function HomePage() {
     winInProgressRef.current = true;
     try {
       if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+      activeGameCodesRef.current.delete(gameId);
       setWinningCards(cards);
       // For appointed wins, mark all drawn numbers as winning cells (pattern may not exist yet)
       setWinningCells(isAppointed && cards[0] ? cards[0].map(row => row.map(n => n === 0 || drawn.includes(n))) : getWinningCells(cards[0] || [], drawn));
