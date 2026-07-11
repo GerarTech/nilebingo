@@ -665,8 +665,8 @@ function HomePage() {
         const roomComm = r.commission ?? cr;
         return { ...r, status: isPlaying ? 'playing' : 'starting_soon', countdown: remaining, winAmount: (r.entry * r.players) * (1 - roomComm / 100) };
       }));
-      // Update game ID every tick — but skip when selected room has an active game
-      if (sr && !ig && !ir && !isSrPlaying) {
+      // Update game ID every tick — only when user hasn't registered and room has no active game
+      if (sr && !ig && !ir && !isr && !isSrPlaying) {
         void (async () => {
           const serverGameId = await getCurrentLobbyGameId(sr.id);
           if (serverGameId) {
