@@ -497,7 +497,7 @@ function HomePage() {
     const isSelected = selectedCards.includes(num);
 
     if (!isSelected && selectedCards.length >= 2) {
-      showToast(t ? t('max_5_cards') : 'Maximum of 2 cards allowed', 'error');
+      showToast(t ? t('max_2_cards') : 'Maximum of 2 cards allowed', 'error');
       return;
     }
 
