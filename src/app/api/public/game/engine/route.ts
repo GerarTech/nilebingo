@@ -395,6 +395,7 @@ export async function POST(request: NextRequest) {
               winners: existingWinners,
             }, { status: 400 });
           }
+          // Game is finished but no win tx — fall through to try crediting
         }
 
         // Finalize: split prize equally among all recorded winners and finish game
@@ -402,6 +403,10 @@ export async function POST(request: NextRequest) {
         const winnerCount = Math.max(realWinners.length, 1);
         const baseShare = Math.floor(winAmount / winnerCount);
         const remainder = winAmount - (baseShare * winnerCount);
+
+        // Track credit results — only finalize the game if ALL credits succeed
+        let allCreditsSucceeded = true;
+        const creditedWinners: any[] = [];
 
         for (let i = 0; i < realWinners.length; i++) {
           const w = realWinners[i];
@@ -411,15 +416,22 @@ export async function POST(request: NextRequest) {
           const bal = await supabase.rpc('adjust_main_balance', { p_user_id: uid, p_amount: sharePerWinner });
           if (bal.error) {
             console.error(`adjust_main_balance error for ${uid}:`, bal.error);
-            continue;
+            allCreditsSucceeded = false;
+            break;
           }
-          await supabase.from('transactions').insert({
+          // Record transaction
+          const txResult = await supabase.from('transactions').insert({
             user_id: uid,
             type: 'win',
             amount: sharePerWinner,
             status: 'completed',
             reference: `WIN-${gameId}`,
           });
+          if (txResult.error) {
+            console.error(`Transaction insert error for ${uid}:`, txResult.error);
+            allCreditsSucceeded = false;
+            break;
+          }
           const { data: existingHistory } = await supabase.from('game_history').select('id').eq('game_id', gameByCode.id).eq('user_id', uid).maybeSingle();
           const historyPayload = { game_id: gameByCode.id, user_id: uid, stake: totalBet, win_amount: sharePerWinner, numbers_matched: drawnNumbers.filter((n: number) => n > 0).length };
           if (existingHistory) {
@@ -428,6 +440,8 @@ export async function POST(request: NextRequest) {
             await supabase.from('game_history').insert(historyPayload);
           }
           await supabase.from('game_players').update({ auto_mark: true }).eq('game_id', gameByCode.id).eq('user_id', uid);
+
+          creditedWinners.push({ ...w, share: sharePerWinner });
 
           // TG notification for this winner
           if (botToken && uid === userId) {
@@ -453,7 +467,17 @@ export async function POST(request: NextRequest) {
           } catch {}
         }
 
-        // Finalize game
+        if (!allCreditsSucceeded) {
+          // Credit failed — return error so client retries. Game stays 'active'.
+          console.error(`Finalize credit failed for game ${gameId} — game will remain active for retry`);
+          return NextResponse.json({
+            success: false,
+            win: false,
+            error: 'Prize credit failed — please retry',
+          }, { status: 500 });
+        }
+
+        // All credits succeeded — finalize the game
         const finalWinnerId = realWinners.length === 1 ? realWinners[0].user_id : null;
         const updateData: any = { status: 'finished', winners: existingWinners };
         if (finalWinnerId) updateData.winner_id = finalWinnerId;
@@ -750,6 +774,109 @@ export async function POST(request: NextRequest) {
         gameId: game.id,
         code,
         prizePool,
+      });
+    }
+
+    // ============ RECOVER WIN — credit prize for a game that finished without crediting ============
+    if (action === 'recover_win') {
+      const { gameId: gameCode } = body;
+      if (!gameCode || !userId) {
+        return NextResponse.json({ error: 'gameId and userId are required' }, { status: 400 });
+      }
+
+      const { data: game } = await supabase
+        .from('games')
+        .select('id, code, status, prize_pool, stake_id, winners, winner_id, commission')
+        .eq('code', gameCode)
+        .maybeSingle();
+
+      if (!game) {
+        return NextResponse.json({ error: 'Game not found' }, { status: 404 });
+      }
+
+      // Check if a win transaction already exists
+      const { data: existingTx } = await supabase
+        .from('transactions')
+        .select('id')
+        .eq('type', 'win')
+        .like('reference', `WIN-${gameCode}`)
+        .limit(1);
+
+      if (existingTx && existingTx.length > 0) {
+        return NextResponse.json({ success: true, message: 'Prize already credited' });
+      }
+
+      const winners: any[] = game.winners || [];
+      if (winners.length === 0) {
+        return NextResponse.json({ error: 'No winners recorded for this game' }, { status: 400 });
+      }
+
+      // Calculate prize pool
+      let effectiveCommission = Number(game.commission) || 15;
+      try {
+        const { data: hhCfg } = await supabase.from('bot_config').select('commands').eq('id', 'main').single();
+        const hhConfig = hhCfg?.commands?.happy_hour as HappyHourConfig | undefined;
+        if (hhConfig?.enabled) {
+          const { data: stake } = await supabase.from('stakes').select('amount').eq('id', game.stake_id).maybeSingle();
+          const perCardStake = Number(stake?.amount) || 10;
+          const rooms = Array.isArray(hhCfg?.commands?.rooms) ? hhCfg.commands.rooms : [];
+          const matchingRoom = rooms.find((r: any) => Number(r.entry) === perCardStake);
+          const roomId = matchingRoom?.name?.toLowerCase() || 'all';
+          effectiveCommission = getEffectiveCommission(effectiveCommission, hhConfig, roomId);
+        }
+      } catch {}
+
+      try {
+        await supabase.rpc('update_game_prize_pool', { p_game_code: gameCode, p_stake_amt: 0, p_commission: effectiveCommission });
+      } catch {}
+      const { data: freshGame } = await supabase.from('games').select('prize_pool').eq('id', game.id).maybeSingle();
+      const winAmount = Number(freshGame?.prize_pool) || 0;
+
+      if (winAmount <= 0) {
+        return NextResponse.json({ error: 'Prize pool is zero' }, { status: 400 });
+      }
+
+      const realWinners = winners.filter((w: any) => w.user_id);
+      const winnerCount = Math.max(realWinners.length, 1);
+      const baseShare = Math.floor(winAmount / winnerCount);
+      const remainder = winAmount - (baseShare * winnerCount);
+
+      let credited = 0;
+      for (let i = 0; i < realWinners.length; i++) {
+        const w = realWinners[i];
+        const share = i === 0 ? baseShare + remainder : baseShare;
+        const bal = await supabase.rpc('adjust_main_balance', { p_user_id: w.user_id, p_amount: share });
+        if (bal.error) {
+          console.error(`recover_win: adjust_main_balance error for ${w.user_id}:`, bal.error);
+          continue;
+        }
+        await supabase.from('transactions').insert({
+          user_id: w.user_id,
+          type: 'win',
+          amount: share,
+          status: 'completed',
+          reference: `WIN-${gameCode}`,
+        });
+        credited++;
+      }
+
+      if (credited === 0) {
+        return NextResponse.json({ error: 'Failed to credit any winners' }, { status: 500 });
+      }
+
+      // Ensure game is properly finished
+      if (game.status !== 'finished') {
+        const finalWinnerId = realWinners.length === 1 ? realWinners[0].user_id : null;
+        const updateData: any = { status: 'finished', winners };
+        if (finalWinnerId) updateData.winner_id = finalWinnerId;
+        await supabase.from('games').update(updateData).eq('id', game.id);
+      }
+
+      return NextResponse.json({
+        success: true,
+        credited,
+        winAmount,
+        message: `Credited ${credited} winner(s) with ${winAmount.toLocaleString()} ETB total`,
       });
     }
 
