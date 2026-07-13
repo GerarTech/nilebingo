@@ -349,10 +349,17 @@ export async function POST(request: NextRequest) {
         }
       } catch {}
 
-      try {
-        await supabase.rpc('update_game_prize_pool', { p_game_code: gameByCode.code, p_stake_amt: perCardStake, p_commission: effectiveCommission ?? 15 });
-      } catch {
-        try { await supabase.rpc('update_game_prize_pool', { p_game_code: gameByCode.code, p_stake_amt: perCardStake }); } catch {}
+      // Only recalculate the prize pool on the initial validate_win call.
+      // During finalize, card reservations may have already been deleted (by leave_game),
+      // which would cause the RPC to undercount cards and overwrite the correct prize pool
+      // with a value based on only 1 card (from the game_players fallback).
+      // The prize pool was already set correctly during register_game or the initial validate_win.
+      if (!finalizeRequested) {
+        try {
+          await supabase.rpc('update_game_prize_pool', { p_game_code: gameByCode.code, p_stake_amt: perCardStake, p_commission: effectiveCommission ?? 15 });
+        } catch {
+          try { await supabase.rpc('update_game_prize_pool', { p_game_code: gameByCode.code, p_stake_amt: perCardStake }); } catch {}
+        }
       }
       const { data: freshGame } = await supabase.from('games').select('prize_pool').eq('id', gameByCode.id).maybeSingle();
       const winAmount = Number(freshGame?.prize_pool) || (totalBet * (1 - (effectiveCommission ?? 15) / 100));
@@ -828,11 +835,10 @@ export async function POST(request: NextRequest) {
         }
       } catch {}
 
-      try {
-        await supabase.rpc('update_game_prize_pool', { p_game_code: gameCode, p_stake_amt: 0, p_commission: effectiveCommission });
-      } catch {}
-      const { data: freshGame } = await supabase.from('games').select('prize_pool').eq('id', game.id).maybeSingle();
-      const winAmount = Number(freshGame?.prize_pool) || 0;
+      // Use the prize pool already stored on the game record.
+      // Do NOT call update_game_prize_pool here — reservations may have been deleted
+      // (which would zero out the card count and overwrite the correct prize pool).
+      const winAmount = Number(game.prize_pool) || 0;
 
       if (winAmount <= 0) {
         return NextResponse.json({ error: 'Prize pool is zero' }, { status: 400 });

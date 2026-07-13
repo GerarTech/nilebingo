@@ -404,11 +404,29 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'gameId and userId are required' }, { status: 400 });
       }
 
-      await supabase
-        .from('game_card_reservations')
-        .delete()
-        .eq('game_code', gameId)
-        .eq('user_id', userId);
+      // Check if this user is recorded as a winner — if so, DON'T delete their card
+      // reservations yet. The finalize step (validate_win with finalize=true) needs
+      // the reservations to calculate the correct prize pool for multi-card games.
+      // The finalize step will delete all reservations for the game code when done.
+      let isWinner = false;
+      try {
+        const { data: game } = await supabase
+          .from('games')
+          .select('winners')
+          .eq('code', gameId)
+          .maybeSingle();
+        if (game?.winners) {
+          isWinner = (game.winners as any[]).some((w: any) => w.user_id === userId);
+        }
+      } catch {}
+
+      if (!isWinner) {
+        await supabase
+          .from('game_card_reservations')
+          .delete()
+          .eq('game_code', gameId)
+          .eq('user_id', userId);
+      }
 
       return NextResponse.json({ success: true });
     }
@@ -578,20 +596,20 @@ export async function POST(request: NextRequest) {
         cardsToStore.push(getSeededCard(fallbackNum));
       }
 
-      // Upsert the game player with all selected cards
-      // Store first card as primary, all cards available in the player's selectedCards
-      for (let i = 0; i < Math.min(cardsToStore.length, 5); i++) {
-        await supabase
-          .from('game_players')
-          .upsert({
-            game_id: dbGameId,
-            user_id: userId,
-            card: cardsToStore[i],
-            card_number: selectedCards ? selectedCards[i] || 0 : 0,
-            is_watching: isSpectator || false,
-            auto_mark: autoMark || false,
-          }, { onConflict: 'game_id,user_id' });
-      }
+      // Upsert a single game_players row for this user.
+      // The card column stores one card; the game_card_reservations table tracks the
+      // full count of cards the user purchased (used for prize pool calculation).
+      // Store the first selected card as the player's primary card.
+      await supabase
+        .from('game_players')
+        .upsert({
+          game_id: dbGameId,
+          user_id: userId,
+          card: cardsToStore[0],
+          card_number: selectedCards ? selectedCards[0] || 0 : 0,
+          is_watching: isSpectator || false,
+          auto_mark: autoMark || false,
+        }, { onConflict: 'game_id,user_id' });
 
       // Ensure card reservations exist for this user's selected cards.
       // Cards were already reserved via toggle_card; this is a safety check.
