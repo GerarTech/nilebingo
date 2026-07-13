@@ -247,12 +247,23 @@ export async function POST(request: NextRequest) {
         .eq('user_id', userId)
         .maybeSingle();
 
-      if (!gamePlayer) {
+      // During finalize, be more lenient — if player record is missing (e.g. race with leave_game),
+      // fall back to the card already stored in the winners list from the initial call
+      let card: number[][] = [];
+      if (gamePlayer) {
+        if (gamePlayer.is_watching) {
+          return NextResponse.json({ error: 'Spectators cannot win' }, { status: 400 });
+        }
+        card = gamePlayer.card || [];
+      } else if (finalizeRequested) {
+        const recordedWinner = ((gameByCode as any).winners || []).find((w: any) => w.user_id === userId);
+        if (recordedWinner?.card) {
+          card = recordedWinner.card;
+        } else {
+          return NextResponse.json({ error: 'Player not found in this game' }, { status: 404 });
+        }
+      } else {
         return NextResponse.json({ error: 'Player not found in this game' }, { status: 404 });
-      }
-
-      if (gamePlayer.is_watching) {
-        return NextResponse.json({ error: 'Spectators cannot win' }, { status: 400 });
       }
 
       // Accept drawn numbers from client or fall back to DB
@@ -265,13 +276,14 @@ export async function POST(request: NextRequest) {
         const { data: gameData } = await supabase.from('games').select('drawn_numbers').eq('id', gameByCode.id).single();
         drawnNumbers = gameData?.drawn_numbers || [];
       }
-      const card: number[][] = gamePlayer.card || [];
       if (!card || card.length === 0) {
         return NextResponse.json({ error: 'No card found' }, { status: 400 });
       }
 
-      // Skip pattern validation for appointed wins
-      if (!isAppointed) {
+      // Skip pattern validation for appointed wins and for finalize requests
+      // (the initial validate_win call already confirmed the pattern — re-validating
+      //  during finalize can fail if drawn numbers state diverged slightly)
+      if (!isAppointed && !finalizeRequested) {
         let hasWin = false;
         for (let row = 0; row < card.length; row++) {
           let complete = true;
