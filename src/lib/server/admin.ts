@@ -716,7 +716,17 @@ export async function getGameDetail(gameId: string) {
     .select('*, profiles(username, first_name)')
     .eq('game_id', gameId);
 
-  return { ...game, players: players || [] };
+  const { data: cardReservations } = await supabase
+    .from('game_card_reservations')
+    .select('id')
+    .eq('game_code', game.code)
+    .gt('card_number', 0);
+
+  const totalCards = cardReservations?.length || 0;
+  const stakePerCard = Number(game.stakes?.amount) || 0;
+  const totalBet = stakePerCard * totalCards;
+
+  return { ...game, players: players || [], totalCards, totalBet };
 }
 
 // Get stakes configuration

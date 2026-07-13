@@ -169,22 +169,24 @@ export default function GameView({
           </div>
         </div>
 
-        {/* Bingo Cards - Compact for dual card view */}
-        <div className="space-y-2 mb-3">
-          {(playerCards.length > 0 ? playerCards : (gameCard.length > 0 ? [gameCard] : [])).map((card, cardIndex) => {
+        {/* Bingo Cards - Side by side layout */}
+        <div className={`mb-3 ${(playerCards.length > 1 || (playerCards.length === 0 && gameCard.length > 1)) ? 'flex gap-2' : ''}`}>
+          {(playerCards.length > 0 ? playerCards : (gameCard.length > 0 ? [gameCard] : [])).map((card, cardIndex, arr) => {
             const drawnNumsToShow = markedNumbers;
             const cardWinningCells = getWinningCells(card, drawnNumsToShow);
+            const isMulti = arr.length > 1;
             return (
-              <div key={cardIndex} className="relative bg-gradient-to-b from-[#0b1624] to-[#050e18] border border-gold-subtle p-2 rounded-xl shadow-xl shadow-black/40 gold-border-hover transition-all">
-                <div className="absolute top-1.5 right-2 text-[8px] font-mono text-gold/80 tracking-widest font-black uppercase">
+              <div key={cardIndex} className={`relative bg-gradient-to-b from-[#0b1624] to-[#050e18] border border-gold-subtle p-2 rounded-xl shadow-xl shadow-black/40 gold-border-hover transition-all ${isMulti ? 'flex-1 min-w-0' : ''}`}>
+                <div className="absolute top-1.5 right-2 text-[8px] font-mono text-gold/80 tracking-widest font-black uppercase z-10">
                   CARD #{selectedCards[cardIndex] || cardIndex + 1}
                 </div>
-                <div className="pt-3">
+                <div className={`${isMulti ? 'pt-3' : 'pt-3'}`}>
                   <BingoGrid
                     card={card}
                     drawnNumbers={drawnNumsToShow}
                     winningCells={cardWinningCells}
                     compact={true}
+                    mini={isMulti}
                     interactive={!autoMark}
                     onCellClick={(row, col) => {
                       if (autoMark) return;
@@ -240,6 +242,7 @@ export default function GameView({
         message={winMessage}
         playerName={profile?.first_name || profile?.username || 'You'}
         countdown={resultCountdown}
+        drawnNumbers={drawnNumbers}
         onSkip={onSkipResult}
         t={t}
       />

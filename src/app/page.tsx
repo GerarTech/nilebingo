@@ -1213,7 +1213,10 @@ function HomePage() {
     // Never record a loss if the user has a pending win - the finalize call will handle it
     const shouldRecordLoss = inGame && !isWatching && gameId && !showWinModal && !opponentWinner && !isPendingWin;
     // Determine if the game is already in a terminal state (opponent won, or we won) — need to call finish_game
-    const gameEnded = (opponentWinner || showWinModal) && gameId;
+    // When isPendingWin is true, the finalize timer will call finish_game after crediting the prize — don't race it
+    const gameEnded = (opponentWinner || showWinModal) && gameId && !isPendingWin;
+    // Capture room ID before clearing so we can start the 50s post-game timer
+    const endedRoomId = selectedRoomRef.current?.id;
     // Reset all state synchronously BEFORE any async operations
     // to prevent re-renders with inGame=true and opponentWinner=null from
     // re-creating the draw interval or keeping the live poll active
@@ -1223,6 +1226,10 @@ function HomePage() {
     setShowWinModal(false); setWinningCards([]); setWinningCells([]); setAllWinners([]);
     setIsPendingWin(false); setWinMessage(''); setFinalWinAmount(0); setTotalWinAmount(0); setWinnerCount(1);
     setOtherPlayers([]); setOpponentWinner(null); setSelectedRoom(null);
+    // Start 50s post-game timer for the room we just left (reliable — polling transition detection can miss it)
+    if (endedRoomId) {
+      gameEndTimersRef.current[endedRoomId] = Date.now() + 50000;
+    }
     if (shouldRecordLoss) addGameToHistory(gameId, selectedStake || 10, 'loss');
     const uid = profile?.id;
     // When the game is over (opponent won or we just won), tell server to finish it so status doesn't stay 'active'

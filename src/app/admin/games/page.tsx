@@ -116,6 +116,7 @@ export default function GamesPage() {
               <div className="space-y-2 text-xs">
                 <div><span className="text-gray-500">Status:</span> <span className="text-white capitalize">{(statusLabel[selectedGame.status] || { text: selectedGame.status }).text}</span></div>
                 <div><span className="text-gray-500">Stake:</span> <span className="text-white">{selectedGame.stakes?.amount || 'N/A'} ETB</span></div>
+                <div><span className="text-gray-500">Total Bet:</span> <span className="text-white font-bold">{Number(selectedGame.totalBet || 0).toLocaleString()} ETB</span> <span className="text-gray-500">({selectedGame.totalCards || 0} cards)</span></div>
                 <div><span className="text-gray-500">Prize Pool:</span> <span className="text-gold font-bold">{Number(selectedGame.prize_pool || 0).toLocaleString()} ETB</span></div>
                 <div><span className="text-gray-500">Called:</span> <span className="text-white">{selectedGame.drawn_numbers?.length || 0}/75</span></div>
                 <div><span className="text-gray-500">Winner:</span> <span className="text-white">{selectedGame.profiles?.username || selectedGame.profiles?.first_name || 'None yet'}</span></div>

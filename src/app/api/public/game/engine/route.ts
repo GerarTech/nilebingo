@@ -35,6 +35,7 @@ async function sendGameStats(botToken: string, gameId: string) {
     const drawnCount = (game.drawn_numbers || []).length;
 
     let commission = 0;
+    let totalBet = 0;
     // Calculate commission earned from prize pool and rate
     // commission = prize * rate / (100 - rate)  i.e., prize_pool = stake * cards * (1 - rate/100)
     const rate = Number(game.commission ?? 15);
@@ -48,10 +49,20 @@ async function sendGameStats(botToken: string, gameId: string) {
         commission = Math.max(0, (Number(stake.amount) * totalCards) - prize);
       }
     }
+    // Calculate exact total amount betted (stake per card × total cards)
+    if (game.stake_id) {
+      const { data: st } = await supabase.from('stakes').select('amount').eq('id', game.stake_id).maybeSingle();
+      if (st) {
+        const { data: cd } = await supabase.from('game_card_reservations').select('id').eq('game_code', game.code).gt('card_number', 0);
+        totalBet = Number(st.amount) * Math.max(cd?.length || 0, 1);
+      }
+    }
+    if (totalBet <= 0) totalBet = prize + commission;
 
     let statsMsg = `*🏁 GAME FINISHED*\n\n`;
     statsMsg += `🆔 Game ID: \`${game.code}\`\n`;
     statsMsg += `👥 Players: ${playerCount}\n`;
+    statsMsg += `💸 Total Bet: ${totalBet.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ETB\n`;
     statsMsg += `💰 Prize Pool: ${prize.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ETB\n`;
     statsMsg += `💵 Commission: ${commission.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ETB\n`;
     statsMsg += `🎱 Numbers Drawn: ${drawnCount}/75\n`;
@@ -208,8 +219,9 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // If game already finished, return winner info
-      if (gameByCode.status === 'finished') {
+      // If game already finished and NOT a finalize request, return winner info
+      // If finalize IS requested, allow it to proceed so prize can still be credited
+      if (gameByCode.status === 'finished' && !finalizeRequested) {
         const gameWinners: any[] = (gameByCode as any).winners || [];
         const firstWinner = gameWinners[0];
         const winnerId = gameByCode.winner_id || firstWinner?.user_id;
@@ -352,6 +364,27 @@ export async function POST(request: NextRequest) {
       const shouldFinalize = finalizeRequested || (existingWinners.length > 0 && collectionExpired);
 
       if (shouldFinalize) {
+        // If game is already finished, check if prize was already credited to avoid double-paying
+        if (gameByCode.status === 'finished') {
+          const { data: existingTx } = await supabase
+            .from('transactions')
+            .select('id')
+            .eq('type', 'win')
+            .like('reference', `WIN-${gameId}`)
+            .limit(1);
+          if (existingTx && existingTx.length > 0) {
+            // Prize already credited — just return the existing winner info
+            return NextResponse.json({
+              success: true,
+              win: false,
+              error: 'Game already finished',
+              winner_id: gameByCode.winner_id || existingWinners[0]?.user_id,
+              winner_name: existingWinners[0]?.name || null,
+              winners: existingWinners,
+            }, { status: 400 });
+          }
+        }
+
         // Finalize: split prize equally among all recorded winners and finish game
         const realWinners = existingWinners.filter((w: any) => w.user_id);
         const winnerCount = Math.max(realWinners.length, 1);
