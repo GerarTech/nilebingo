@@ -986,22 +986,48 @@ function HomePage() {
       setShowWinModal(true);
 
       if (profile?.id) {
-        try {
-          const res = await fetch('/api/public/game/engine', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'validate_win', gameId, userId: profile.id, drawnNumbers: drawn, isAppointed: !!isAppointed }),
-          });
-          const data = await res.json();
-          if (data.success) {
-            if (data.pending) {
+        const MAX_INIT_RETRIES = 2;
+        const INIT_RETRY_DELAY = 1500;
+        let initData: any = null;
+        for (let attempt = 0; attempt <= MAX_INIT_RETRIES; attempt++) {
+          try {
+            const res = await fetch('/api/public/game/engine', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'validate_win', gameId, userId: profile.id, drawnNumbers: drawn, isAppointed: !!isAppointed }),
+            });
+            initData = await res.json();
+            break; // success — exit retry loop
+          } catch (initErr) {
+            console.error(`Initial validate_win attempt ${attempt + 1} failed:`, initErr);
+            if (attempt < MAX_INIT_RETRIES) {
+              await new Promise(r => setTimeout(r, INIT_RETRY_DELAY));
+            }
+          }
+        }
+        if (!initData) {
+          // All initial attempts failed — finish game with winner_id as last resort
+          console.error('All initial validate_win attempts failed, calling finish_game with winnerId');
+          try {
+            const fallbackBody: any = { action: 'finish_game', gameCode: gameId };
+            if (isValidUUID(profile.id)) fallbackBody.winnerId = profile.id;
+            fetch('/api/public/game/lobby', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(fallbackBody),
+            }).catch(() => {});
+          } catch {}
+        } else if (initData.success) {
+            if (initData.pending) {
               // Collection window — record winners info and schedule finalization
               setIsPendingWin(true);
-              setAllWinners(data.winners || []);
-              setWinnerCount(data.winnerCount || 1);
-              setWinMessage(data.message || 'Winner recorded! Prize will be finalized shortly.');
-              // Schedule finalization after the 5s collection window
-              setTimeout(async () => {
+              setAllWinners(initData.winners || []);
+              setWinnerCount(initData.winnerCount || 1);
+              setWinMessage(initData.message || 'Winner recorded! Prize will be finalized shortly.');
+              // Schedule finalization after the 5s collection window — with retry logic
+              const MAX_FINALIZE_RETRIES = 3;
+              const FINALIZE_RETRY_DELAY = 2000;
+              const doFinalize = async (attempt: number): Promise<boolean> => {
                 try {
                   const finalRes = await fetch('/api/public/game/engine', {
                     method: 'POST',
@@ -1018,6 +1044,7 @@ function HomePage() {
                     setWinMessage(finalData.message || '');
                     const totalUserStake = selectedStake || (selectedRoom?.entry || 10) * (selectedCardsRef.current.length || 1);
                     addGameToHistory(gameId, totalUserStake, 'win', finalData.winAmount);
+                    return true;
                   } else if (finalData.error === 'Game already finished') {
                     setIsPendingWin(false);
                     if (finalData.winners) { setAllWinners(finalData.winners); setWinnerCount(finalData.winners.length); }
@@ -1028,14 +1055,36 @@ function HomePage() {
                       setShowWinModal(false);
                       setOpponentWinner(finalData.winner_name || 'Opponent');
                     }
+                    return true;
                   }
-                } catch {
-                  // Finalize failed — at least tell server to finish the game so status doesn't stay 'active'
+                  // Other error — retry if attempts remain
+                  if (attempt < MAX_FINALIZE_RETRIES) {
+                    console.warn(`Finalize attempt ${attempt + 1} failed: ${finalData.error}, retrying...`);
+                    await new Promise(r => setTimeout(r, FINALIZE_RETRY_DELAY));
+                    return doFinalize(attempt + 1);
+                  }
+                  return false;
+                } catch (finalizeErr) {
+                  console.error(`Finalize attempt ${attempt + 1} fetch error:`, finalizeErr);
+                  if (attempt < MAX_FINALIZE_RETRIES) {
+                    await new Promise(r => setTimeout(r, FINALIZE_RETRY_DELAY));
+                    return doFinalize(attempt + 1);
+                  }
+                  return false;
+                }
+              };
+              setTimeout(async () => {
+                const finalizeSucceeded = await doFinalize(0);
+                if (!finalizeSucceeded) {
+                  // All finalize attempts failed — fall back to finish_game with winner_id
+                  console.error('All finalize attempts failed, falling back to finish_game with winnerId');
                   try {
+                    const fallbackBody: any = { action: 'finish_game', gameCode: gameId };
+                    if (profile?.id && isValidUUID(profile.id)) fallbackBody.winnerId = profile.id;
                     fetch('/api/public/game/lobby', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ action: 'finish_game', gameCode: gameId }),
+                      body: JSON.stringify(fallbackBody),
                     }).catch(() => {});
                   } catch {}
                 }
@@ -1047,26 +1096,25 @@ function HomePage() {
             } else {
               // Immediate finalization
               setIsPendingWin(false);
-              setAllWinners(data.winners || []);
-              setWinnerCount(data.winnerCount || 1);
-              setFinalWinAmount(data.winAmount || 0);
-              setTotalWinAmount(data.totalWinAmount || 0);
-              setWinMessage(data.message || '');
+              setAllWinners(initData.winners || []);
+              setWinnerCount(initData.winnerCount || 1);
+              setFinalWinAmount(initData.winAmount || 0);
+              setTotalWinAmount(initData.totalWinAmount || 0);
+              setWinMessage(initData.message || '');
               const cardCount = selectedCardsRef.current.length || 1;
               const totalUserStake = selectedStake || (selectedRoom?.entry || 10) * cardCount;
-              addGameToHistory(gameId, totalUserStake, 'win', data.winAmount);
+              addGameToHistory(gameId, totalUserStake, 'win', initData.winAmount);
             }
-          } else if (data.error === 'Game already finished') {
-            if (data.winner_id === profile.id) {
+          } else if (initData.error === 'Game already finished') {
+            if (initData.winner_id === profile.id) {
               const cc = selectedCardsRef.current.length || 1;
               addGameToHistory(gameId, selectedStake || (selectedRoom?.entry || 10) * cc, 'win');
             } else {
               setShowWinModal(false);
-              setOpponentWinner(data.winner_name || 'Opponent');
+              setOpponentWinner(initData.winner_name || 'Opponent');
               if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
             }
           }
-        } catch {}
         // Refresh wallet immediately then again after a delay to handle any DB read-after-write consistency lag
         await refreshWallet();
         setTimeout(() => { void refreshWallet(); }, 500);
@@ -1233,12 +1281,15 @@ function HomePage() {
     if (shouldRecordLoss) addGameToHistory(gameId, selectedStake || 10, 'loss');
     const uid = profile?.id;
     // When the game is over (opponent won or we just won), tell server to finish it so status doesn't stay 'active'
+    // Pass winnerId when the current user won (showWinModal=true) so opponent can detect who won
     if (gameEnded) {
       try {
+        const finishBody: any = { action: 'finish_game', gameCode: gameId };
+        if (showWinModal && uid && isValidUUID(uid)) finishBody.winnerId = uid;
         fetch('/api/public/game/lobby', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'finish_game', gameCode: gameId }),
+          body: JSON.stringify(finishBody),
         }).catch(() => {});
       } catch {}
     }

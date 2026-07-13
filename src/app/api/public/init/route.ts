@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
       }
     } else {
       const updates: Record<string, string> = {};
-      if (firstName && profile.first_name !== firstName) updates.first_name = firstName;
+      // Only update username, never overwrite first_name on init — name is user-controlled via profile tab
       if (username && profile.username !== username) updates.username = username;
       if (Object.keys(updates).length > 0) {
         const { data: updatedProfile } = await supabase

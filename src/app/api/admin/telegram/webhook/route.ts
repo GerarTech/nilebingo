@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { notifyAdminTransactionCompleted as _notifyAdminTransactionCompleted } from '@/lib/server/admin';
+import { getSeededCard } from '@/lib/server/bingo';
 
 const botToken = process.env.ADMIN_BOT_TOKEN || '';
 const adminChatId = process.env.ADMIN_CHAT_ID || '';
@@ -571,7 +572,82 @@ export async function POST(request: NextRequest) {
           .update({ commands: currentCommands })
           .eq('id', 'main');
 
-        await sendMessage(chatId, `🎯 *Appointed Winner Recorded*\n\nGame ID: \`${gameId}\`\nAppointed Card: *Card #${cardNumber}*\nWin after: *${afterBalls} balls*\n\nThis card will be prioritized to win during live play!`, { parse_mode: 'Markdown' });
+        // Generate card preview and proximity analysis
+        const card = getSeededCard(cardNumber);
+        const colLabels = ['B', 'I', 'N', 'G', 'O'];
+
+        // Build formatted grid
+        const pad = (n: number) => n === 0 ? ' · ' : String(n).padStart(2, ' ') + ' ';
+        const gridLines = [
+          colLabels.map(l => ` ${l} `).join(''),
+          ...card.map(row => row.map(pad).join('')),
+        ];
+
+        // Get current drawn numbers from the game for real proximity
+        let drawnNumbers: number[] = [];
+        try {
+          const { data: gameData } = await supabase
+            .from('games')
+            .select('drawn_numbers')
+            .eq('code', gameId)
+            .maybeSingle();
+          drawnNumbers = gameData?.drawn_numbers || [];
+        } catch {}
+
+        const isMarked = (r: number, c: number) => card[r][c] === 0 || drawnNumbers.includes(card[r][c]);
+
+        // Proximity analysis — count how many numbers each line still needs
+        const lineProx: { label: string; needed: number; drawn: number }[] = [];
+
+        // Rows
+        for (let r = 0; r < 5; r++) {
+          let needed = 0;
+          for (let c = 0; c < 5; c++) { if (!isMarked(r, c)) needed++; }
+          lineProx.push({ label: `Row ${r + 1}`, needed, drawn: 5 - needed });
+        }
+
+        // Columns
+        for (let c = 0; c < 5; c++) {
+          let needed = 0;
+          for (let r = 0; r < 5; r++) { if (!isMarked(r, c)) needed++; }
+          lineProx.push({ label: `Col ${colLabels[c]}`, needed, drawn: 5 - needed });
+        }
+
+        // Diagonals
+        let diag1 = 0;
+        for (let i = 0; i < 5; i++) { if (!isMarked(i, i)) diag1++; }
+        lineProx.push({ label: 'Diag ↘', needed: diag1, drawn: 5 - diag1 });
+
+        let diag2 = 0;
+        for (let i = 0; i < 5; i++) { if (!isMarked(i, 4 - i)) diag2++; }
+        lineProx.push({ label: 'Diag ↙', needed: diag2, drawn: 5 - diag2 });
+
+        // Sort by fewest needed (closest to winning)
+        lineProx.sort((a, b) => a.needed - b.needed);
+
+        const proximityText = lineProx.slice(0, 5).map(l => {
+          const filled = 5 - l.needed;
+          const bar = '█'.repeat(filled) + '░'.repeat(l.needed);
+          return `  ${l.label}: ${bar} ${filled}/5`;
+        }).join('\n');
+
+        const drawnText = drawnNumbers.length > 0 ? `${drawnNumbers.length}/75 drawn` : 'Game not started';
+
+        const msg = [
+          `🎯 *Appoint Winner — Card #${cardNumber}*`,
+          '',
+          '```',
+          gridLines.join('\n'),
+          '```',
+          '',
+          `📊 *Lines closest to win:* (${drawnText})`,
+          proximityText,
+          '',
+          `✅ Saved for *${gameId}*`,
+          `🎱 Win after: *${afterBalls} balls*`,
+        ].join('\n');
+
+        await sendMessage(chatId, msg, { parse_mode: 'Markdown' });
 
         // Route to subscribed channels
         try {

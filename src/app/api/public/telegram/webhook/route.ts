@@ -1707,7 +1707,7 @@ export async function POST(request: NextRequest) {
         await sendMessage(chatId, getText(lang, 'transactions_empty'), { parse_mode: 'Markdown' });
       }
     } else if (text === '/invite' || text.toLowerCase() === 'invite' || text === '👥 Invite Friends' || text.includes('invite') || matchesCommand(userCommands.mycode, plainCommands.mycode)) {
-      const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'YOUR_BOT_USERNAME';
+      const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'yenedating_bot';
       const refLink = `https://t.me/${botUsername}?start=ref_${from.id}`;
       const refBonus = commands.referral_bonus || 10;
 

@@ -374,9 +374,13 @@ export async function POST(request: NextRequest) {
       if (!gameCode) {
         return NextResponse.json({ error: 'gameCode is required' }, { status: 400 });
       }
+      const finishUpdate: any = { status: 'finished' };
+      if (body.winnerId && isValidUUID(body.winnerId)) {
+        finishUpdate.winner_id = body.winnerId;
+      }
       await supabase
         .from('games')
-        .update({ status: 'finished' })
+        .update(finishUpdate)
         .eq('code', gameCode)
         .eq('status', 'active');
       await supabase
@@ -613,7 +617,10 @@ export async function POST(request: NextRequest) {
       }
 
       // Deduct stake from player's wallet server-side (play_balance first, then main_balance)
+      // Total deduction = per-card stake × number of cards
       if (!isSpectator) {
+        const cardCount = cardsToStore.length || 1;
+        const totalDeduction = stakeAmount * cardCount;
         try {
           const { data: wallet } = await supabase
             .from('wallets')
@@ -622,13 +629,13 @@ export async function POST(request: NextRequest) {
             .maybeSingle();
           if (wallet) {
             const playBal = Number(wallet.play_balance) || 0;
-            if (playBal >= stakeAmount) {
-              await supabase.rpc('adjust_play_balance', { p_user_id: userId, p_amount: -stakeAmount });
+            if (playBal >= totalDeduction) {
+              await supabase.rpc('adjust_play_balance', { p_user_id: userId, p_amount: -totalDeduction });
             } else {
               if (playBal > 0) {
                 await supabase.rpc('adjust_play_balance', { p_user_id: userId, p_amount: -playBal });
               }
-              const remaining = stakeAmount - playBal;
+              const remaining = totalDeduction - playBal;
               if (remaining > 0) {
                 await supabase.rpc('adjust_main_balance', { p_user_id: userId, p_amount: -remaining });
               }

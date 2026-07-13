@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { Save, RefreshCw, MessageSquare, Sliders, CreditCard, Trophy, Trash2, Bell } from 'lucide-react';
+import BingoGrid from '@/lib/components/BingoGrid';
+import { getSeededCard, getNumbersAwayFromWin } from '@/lib/server/bingo';
 
 interface BotCommands {
   admin_stats: string;
@@ -144,6 +146,8 @@ export default function SettingsPage() {
   const [botDescriptionImage, setBotDescriptionImage] = useState<string | null>(null);
   const [adminReferralEnabled, setAdminReferralEnabled] = useState(true);
   const [appointedWinners, setAppointedWinners] = useState<Record<string, {card_number: number, after_balls: number}>>({});
+  const [previewCardNum, setPreviewCardNum] = useState<number | ''>('');
+  const [previewDrawn, setPreviewDrawn] = useState<number[]>([]);
 
   const [happyHourEnabled, setHappyHourEnabled] = useState(false);
   const [happyHourRoom, setHappyHourRoom] = useState('bronze');
@@ -1349,6 +1353,11 @@ export default function SettingsPage() {
                     min="1"
                     max="200"
                     placeholder="e.g. 58"
+                    value={previewCardNum}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value, 10);
+                      setPreviewCardNum(isNaN(v) ? '' : v);
+                    }}
                     className="w-full bg-navy border border-gold-subtle rounded-md px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
                   />
                 </div>
@@ -1365,6 +1374,64 @@ export default function SettingsPage() {
                   />
                 </div>
               </div>
+
+              {/* Live Card Preview */}
+              {previewCardNum && previewCardNum >= 1 && previewCardNum <= 200 && (() => {
+                const card = getSeededCard(previewCardNum);
+                const drawnNums = previewDrawn;
+                const proximity = getNumbersAwayFromWin(card, drawnNums);
+                const colLabels = ['B', 'I', 'N', 'G', 'O'];
+
+                const lineProx: { label: string; needed: number }[] = [];
+                const isMarked = (r: number, c: number) => card[r][c] === 0 || drawnNums.includes(card[r][c]);
+                for (let r = 0; r < 5; r++) {
+                  let needed = 0;
+                  for (let c = 0; c < 5; c++) { if (!isMarked(r, c)) needed++; }
+                  lineProx.push({ label: `Row ${r + 1}`, needed });
+                }
+                for (let c = 0; c < 5; c++) {
+                  let needed = 0;
+                  for (let r = 0; r < 5; r++) { if (!isMarked(r, c)) needed++; }
+                  lineProx.push({ label: `Col ${colLabels[c]}`, needed });
+                }
+                let d1 = 0; for (let i = 0; i < 5; i++) { if (!isMarked(i, i)) d1++; }
+                lineProx.push({ label: 'Diag ↘', needed: d1 });
+                let d2 = 0; for (let i = 0; i < 5; i++) { if (!isMarked(i, 4 - i)) d2++; }
+                lineProx.push({ label: 'Diag ↙', needed: d2 });
+                lineProx.sort((a, b) => a.needed - b.needed);
+
+                return (
+                  <div className="bg-navy/60 border border-gold-subtle rounded-lg p-3 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-gold uppercase">Card #{previewCardNum} Preview</span>
+                      {drawnNums.length > 0 && (
+                        <span className="text-[9px] text-gray-400">{drawnNums.length}/75 drawn</span>
+                      )}
+                    </div>
+                    <div className="flex justify-center">
+                      <div className="w-[220px]">
+                        <BingoGrid card={card} drawnNumbers={drawnNums} compact />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-[9px]">
+                      {lineProx.slice(0, 8).map((l) => (
+                        <div key={l.label} className="flex items-center justify-between">
+                          <span className="text-gray-400">{l.label}</span>
+                          <span className={`font-bold ${l.needed <= 1 ? 'text-emerald-400' : l.needed <= 2 ? 'text-gold' : 'text-gray-500'}`}>
+                            {l.needed === 0 ? '✓ WIN' : `${l.needed} left`}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    {proximity !== null && proximity <= 2 && (
+                      <div className="text-[9px] text-emerald-400 font-bold text-center">
+                        🔥 Very close to winning — {proximity} number{proximity !== 1 ? 's' : ''} away
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
               <button
                 type="button"
                 onClick={() => {
@@ -1383,6 +1450,7 @@ export default function SettingsPage() {
                     if (gEl) gEl.value = '';
                     if (cEl) cEl.value = '';
                     if (bEl) bEl.value = '20';
+                    setPreviewCardNum('');
                   } else {
                     alert("Please provide a valid Game Session ID and Card number between 1 and 200.");
                   }
