@@ -612,6 +612,33 @@ export async function POST(request: NextRequest) {
         console.warn('Prize pool update failed:', poolErr);
       }
 
+      // Deduct stake from player's wallet server-side (play_balance first, then main_balance)
+      if (!isSpectator) {
+        try {
+          const { data: wallet } = await supabase
+            .from('wallets')
+            .select('play_balance, main_balance')
+            .eq('user_id', userId)
+            .maybeSingle();
+          if (wallet) {
+            const playBal = Number(wallet.play_balance) || 0;
+            if (playBal >= stakeAmount) {
+              await supabase.rpc('adjust_play_balance', { p_user_id: userId, p_amount: -stakeAmount });
+            } else {
+              if (playBal > 0) {
+                await supabase.rpc('adjust_play_balance', { p_user_id: userId, p_amount: -playBal });
+              }
+              const remaining = stakeAmount - playBal;
+              if (remaining > 0) {
+                await supabase.rpc('adjust_main_balance', { p_user_id: userId, p_amount: -remaining });
+              }
+            }
+          }
+        } catch (deductionErr) {
+          console.warn('Server-side stake deduction failed:', deductionErr);
+        }
+      }
+
       return NextResponse.json({ success: true, dbGameId });
     }
 

@@ -1177,28 +1177,6 @@ function HomePage() {
 
     setIsRegistered(true);
     setReservedCardCount(Math.max(selectedCards.length, reservedCardCount));
-    const playBal = wallet?.play_balance || 0;
-    try {
-      if (playBal >= stakeAmount) {
-        await updateBalance(-stakeAmount, 'play_balance');
-      } else {
-        if (playBal > 0) await updateBalance(-playBal, 'play_balance');
-        await updateBalance(-(stakeAmount - playBal), 'main_balance');
-      }
-    } catch (e) {
-      console.warn('Balance deduction failed, reverting registration:', e);
-      setIsRegistered(false);
-      // Release reserved cards
-      const uid = profile?.id;
-      if (gameId && uid && isValidUUID(uid)) {
-        fetch('/api/public/game/lobby', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'leave_game', gameId, userId: uid }),
-        }).catch(() => {});
-      }
-      return;
-    }
     await refreshWallet();
   }, [selectedCards, selectedRoom, wallet, updateBalance, refreshWallet, gameId, profile?.id, t]);
 
@@ -1319,8 +1297,8 @@ function HomePage() {
         addGameToHistory(gameId, selectedStake || 10, 'loss');
         setOpponentWinner(null);
       }
-      // Don't leave game if there's a pending win - the finalize call will handle exit
-      if (!isPendingWin) leaveGame();
+      // Always leave game when countdown hits 0 — go straight to home view
+      leaveGame();
       return;
     }
     const timer = setTimeout(() => setResultCountdown(prev => (prev !== null ? prev - 1 : null)), 1000);

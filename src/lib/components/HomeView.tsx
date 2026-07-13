@@ -125,12 +125,12 @@ export default function HomeView({
       <div className="mb-6">
         {selectedStake ? (
           <button onClick={onPlay}
-            className="w-full text-navy font-black py-4 rounded-2xl text-[13px] tracking-widest flex items-center justify-center gap-2 shadow-gold-glow-lg transition-all hover:scale-[1.01] active:translate-y-0.5 cursor-pointer uppercase font-sans bg-gradient-gold gold-shimmer border border-gold-dark/30">
+            className="w-full text-white font-black py-4 rounded-2xl text-[13px] tracking-widest flex items-center justify-center gap-2 shadow-gold-glow-lg transition-all hover:scale-[1.01] active:translate-y-0.5 cursor-pointer uppercase font-sans bg-gradient-gold gold-shimmer border border-gold-dark/30">
             🚀 PLAY WITH {selectedStake} {t('birr')}
           </button>
         ) : (
           <button disabled
-            className="w-full bg-[#0d1a30]/40 border border-gold-subtle text-gray-500 font-extrabold py-4 rounded-2xl text-[12px] tracking-widest text-center cursor-not-allowed select-none uppercase">
+            className="w-full bg-[#0d1a30]/40 border border-gold-subtle text-white font-extrabold py-4 rounded-2xl text-[12px] tracking-widest text-center cursor-not-allowed select-none uppercase opacity-50">
             ⚙️ SELECT A STAKE
           </button>
         )}
