@@ -12,6 +12,12 @@ export interface DailyStreakConfig {
   rewards?: number[];
 }
 
+export interface WinComboConfig {
+  enabled?: boolean;
+  required_wins?: number;
+  bonus_amount?: number;
+}
+
 const DEFAULT_STREAK_REWARDS = [5, 5, 5, 10, 10, 15, 25];
 
 /** Ethiopia local hour (UTC+3) */
@@ -57,4 +63,12 @@ export function getStreakRewardForDay(streakDay: number, config: DailyStreakConf
   const rewards = getStreakRewards(config);
   const idx = Math.min(Math.max(streakDay, 1), rewards.length) - 1;
   return rewards[idx] ?? rewards[rewards.length - 1] ?? 5;
+}
+
+export function getComboConfig(config: WinComboConfig | null | undefined): { enabled: boolean; requiredWins: number; bonusAmount: number } {
+  return {
+    enabled: config?.enabled !== false,
+    requiredWins: config?.required_wins ?? 3,
+    bonusAmount: config?.bonus_amount ?? 10,
+  };
 }

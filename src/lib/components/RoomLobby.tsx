@@ -67,11 +67,7 @@ export default function RoomLobby({
         <div className="relative bg-gradient-to-b from-[#1c0d02] to-[#0c0500] border border-[#ff5a00]/30 p-8 rounded-3xl shadow-xl shadow-black/40 overflow-hidden text-center">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,90,0,0.04)_0%,transparent_80%)] pointer-events-none" />
           <span className="text-[9px] text-[#ff7a22] font-black uppercase tracking-widest block mb-2 animate-pulse">⏰ GAME IN PROGRESS</span>
-          <div className="flex items-baseline justify-center gap-1.5 mt-2">
-            <span className="text-6xl font-extrabold tracking-tight text-[#ff5a00]">{room.countdown}</span>
-            <span className="text-lg font-black text-gray-400">S</span>
-          </div>
-          <p className="text-[10px] text-gray-400 mt-2">Please wait for the current game to finish.</p>
+          <p className="text-sm text-gray-300 mt-4">Please wait for the current game to finish.</p>
         </div>
 
         <div className="bg-[#142036]/40 border border-gold-subtle rounded-2xl p-4 mt-4 text-center">

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getSeededCard } from '@/lib/server/bingo';
+import { getEffectiveCommission, getComboConfig, type HappyHourConfig, type WinComboConfig } from '@/lib/server/promotions';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -309,6 +310,19 @@ export async function POST(request: NextRequest) {
       const { data: cardCountData } = await supabase.from('game_card_reservations').select('id').eq('game_code', gameByCode.code).gt('card_number', 0);
       const totalCardCount = Math.max(cardCountData?.length || 1, 1);
       const totalBet = perCardStake * totalCardCount;
+
+      // Apply Happy Hour commission override if active
+      try {
+        const { data: hhCfg } = await supabase.from('bot_config').select('commands').eq('id', 'main').single();
+        const hhConfig = hhCfg?.commands?.happy_hour as HappyHourConfig | undefined;
+        if (hhConfig?.enabled) {
+          const rooms = Array.isArray(hhCfg?.commands?.rooms) ? hhCfg.commands.rooms : [];
+          const matchingRoom = rooms.find((r: any) => Number(r.entry) === Number(perCardStake));
+          const roomId = matchingRoom?.name?.toLowerCase() || 'all';
+          effectiveCommission = getEffectiveCommission(effectiveCommission ?? 15, hhConfig, roomId);
+        }
+      } catch {}
+
       try {
         await supabase.rpc('update_game_prize_pool', { p_game_code: gameByCode.code, p_stake_amt: perCardStake, p_commission: effectiveCommission ?? 15 });
       } catch {
@@ -380,6 +394,18 @@ export async function POST(request: NextRequest) {
               }
             } catch {}
           }
+
+          // Track combo wins — increment consecutive win counter
+          try {
+            const { data: comboRow } = await supabase.from('user_win_combos').select('consecutive_wins').eq('user_id', uid).maybeSingle();
+            const newComboCount = (comboRow?.consecutive_wins || 0) + 1;
+            await supabase.from('user_win_combos').upsert({
+              user_id: uid,
+              consecutive_wins: newComboCount,
+              last_win_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            }, { onConflict: 'user_id' });
+          } catch {}
         }
 
         // Finalize game
@@ -510,6 +536,15 @@ export async function POST(request: NextRequest) {
         }).eq('id', existingHistory.data.id);
       }
 
+      // Reset combo counter on loss
+      try {
+        await supabase.from('user_win_combos').upsert({
+          user_id: userId,
+          consecutive_wins: 0,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id' });
+      } catch {}
+
       return NextResponse.json({
         success: true,
         win: false,
@@ -537,6 +572,12 @@ export async function POST(request: NextRequest) {
         if (matchingRoom && typeof matchingRoom.commission === 'number') {
           roomCommission = matchingRoom.commission;
           commission = matchingRoom.commission;
+        }
+        // Apply Happy Hour commission override if active
+        const hhConfig = config.happy_hour as HappyHourConfig | undefined;
+        if (hhConfig?.enabled) {
+          const roomId = matchingRoom?.name?.toLowerCase() || 'all';
+          commission = getEffectiveCommission(commission, hhConfig, roomId);
         }
       } catch {}
 

@@ -156,6 +156,7 @@ export default function SettingsPage() {
   const [streakRewards, setStreakRewards] = useState('5,5,5,10,10,15,25');
   const [comboEnabled, setComboEnabled] = useState(true);
   const [comboBonus, setComboBonus] = useState(10);
+  const [comboRequiredWins, setComboRequiredWins] = useState(3);
 
   const [jackpotEnabled, setJackpotEnabled] = useState(false);
   const [jackpotPercent, setJackpotPercent] = useState(5);
@@ -235,6 +236,7 @@ export default function SettingsPage() {
           const wc = config.win_combo;
           setComboEnabled(wc.enabled !== false);
           if (typeof wc.bonus === 'number') setComboBonus(wc.bonus);
+          if (typeof wc.required_wins === 'number') setComboRequiredWins(wc.required_wins);
         }
         if (config.jackpot) {
           const jp = config.jackpot;
@@ -320,7 +322,8 @@ export default function SettingsPage() {
       },
       win_combo: {
         enabled: comboEnabled,
-        bonus: comboBonus,
+        required_wins: comboRequiredWins,
+        bonus_amount: comboBonus,
       },
       jackpot: {
         enabled: jackpotEnabled,
@@ -1147,6 +1150,16 @@ export default function SettingsPage() {
               </div>
               {comboEnabled && (
                 <div className="space-y-2 ml-2 border-l-2 border-gold/30 pl-3">
+                  <div>
+                    <label className="text-[10px] text-gray-400 block mb-0.5">Required Consecutive Wins</label>
+                    <input
+                      type="number" step="1" min="2" max="10"
+                      value={comboRequiredWins}
+                      onChange={e => setComboRequiredWins(Math.max(2, Math.min(10, parseInt(e.target.value) || 3)))}
+                      className="w-full bg-navy border border-gold-subtle rounded-md px-2.5 py-1.5 text-white text-xs"
+                    />
+                    <p className="text-[8px] text-gray-500 mt-0.5">How many consecutive wins needed before bonus is awarded (2-10)</p>
+                  </div>
                   <div>
                     <label className="text-[10px] text-gray-400 block mb-0.5">Bonus Amount (ETB)</label>
                     <input

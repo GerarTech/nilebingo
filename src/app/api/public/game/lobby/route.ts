@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getSeededCard } from '@/lib/server/bingo';
+import { getEffectiveCommission, type HappyHourConfig } from '@/lib/server/promotions';
 
 export const dynamic = 'force-dynamic';
 
@@ -399,6 +400,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true });
     }
 
+    if (action === 'finish_stale') {
+      const staleMinutes = body.staleMinutes || 10;
+      const cutoff = new Date(Date.now() - staleMinutes * 60 * 1000).toISOString();
+      const { data: staleGames } = await supabase
+        .from('games')
+        .select('id, code')
+        .eq('status', 'active')
+        .lt('created_at', cutoff);
+      if (staleGames && staleGames.length > 0) {
+        const codes = staleGames.map((g: any) => g.code);
+        const ids = staleGames.map((g: any) => g.id);
+        await supabase.from('games').update({ status: 'finished' }).in('id', ids);
+        await supabase.from('game_card_reservations').delete().in('game_code', codes);
+        return NextResponse.json({ success: true, finished: staleGames.length });
+      }
+      return NextResponse.json({ success: true, finished: 0 });
+    }
+
     if (action === 'register_game') {
       if (!gameId || !userId || !stakeAmount) {
         return NextResponse.json({ error: 'gameId, userId, and stakeAmount are required' }, { status: 400 });
@@ -442,13 +461,22 @@ export async function POST(request: NextRequest) {
 
       // Look up room-specific commission from bot_config
       let roomCommission: number | null = null;
+      let effectiveCommission = 15;
       try {
         const { data: configData } = await supabase.from('bot_config').select('commands').eq('id', 'main').single();
         const config = configData?.commands || {};
+        if (typeof config.commission === 'number') effectiveCommission = config.commission;
         const rooms = Array.isArray(config.rooms) ? config.rooms : [];
         const matchingRoom = rooms.find((r: any) => Number(r.entry) === Number(stakeAmount));
         if (matchingRoom && typeof matchingRoom.commission === 'number') {
           roomCommission = matchingRoom.commission;
+          effectiveCommission = matchingRoom.commission;
+        }
+        // Apply Happy Hour commission override if active
+        const hhConfig = config.happy_hour as HappyHourConfig | undefined;
+        if (hhConfig?.enabled) {
+          const roomId = matchingRoom?.name?.toLowerCase() || 'all';
+          effectiveCommission = getEffectiveCommission(effectiveCommission, hhConfig, roomId);
         }
       } catch {}
 
@@ -495,7 +523,7 @@ export async function POST(request: NextRequest) {
           drawn_numbers: [],
         };
         if (roomCommission !== null) {
-          gameInsert.commission = roomCommission;
+          gameInsert.commission = effectiveCommission;
         }
         const { data: newGame, error: err } = await supabase
           .from('games')
@@ -579,7 +607,7 @@ export async function POST(request: NextRequest) {
       // Update prize pool — p_stake_amt is the PER-CARD entry fee (already correct, stakeAmount is per card).
       // Formula: p_stake_amt * total_cards * (1 - commission/100)
       try {
-        await supabase.rpc('update_game_prize_pool', { p_game_code: gameId, p_stake_amt: stakeAmount });
+        await supabase.rpc('update_game_prize_pool', { p_game_code: gameId, p_stake_amt: stakeAmount, p_commission: effectiveCommission });
       } catch (poolErr) {
         console.warn('Prize pool update failed:', poolErr);
       }

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   Wallet as WalletIcon, ArrowLeft, Copy, Check, Share2,
-  ArrowDownToLine, ArrowUpFromLine, ArrowLeftRight, History, Flame, Gift,
+  ArrowDownToLine, ArrowUpFromLine, ArrowLeftRight, History, Flame, Gift, Trophy,
 } from 'lucide-react';
 
 interface Wallet {
@@ -75,6 +75,9 @@ export default function WalletTab({
   const [streak, setStreak] = useState<StreakInfo | null>(null);
   const [claimingStreak, setClaimingStreak] = useState(false);
 
+  const [combo, setCombo] = useState<{ enabled: boolean; consecutiveWins: number; requiredWins: number; bonusAmount: number; canClaim: boolean } | null>(null);
+  const [claimingCombo, setClaimingCombo] = useState(false);
+
   const [depositMethod, setDepositMethod] = useState<'cbe' | 'telebirr'>('cbe');
   const [depositAmount, setDepositAmount] = useState('');
   const [depositTxRef, setDepositTxRef] = useState('');
@@ -116,6 +119,17 @@ export default function WalletTab({
 
   useEffect(() => { loadStreak(); }, [loadStreak]);
 
+  const loadCombo = useCallback(async () => {
+    if (!userId) return;
+    try {
+      const res = await fetch(`/api/public/combo?userId=${userId}`);
+      const data = await res.json();
+      if (!data.error) setCombo(data);
+    } catch { /* ignore */ }
+  }, [userId]);
+
+  useEffect(() => { loadCombo(); }, [loadCombo]);
+
   const handleClaimStreak = async () => {
     if (!userId || !streak?.canClaim) return;
     setClaimingStreak(true);
@@ -134,6 +148,26 @@ export default function WalletTab({
       onToast?.(e instanceof Error ? e.message : 'Claim failed', 'error');
     }
     setClaimingStreak(false);
+  };
+
+  const handleClaimCombo = async () => {
+    if (!userId || !combo?.canClaim) return;
+    setClaimingCombo(true);
+    try {
+      const res = await fetch('/api/public/combo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Claim failed');
+      onToast?.(`+${data.bonusAmount} ${birr} combo bonus! (${combo.consecutiveWins} wins streak)`, 'success');
+      await onRefreshWallet?.();
+      await loadCombo();
+    } catch (e) {
+      onToast?.(e instanceof Error ? e.message : 'Claim failed', 'error');
+    }
+    setClaimingCombo(false);
   };
 
   const handleDeposit = async () => {
@@ -252,6 +286,31 @@ export default function WalletTab({
             <button onClick={handleClaimStreak} disabled={claimingStreak || isGuest}
               className="w-full bg-gradient-to-r from-orange-500 to-gold text-navy font-black py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 disabled:opacity-50">
               <Gift size={14} /> {claimingStreak ? 'Claiming...' : `Claim ${streak.todayReward} ${birr}`}
+            </button>
+          )}
+        </div>
+      )}
+
+      {combo?.enabled && (
+        <div className="bg-gradient-to-r from-purple-900/40 to-indigo-900/30 border border-purple-500/30 rounded-2xl p-4 mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-purple-300 font-black text-xs uppercase flex items-center gap-1.5">
+              <Trophy size={14} /> Win Combo
+            </h3>
+            <span className="text-gold font-black text-sm">{combo.consecutiveWins}/{combo.requiredWins}</span>
+          </div>
+          <p className="text-[11px] text-gray-400 mb-3">
+            {combo.canClaim
+              ? `You won ${combo.consecutiveWins} games in a row! Claim your ${combo.bonusAmount} ${birr} bonus!`
+              : `Win ${combo.requiredWins - combo.consecutiveWins} more game${combo.requiredWins - combo.consecutiveWins !== 1 ? 's' : ''} in a row for a bonus`}
+          </p>
+          <div className="w-full bg-purple-900/50 rounded-full h-2 mb-2">
+            <div className="bg-gradient-to-r from-purple-500 to-gold h-2 rounded-full transition-all" style={{ width: `${Math.min(100, (combo.consecutiveWins / combo.requiredWins) * 100)}%` }} />
+          </div>
+          {combo.canClaim && (
+            <button onClick={handleClaimCombo} disabled={claimingCombo || isGuest}
+              className="w-full bg-gradient-to-r from-purple-500 to-gold text-navy font-black py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 disabled:opacity-50">
+              <Trophy size={14} /> {claimingCombo ? 'Claiming...' : `Claim ${combo.bonusAmount} ${birr}`}
             </button>
           )}
         </div>

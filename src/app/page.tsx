@@ -610,12 +610,6 @@ function HomePage() {
   useEffect(() => {
     const fetchActive = async () => {
       try {
-        // Auto-finish games stuck active for over 10 minutes (connection drop, etc.)
-        await supabase
-          .from('games')
-          .update({ status: 'finished' })
-          .eq('status', 'active')
-          .lt('created_at', new Date(Date.now() - 10 * 60 * 1000).toISOString());
         const { data } = await supabase.from('games').select('code, stake_id').eq('status', 'active');
         if (data) {
           activeGameCodesRef.current = new Set(data.map(g => g.code));
@@ -635,6 +629,22 @@ function HomePage() {
     };
     fetchActive();
     const interval = setInterval(fetchActive, 500);
+    return () => clearInterval(interval);
+  }, []);
+
+  // ============ STALE GAME CLEANUP (every 30s via server API) ============
+  useEffect(() => {
+    const finishStale = async () => {
+      try {
+        await fetch('/api/public/game/lobby', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'finish_stale', staleMinutes: 10 }),
+        });
+      } catch {}
+    };
+    finishStale();
+    const interval = setInterval(finishStale, 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -689,8 +699,8 @@ function HomePage() {
         const displayStatus = (isPlaying || isLocked) ? 'playing' : 'starting_soon';
         return { ...r, status: displayStatus, countdown: remaining, winAmount: (r.entry * r.players) * (1 - roomComm / 100) };
       }));
-      // Update game ID every tick — only when user hasn't registered, room has no active game, AND stake is not locked
-      if (sr && !ig && !ir && !isr && !isSrPlaying && !isSrLocked) {
+      // Update game ID every tick — when user is in lobby (not playing, not registered) and room has a locked stake or no active game
+      if (sr && !ig && !ir && !isr) {
         void (async () => {
           const serverGameId = await getCurrentLobbyGameId(sr.id);
           if (serverGameId) {
@@ -1019,7 +1029,16 @@ function HomePage() {
                       setOpponentWinner(finalData.winner_name || 'Opponent');
                     }
                   }
-                } catch {}
+                } catch {
+                  // Finalize failed — at least tell server to finish the game so status doesn't stay 'active'
+                  try {
+                    fetch('/api/public/game/lobby', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ action: 'finish_game', gameCode: gameId }),
+                    }).catch(() => {});
+                  } catch {}
+                }
                 await refreshWallet();
                 setTimeout(() => { void refreshWallet(); }, 500);
                 // Exit game after wallet is refreshed — countdown won't do it during pending win
@@ -1070,15 +1089,27 @@ function HomePage() {
   }, []);
 
   const handleJoinRoom = useCallback(async (room: RoomConfig) => {
+    // Check if this room's stake is already locked by an active game
+    if (activeStakesRef.current.has(room.entry)) {
+      // Query server for the actual active game code (may be from a previous cycle)
+      const serverGameId = await getCurrentLobbyGameId(room.id);
+      setSelectedRoom(room);
+      setSelectedStake(room.entry);
+      setSelectedCards([]);
+      setPreviewCard([]);
+      setTakenCards([]);
+      setLobbyPlayerCount(0);
+      setReservedCardCount(0);
+      setIsRegistered(false);
+      setIsSpectatingReady(false);
+      if (serverGameId) setGameId(serverGameId);
+      return;
+    }
+    // No active game — generate deterministic code for current cycle
     const currentSec = Math.floor(Date.now() / 1000);
     const period = getRoomPeriod(room.id);
     const currentCycle = Math.floor(currentSec / period);
     const currentGameCode = generateDeterministicGameId(room.id, currentCycle);
-    // Block if current cycle's game is actually active (not a stale game from a previous cycle)
-    if (activeGameCodesRef.current.has(currentGameCode)) {
-      showToast('Game in progress. Please wait for it to finish.', 'info');
-      return;
-    }
     setSelectedRoom(room);
     setSelectedStake(room.entry);
     setSelectedCards([]);
@@ -1089,7 +1120,7 @@ function HomePage() {
     setIsRegistered(false);
     setIsSpectatingReady(false);
     setGameId(currentGameCode);
-  }, []);
+  }, [getCurrentLobbyGameId]);
 
   // ============ PLAY / REGISTER / LEAVE ============
   const watchGame = useCallback(async () => {
@@ -1203,6 +1234,8 @@ function HomePage() {
     // Capture pre-reset state for history check before we reset everything
     // Never record a loss if the user has a pending win - the finalize call will handle it
     const shouldRecordLoss = inGame && !isWatching && gameId && !showWinModal && !opponentWinner && !isPendingWin;
+    // Determine if the game is already in a terminal state (opponent won, or we won) — need to call finish_game
+    const gameEnded = (opponentWinner || showWinModal) && gameId;
     // Reset all state synchronously BEFORE any async operations
     // to prevent re-renders with inGame=true and opponentWinner=null from
     // re-creating the draw interval or keeping the live poll active
@@ -1214,6 +1247,16 @@ function HomePage() {
     setOtherPlayers([]); setOpponentWinner(null); setSelectedRoom(null);
     if (shouldRecordLoss) addGameToHistory(gameId, selectedStake || 10, 'loss');
     const uid = profile?.id;
+    // When the game is over (opponent won or we just won), tell server to finish it so status doesn't stay 'active'
+    if (gameEnded) {
+      try {
+        fetch('/api/public/game/lobby', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'finish_game', gameCode: gameId }),
+        }).catch(() => {});
+      } catch {}
+    }
     if (gameId && isValidUUID(uid)) {
       try {
         await fetch('/api/public/game/lobby', {
