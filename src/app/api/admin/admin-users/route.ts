@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { verifyAdmin } from '@/lib/server/admin';
-import crypto from 'crypto';
+import { checkAdminAuth, hasRole, hashPassword } from '@/lib/server/admin';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,17 +9,14 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.
 if (!supabaseUrl || !supabaseServiceKey) throw new Error('Missing Supabase environment variables');
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-function hashPassword(password: string): string {
-  return crypto.createHash('sha256').update(password).digest('hex');
-}
-
-function checkAuth(request: NextRequest): boolean {
-  const cookie = request.cookies.get('admin_token')?.value;
-  return !!cookie && verifyAdmin(cookie);
+function authCheck(request: NextRequest) {
+  const cookie = request.cookies.get('admin_session')?.value || request.cookies.get('admin_token')?.value;
+  return checkAdminAuth(cookie);
 }
 
 export async function GET(request: NextRequest) {
-  if (!checkAuth(request)) {
+  const { authorized } = authCheck(request);
+  if (!authorized) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   const { data, error } = await supabase
@@ -32,7 +28,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  if (!checkAuth(request)) {
+  const { authorized, session } = authCheck(request);
+  if (!authorized) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {
@@ -40,8 +37,16 @@ export async function POST(request: NextRequest) {
     const { action, id, username, password, role } = body;
 
     if (action === 'create') {
+      // Only admin+ can create users
+      if (!hasRole(session, 'admin')) {
+        return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
+      }
       if (!username || !password || !role) {
         return NextResponse.json({ error: 'username, password, and role are required' }, { status: 400 });
+      }
+      // Only super_admin can create other super_admins
+      if (role === 'super_admin' && session?.role !== 'super_admin') {
+        return NextResponse.json({ error: 'Only super admin can create super admin users' }, { status: 403 });
       }
       const { data: existing } = await supabase
         .from('admin_users')
@@ -61,9 +66,31 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'update') {
+      if (!hasRole(session, 'admin')) {
+        return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
+      }
       if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
+
+      // Check target user's current role
+      const { data: target } = await supabase
+        .from('admin_users')
+        .select('role')
+        .eq('id', id)
+        .single();
+
+      // Cannot change super_admin role unless you are super_admin
+      if (target?.role === 'super_admin' && session?.role !== 'super_admin') {
+        return NextResponse.json({ error: 'Only super admin can modify super admin' }, { status: 403 });
+      }
+
       const updates: Record<string, string> = {};
-      if (role) updates.role = role;
+      if (role) {
+        // Only super_admin can assign super_admin role
+        if (role === 'super_admin' && session?.role !== 'super_admin') {
+          return NextResponse.json({ error: 'Only super admin can assign super admin role' }, { status: 403 });
+        }
+        updates.role = role;
+      }
       if (password) updates.password_hash = hashPassword(password);
       const { data, error } = await supabase
         .from('admin_users')
@@ -76,6 +103,9 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'delete') {
+      if (!hasRole(session, 'admin')) {
+        return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
+      }
       if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
       const { data: target } = await supabase
         .from('admin_users')

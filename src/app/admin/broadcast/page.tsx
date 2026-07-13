@@ -49,19 +49,19 @@ export default function BroadcastPage() {
           onChange={(e) => setMessage(e.target.value)}
           placeholder="Type your broadcast message here..."
           rows={6}
-          className="w-full bg-navy border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-gold/50 resize-none"
+          className="w-full bg-navy border border-gold-subtle rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-gold/50 resize-none"
         />
 
         <div className="mt-3 flex gap-2">
           <button
             onClick={() => { setMediaType(mediaType === 'photo' ? '' : 'photo'); setMediaUrl(''); }}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all ${mediaType === 'photo' ? 'bg-gold text-navy' : 'bg-navy border border-white/10 text-gray-300 hover:border-gold/50'}`}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all ${mediaType === 'photo' ? 'bg-gold text-navy' : 'bg-navy border border-gold-subtle text-gray-300 hover:border-gold/50'}`}
           >
             <Image size={14} /> {mediaType === 'photo' ? '✓ Photo' : 'Photo'}
           </button>
           <button
             onClick={() => { setMediaType(mediaType === 'video' ? '' : 'video'); setMediaUrl(''); }}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all ${mediaType === 'video' ? 'bg-gold text-navy' : 'bg-navy border border-white/10 text-gray-300 hover:border-gold/50'}`}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all ${mediaType === 'video' ? 'bg-gold text-navy' : 'bg-navy border border-gold-subtle text-gray-300 hover:border-gold/50'}`}
           >
             <Video size={14} /> {mediaType === 'video' ? '✓ Video' : 'Video'}
           </button>
@@ -73,7 +73,7 @@ export default function BroadcastPage() {
             value={mediaUrl}
             onChange={(e) => setMediaUrl(e.target.value)}
             placeholder={`Enter public ${mediaType} URL (https://...)`}
-            className="w-full mt-2 bg-navy border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-gold/50"
+            className="w-full mt-2 bg-navy border border-gold-subtle rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-gold/50"
           />
         )}
 

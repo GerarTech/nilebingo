@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import crypto from 'crypto';
 import type { Profile, Wallet, Transaction, Game, GamePlayer, Stake } from '../types';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
@@ -122,6 +123,70 @@ export function verifyAdmin(password: string): boolean {
   const adminPassword = process.env.ADMIN_PASSWORD;
   if (!adminPassword) return false;
   return password === adminPassword;
+}
+
+export function hashPassword(password: string): string {
+  return crypto.createHash('sha256').update(password).digest('hex');
+}
+
+export interface AdminSession {
+  userId: string;
+  username: string;
+  role: 'super_admin' | 'admin' | 'moderator' | 'support';
+  expiresAt: number;
+}
+
+const ROLE_HIERARCHY: Record<string, number> = {
+  super_admin: 4,
+  admin: 3,
+  moderator: 2,
+  support: 1,
+};
+
+export function getAdminSession(cookieValue: string | undefined): AdminSession | null {
+  if (!cookieValue) return null;
+  try {
+    const decoded = Buffer.from(cookieValue, 'base64').toString('utf-8');
+    const session: AdminSession = JSON.parse(decoded);
+    if (!session.userId || !session.username || !session.role || !session.expiresAt) return null;
+    if (Date.now() > session.expiresAt) return null;
+    return session;
+  } catch {
+    return null;
+  }
+}
+
+export function isAdminSession(value: string): boolean {
+  try {
+    const decoded = Buffer.from(value, 'base64').toString('utf-8');
+    const parsed = JSON.parse(decoded);
+    return !!(parsed.userId && parsed.username && parsed.role && parsed.expiresAt);
+  } catch {
+    return false;
+  }
+}
+
+export function hasRole(session: AdminSession | null, minRole: string): boolean {
+  if (!session) return false;
+  const sessionLevel = ROLE_HIERARCHY[session.role] || 0;
+  const requiredLevel = ROLE_HIERARCHY[minRole] || 0;
+  return sessionLevel >= requiredLevel;
+}
+
+/** Check admin auth — supports both new session tokens and legacy password cookies */
+export function checkAdminAuth(cookieValue: string | undefined): { authorized: boolean; session: AdminSession | null } {
+  if (!cookieValue) return { authorized: false, session: null };
+  // Try new session token first
+  const session = getAdminSession(cookieValue);
+  if (session) return { authorized: true, session };
+  // Legacy: raw password in cookie (backward compat for super_admin via env password)
+  if (verifyAdmin(cookieValue)) {
+    return {
+      authorized: true,
+      session: { userId: 'env-superadmin', username: 'superadmin', role: 'super_admin', expiresAt: Date.now() + 86400000 },
+    };
+  }
+  return { authorized: false, session: null };
 }
 
 // Dashboard stats

@@ -49,7 +49,7 @@ export default function ContactsPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
-              <tr className="border-b border-white/5 text-gray-500">
+              <tr className="border-b border-gold-subtle text-gray-500">
                 <th className="text-left p-3 font-medium">User</th>
                 <th className="text-left p-3 font-medium">Username</th>
                 <th className="text-left p-3 font-medium">Phone</th>
@@ -60,7 +60,7 @@ export default function ContactsPage() {
             </thead>
             <tbody>
               {contacts.map((c: any) => (
-                <tr key={c.id} className="border-b border-white/5 hover:bg-white/5">
+                <tr key={c.id} className="border-b border-gold-subtle hover:bg-white/5">
                   <td className="p-3">
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 rounded-full bg-gradient-gold flex items-center justify-center">

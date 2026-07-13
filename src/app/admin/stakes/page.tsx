@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Plus, X } from 'lucide-react';
+import { Plus } from 'lucide-react';
 
 export default function StakesPage() {
   const [stakes, setStakes] = useState<any[]>([]);
@@ -76,7 +76,7 @@ export default function StakesPage() {
             value={newAmount}
             onChange={(e) => setNewAmount(e.target.value)}
             placeholder="Amount in ETB"
-            className="flex-1 bg-navy border border-white/10 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-gold/50"
+            className="flex-1 bg-navy border border-gold-subtle rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-gold/50"
           />
           <button onClick={createStake} className="bg-gold text-navy font-bold px-4 rounded-lg text-sm hover:opacity-90 flex items-center gap-1">
             <Plus size={16} /> Add

@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { notifyAdminTransactionCompleted } from '@/lib/server/admin';
+import { notifyAdminTransactionCompleted as _notifyAdminTransactionCompleted } from '@/lib/server/admin';
 
 const botToken = process.env.ADMIN_BOT_TOKEN || '';
 const adminChatId = process.env.ADMIN_CHAT_ID || '';
-const userBotToken = process.env.TELEGRAM_BOT_TOKEN || '';
+const _userBotToken = process.env.TELEGRAM_BOT_TOKEN || '';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key';
@@ -296,7 +296,7 @@ async function handleAdminCommission(chatId: number) {
       .eq('status', 'finished');
 
     let totalCommission = 0, todayCommission = 0;
-    let totalBets = 0, todayBets = 0;
+    let totalBets = 0, _todayBets = 0;
     let gameCount = 0;
 
     if (games) {
@@ -340,7 +340,7 @@ async function handleAdminCommission(chatId: number) {
 
         totalCommission += commission;
         totalBets += entryTotal;
-        if (isToday) { todayCommission += commission; todayBets += entryTotal; }
+        if (isToday) { todayCommission += commission; _todayBets += entryTotal; }
         gameCount++;
       }
     }

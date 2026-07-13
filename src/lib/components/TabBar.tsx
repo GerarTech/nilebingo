@@ -24,7 +24,7 @@ export default function TabBar({ activeTab, onTabChange, inGame, themeColor = '#
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 tab-bar-safe-area">
-      <div className="glass border-t border-white/5 px-2 py-1">
+      <div className="glass border-t border-gold-subtle px-2 py-1">
         <div className="flex items-center justify-around max-w-lg mx-auto">
           {tabs.map((tab) => {
             const Icon = tab.icon;
@@ -37,11 +37,17 @@ export default function TabBar({ activeTab, onTabChange, inGame, themeColor = '#
                 className="flex flex-col items-center gap-0.5 py-2 px-3 rounded-xl transition-all duration-200 min-w-[60px] relative"
                 style={{ color: isActive ? themeColor : undefined }}
               >
-                <Icon size={22} style={{ color: isActive ? themeColor : undefined }} />
-                <span className="text-[10px] font-medium" style={{ color: isActive ? themeColor : undefined }}>{tab.label}</span>
-                {isActive && (
-                  <div className="absolute bottom-1 w-6 h-0.5 rounded-full" style={{ backgroundColor: themeColor }} />
-                )}
+                <div className="relative">
+                  <Icon size={22} style={{ color: isActive ? themeColor : undefined }} className={`transition-all duration-200 ${isActive ? 'drop-shadow-[0_0_6px_rgba(254,232,0,0.4)]' : ''}`} />
+                  {isActive && (
+                    <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-5 h-0.5 rounded-full shadow-gold-glow-sm"
+                      style={{ backgroundColor: themeColor, boxShadow: `0 0 8px ${themeColor}66` }} />
+                  )}
+                </div>
+                <span className={`text-[10px] font-medium transition-all duration-200 ${isActive ? 'font-bold' : ''}`}
+                  style={{ color: isActive ? themeColor : undefined }}>
+                  {tab.label}
+                </span>
               </button>
             );
           })}

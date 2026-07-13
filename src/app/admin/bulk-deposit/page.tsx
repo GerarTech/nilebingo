@@ -78,7 +78,7 @@ export default function BulkDepositPage() {
         </div>
       </div>
 
-      <div className="bg-navy rounded-2xl border border-white/5 p-4 space-y-4">
+      <div className="bg-navy rounded-2xl border border-gold-subtle p-4 space-y-4">
         <div>
           <label className="text-[10px] text-gray-400 uppercase block mb-1.5">Find User</label>
           <div className="flex gap-2">
@@ -87,7 +87,7 @@ export default function BulkDepositPage() {
               onChange={e => setSearchQuery(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && searchUser()}
               placeholder="Telegram ID, username, or name"
-              className="flex-1 bg-navy-card border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-gold/50"
+              className="flex-1 bg-navy-card border border-gold-subtle rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-gold/50"
             />
             <button onClick={searchUser} disabled={searching}
               className="bg-gold text-navy px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer hover:opacity-90 disabled:opacity-50">
@@ -115,7 +115,7 @@ export default function BulkDepositPage() {
               <label className="text-[10px] text-gray-400 uppercase block mb-1.5">Amount (ETB)</label>
               <input type="number" min="1" max="100000" step="1" value={amount}
                 onChange={e => setAmount(Number(e.target.value) || 0)}
-                className="w-full bg-navy-card border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-gold/50"
+                className="w-full bg-navy-card border border-gold-subtle rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-gold/50"
               />
             </div>
 
@@ -124,7 +124,7 @@ export default function BulkDepositPage() {
               <input type="text" value={reason}
                 onChange={e => setReason(e.target.value)}
                 placeholder="e.g. promotional credit"
-                className="w-full bg-navy-card border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-gold/50"
+                className="w-full bg-navy-card border border-gold-subtle rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-gold/50"
               />
             </div>
 

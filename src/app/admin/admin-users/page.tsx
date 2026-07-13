@@ -11,11 +11,11 @@ interface AdminUser {
   last_login: string | null;
 }
 
-const ROLE_COLORS: Record<string, string> = {
-  super_admin: 'text-red-400 bg-red-500/10 border-red-500/20',
-  admin: 'text-gold bg-gold/10 border-gold/20',
-  moderator: 'text-blue-400 bg-blue-500/10 border-blue-500/20',
-  support: 'text-green-400 bg-green-500/10 border-green-500/20',
+const ROLE_CONFIG: Record<string, { color: string; label: string; description: string }> = {
+  super_admin: { color: 'text-red-400 bg-red-500/10 border-red-500/20', label: 'Super Admin', description: 'Full access, can manage all admin users' },
+  admin: { color: 'text-gold bg-gold/10 border-gold/20', label: 'Admin', description: 'Full access to all features' },
+  moderator: { color: 'text-blue-400 bg-blue-500/10 border-blue-500/20', label: 'Moderator', description: 'View users, approve/reject transactions' },
+  support: { color: 'text-green-400 bg-green-500/10 border-green-500/20', label: 'Support', description: 'View-only access, dashboard & contacts' },
 };
 
 export default function AdminUsersPage() {
@@ -27,10 +27,16 @@ export default function AdminUsersPage() {
   const [newPassword, setNewPassword] = useState('');
   const [newRole, setNewRole] = useState<string>('admin');
   const [saving, setSaving] = useState(false);
+  const [currentRole, setCurrentRole] = useState('');
 
   // Edit role state
   const [editRoleId, setEditRoleId] = useState<string | null>(null);
   const [editRoleValue, setEditRoleValue] = useState<string>('');
+
+  useEffect(() => {
+    const roleCookie = document.cookie.split('; ').find(r => r.startsWith('admin_role='));
+    if (roleCookie) setCurrentRole(roleCookie.split('=')[1]);
+  }, []);
 
   const loadUsers = useCallback(async () => {
     setError(null);
@@ -119,6 +125,11 @@ export default function AdminUsersPage() {
     }
   };
 
+  const isSuperAdmin = currentRole === 'super_admin';
+  const availableRoles = isSuperAdmin
+    ? ['super_admin', 'admin', 'moderator', 'support']
+    : ['admin', 'moderator', 'support'];
+
   return (
     <div className="max-w-4xl mx-auto space-y-5">
       <div className="flex items-center justify-between">
@@ -136,6 +147,16 @@ export default function AdminUsersPage() {
           <Plus size={14} />
           Add Admin
         </button>
+      </div>
+
+      {/* Role Legend */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        {Object.entries(ROLE_CONFIG).map(([key, config]) => (
+          <div key={key} className="bg-navy rounded-xl p-2.5 border border-white/5">
+            <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold border ${config.color}`}>{config.label}</span>
+            <p className="text-[9px] text-gray-500 mt-1">{config.description}</p>
+          </div>
+        ))}
       </div>
 
       {error && (
@@ -182,12 +203,11 @@ export default function AdminUsersPage() {
                           value={editRoleValue}
                           onChange={e => setEditRoleValue(e.target.value)}
                           className="bg-navy border border-white/10 rounded px-2 py-1 text-white text-[10px]"
-                          disabled={user.role === 'super_admin'}
+                          disabled={user.role === 'super_admin' && !isSuperAdmin}
                         >
-                          <option value="super_admin">super_admin</option>
-                          <option value="admin">admin</option>
-                          <option value="moderator">moderator</option>
-                          <option value="support">support</option>
+                          {availableRoles.map(r => (
+                            <option key={r} value={r}>{ROLE_CONFIG[r]?.label || r}</option>
+                          ))}
                         </select>
                         <button
                           onClick={() => handleUpdateRole(user.id)}
@@ -204,8 +224,8 @@ export default function AdminUsersPage() {
                         </button>
                       </div>
                     ) : (
-                      <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold border ${ROLE_COLORS[user.role] || 'text-gray-400'}`}>
-                        {user.role}
+                      <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold border ${ROLE_CONFIG[user.role]?.color || 'text-gray-400'}`}>
+                        {ROLE_CONFIG[user.role]?.label || user.role}
                       </span>
                     )}
                   </td>
@@ -230,6 +250,9 @@ export default function AdminUsersPage() {
                             <Trash2 size={13} />
                           </button>
                         </>
+                      )}
+                      {user.role === 'super_admin' && !isSuperAdmin && (
+                        <span className="text-[9px] text-gray-500 italic">Protected</span>
                       )}
                     </div>
                   </td>
@@ -270,15 +293,34 @@ export default function AdminUsersPage() {
             </div>
             <div>
               <label className="text-[10px] text-gray-400 uppercase block mb-1">Role</label>
-              <select
-                value={newRole}
-                onChange={e => setNewRole(e.target.value)}
-                className="w-full bg-navy-light border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-gold/50"
-              >
-                <option value="admin">Admin</option>
-                <option value="moderator">Moderator</option>
-                <option value="support">Support</option>
-              </select>
+              <div className="space-y-1.5">
+                {availableRoles.map(r => (
+                  <label
+                    key={r}
+                    className={`flex items-center gap-2.5 p-2 rounded-lg border cursor-pointer transition-all ${
+                      newRole === r ? 'bg-gold/5 border-gold/30' : 'bg-navy-light border-white/5 hover:border-white/10'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="role"
+                      value={r}
+                      checked={newRole === r}
+                      onChange={e => setNewRole(e.target.value)}
+                      className="sr-only"
+                    />
+                    <div className={`w-3 h-3 rounded-full border-2 flex items-center justify-center ${newRole === r ? 'border-gold' : 'border-gray-500'}`}>
+                      {newRole === r && <div className="w-1.5 h-1.5 rounded-full bg-gold" />}
+                    </div>
+                    <div>
+                      <span className={`text-[10px] font-semibold ${ROLE_CONFIG[r]?.color?.split(' ')[0] || 'text-gray-400'}`}>
+                        {ROLE_CONFIG[r]?.label || r}
+                      </span>
+                      <p className="text-[8px] text-gray-500">{ROLE_CONFIG[r]?.description}</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
             </div>
             <div className="flex gap-2 pt-1">
               <button

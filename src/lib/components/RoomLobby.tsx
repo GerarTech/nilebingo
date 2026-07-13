@@ -51,10 +51,10 @@ export default function RoomLobby({
   // ===== GAME IN PROGRESS WAIT SCREEN =====
   if (gameActive && !isRegistered) {
     return (
-      <div className="px-4 pt-4 animate-fade-in pb-24 font-sans bg-[#0c1322] min-h-screen text-white">
-        <div className="flex items-center justify-between mb-4 border-b border-[#233c66]/30 pb-3">
+      <div className="px-4 pt-4 animate-fade-in pb-24 font-sans bg-gradient-navy min-h-screen text-white">
+        <div className="flex items-center justify-between mb-4 border-b border-gold-subtle pb-3">
           <button onClick={onBack}
-            className="flex items-center gap-1.5 text-xs text-gray-300 hover:text-white bg-[#141f33] px-3 py-1.5 rounded-xl border border-[#233c66]/40 font-bold transition-all cursor-pointer">
+            className="flex items-center gap-1.5 text-xs text-gray-300 hover:text-white bg-[#141f33] px-3 py-1.5 rounded-xl border border-gold-subtle font-bold transition-all cursor-pointer">
             ⬅ Back
           </button>
           <div className="text-center">
@@ -74,7 +74,7 @@ export default function RoomLobby({
           <p className="text-[10px] text-gray-400 mt-2">Please wait for the current game to finish.</p>
         </div>
 
-        <div className="bg-[#142036]/40 border border-[#233c66]/30 rounded-2xl p-4 mt-4 text-center">
+        <div className="bg-[#142036]/40 border border-gold-subtle rounded-2xl p-4 mt-4 text-center">
           <div className="text-xs text-gray-400">
             Card selection will be available when the current game ends.
           </div>
@@ -89,7 +89,7 @@ export default function RoomLobby({
     const prizePool = fee * totalCards * (1 - commissionRate / 100);
 
     return (
-      <div className="px-4 pt-4 animate-fade-in pb-24 font-sans bg-[#0c1322] min-h-screen text-white">
+      <div className="px-4 pt-4 animate-fade-in pb-24 font-sans bg-gradient-navy min-h-screen text-white">
         <div className="space-y-4 animate-fade-in">
           <div className="relative bg-gradient-to-b from-[#1c0d02] to-[#0c0500] border border-[#ff5a00]/30 p-5 rounded-3xl shadow-xl shadow-black/40 overflow-hidden text-center">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,90,0,0.04)_0%,transparent_80%)] pointer-events-none" />
@@ -122,18 +122,18 @@ export default function RoomLobby({
             </div>
 
             <div className="text-center">
-              <div className="inline-block bg-white/[0.03] border border-white/[0.06] rounded-xl px-6 py-2.5 text-center">
+                <div className="inline-block bg-white/[0.03] border border-gold-subtle rounded-xl px-6 py-2.5 text-center">
                 <div className="text-[8px] text-gray-500 uppercase font-bold tracking-wider">Stake</div>
                 <div className="text-xs font-extrabold text-white mt-1">{Number(fee * selectedCards.length).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {t('birr')}</div>
               </div>
             </div>
           </div>
 
-          <div className="bg-[#142036]/40 border border-[#233c66]/30 rounded-2xl p-4 shadow-xl">
+          <div className="bg-[#142036]/40 border border-gold-subtle rounded-2xl p-4 shadow-xl">
             <div className="text-[10px] text-amber-400 font-black uppercase tracking-widest mb-3 text-center">🎴 YOUR CARDS</div>
             <div className="grid grid-cols-2 gap-3 max-w-sm mx-auto">
               {selectedCards.map((cardNum) => (
-                <div key={cardNum} className="bg-gradient-to-b from-[#142036] to-[#0e1726] rounded-xl p-3 border border-[#233c66]/55 shadow-md">
+                <div key={cardNum} className="bg-gradient-to-b from-[#142036] to-[#0e1726] rounded-xl p-3 border border-gold-medium shadow-md">
                   <div className="text-[10px] font-black tracking-wider text-amber-400 text-center mb-2">CARD #{cardNum}</div>
                   <BingoGrid card={getSeededCard(cardNum)} drawnNumbers={[]} compact={true} />
                 </div>
@@ -152,10 +152,10 @@ export default function RoomLobby({
 
   // ===== CARD SELECTION =====
   return (
-    <div className="px-4 pt-4 animate-fade-in pb-24 font-sans bg-[#0c1322] min-h-screen text-white">
-      <div className="flex items-center justify-between mb-4 border-b border-[#233c66]/30 pb-3">
+    <div className="px-4 pt-4 animate-fade-in pb-24 font-sans bg-gradient-navy min-h-screen text-white">
+      <div className="flex items-center justify-between mb-4 border-b border-gold-subtle pb-3">
         <button onClick={onBack}
-          className="flex items-center gap-1.5 text-xs text-gray-300 hover:text-white bg-[#141f33] px-3 py-1.5 rounded-xl border border-[#233c66]/40 font-bold transition-all cursor-pointer">
+          className="flex items-center gap-1.5 text-xs text-gray-300 hover:text-white bg-[#141f33] px-3 py-1.5 rounded-xl border border-gold-subtle font-bold transition-all cursor-pointer">
           ⬅ Back
         </button>
         <div className="text-center">
@@ -167,11 +167,11 @@ export default function RoomLobby({
       </div>
 
       <div className="flex items-stretch gap-1.5 mb-4">
-        <div className="bg-[#141f33] border border-[#233c66]/30 p-2.5 rounded-xl flex-1 text-center shadow-lg">
+        <div className="bg-[#141f33] border border-gold-subtle p-2.5 rounded-xl flex-1 text-center shadow-lg">
           <div className="text-[7.5px] text-gray-400 font-extrabold uppercase tracking-wider">WALLET</div>
           <div className="text-sm font-black text-white mt-1">{Number(totalBalance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {t('birr')}</div>
         </div>
-        <div className="bg-[#141f33] border border-[#233c66]/30 p-2.5 rounded-xl flex-1 text-center shadow-lg">
+        <div className="bg-[#141f33] border border-gold-subtle p-2.5 rounded-xl flex-1 text-center shadow-lg">
           <div className="text-[7.5px] text-gray-400 font-extrabold uppercase tracking-wider">PRIZE</div>
           <div className="text-sm font-black text-gold mt-1">
             {(() => {
@@ -180,7 +180,7 @@ export default function RoomLobby({
             })()}
           </div>
         </div>
-        <div className="bg-[#141f33] border border-[#233c66]/30 p-2.5 rounded-xl flex-1 text-center shadow-lg">
+        <div className="bg-[#141f33] border border-gold-subtle p-2.5 rounded-xl flex-1 text-center shadow-lg">
           <div className="text-[7.5px] text-gray-400 font-extrabold uppercase tracking-wider">STAKE</div>
           <div className="text-sm font-black text-amber-400 mt-1">{Number(fee * selectedCards.length).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {t('birr')}</div>
         </div>
@@ -196,11 +196,11 @@ export default function RoomLobby({
           <span className="font-bold text-gray-300 text-[11px] uppercase tracking-wider">MY CARDS</span>
         </div>
         <div className="text-xs font-black text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-md">
-          Selected: {selectedCards.length}/5
+          Selected: {selectedCards.length}/2
         </div>
       </div>
 
-      <div className="rounded-2xl bg-[#0a1120] border border-[#1e2f4d]/60 p-2.5 text-center relative overflow-hidden mb-4 shadow-xl shadow-black/30">
+      <div className="rounded-2xl bg-[#0a1120] border border-gold-subtle p-2.5 text-center relative overflow-hidden mb-4 shadow-xl shadow-black/30 gold-border-hover transition-all">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(35,60,102,0.06)_0%,transparent_75%)] pointer-events-none" />
         <div className="grid grid-cols-10 gap-[5px] sm:gap-1.5 max-h-[35vh] overflow-y-auto pb-1 relative z-10 scrollbar-none">
           {cards.map((num) => {
@@ -212,8 +212,8 @@ export default function RoomLobby({
                   isSelected
                     ? 'bg-gradient-to-b from-[#ff5a00] to-[#e04f00] border-[#ff7a22]/30 border-b-[3.5px] border-b-[#9e3800] text-white shadow-lg shadow-[#ff5a00]/25 font-black scale-[1.04] z-10'
                     : isTaken
-                      ? 'bg-[#0e1624]/40 text-[#253248] border-[#182335]/30 border-dashed cursor-not-allowed opacity-35 text-[8.5px] sm:text-[9.5px]'
-                      : 'bg-[#131f36] border-[#1e2f4d] border-b-[3px] border-b-[#1e2f4d] text-white hover:bg-[#1a2b4b] active:translate-y-[1px] active:border-b-[1.5px] cursor-pointer'
+                      ? 'bg-[#0e1624]/40 text-[#253248] border-gold-subtle border-dashed cursor-not-allowed opacity-35 text-[8.5px] sm:text-[9.5px]'
+                      : 'bg-[#131f36] border-gold-subtle border-b-[3px] border-b-gold-medium text-white hover:bg-[#1a2b4b] active:translate-y-[1px] active:border-b-[1.5px] cursor-pointer gold-border-hover transition-all'
                 }`}>
                 {num}
               </button>
@@ -223,13 +223,13 @@ export default function RoomLobby({
       </div>
 
       {selectedCards.length > 0 && (
-        <div className="mb-4 bg-[#142036]/60 border border-[#233c66]/40 rounded-2xl p-3 shadow-xl">
+        <div className="mb-4 bg-[#142036]/60 border border-gold-subtle rounded-2xl p-3 shadow-xl">
           <div className="text-[10px] text-amber-400 font-extrabold uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
             <span>👁</span> Card Preview
           </div>
           <div className="grid grid-cols-2 gap-3">
             {selectedCards.map((cardNum, cIndex) => (
-              <div key={cardNum} className="bg-gradient-to-b from-[#142036]/80 to-[#0e1726]/65 rounded-xl p-2.5 border border-[#233c66]/30 shadow-md">
+              <div key={cardNum} className="bg-gradient-to-b from-[#142036]/80 to-[#0e1726]/65 rounded-xl p-2.5 border border-gold-subtle shadow-md">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-[9px] font-black tracking-wider text-[#8da0c4]">CARD #{cardNum}</span>
                   <span className="text-[7.5px] font-black text-amber-400 bg-amber-400/10 px-1 rounded uppercase">Selected</span>
@@ -261,7 +261,7 @@ export default function RoomLobby({
             </button>
           ) : (
             <button disabled
-              className="flex-1 bg-gray-500/10 border border-white/5 text-gray-500 font-extrabold py-3.5 rounded-xl text-xs transition-all uppercase tracking-widest cursor-not-allowed text-center">
+              className="flex-1 bg-gray-500/10 border border-gold-subtle text-gray-500 font-extrabold py-3.5 rounded-xl text-xs transition-all uppercase tracking-widest cursor-not-allowed text-center">
               {selectedCards.length === 0 ? `SELECT A CARD (${fee} ${t('birr')})` : 'SELECT A CARD'}
             </button>
           )}

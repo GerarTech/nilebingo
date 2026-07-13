@@ -67,7 +67,7 @@ function hasAnyActiveGameForRoom(roomId: string, activeCodes: Set<string>): bool
 }
 
 function HomePage() {
-  const { profile, wallet, language, activeTab, loading, t, setActiveTab, setLanguage, initialize, updateBalance, updateAvatar, refreshWallet } = useApp();
+  const { profile, wallet, language, activeTab, loading, t, setActiveTab, setLanguage, initialize, updateBalance, updateAvatar, updateName, refreshWallet } = useApp();
 
   const [inGame, setInGame] = useState(false);
   const [gameCard, setGameCard] = useState<number[][]>([]);
@@ -105,12 +105,13 @@ function HomePage() {
   const [takenCards, setTakenCards] = useState<number[]>([]);
   const [lobbyPlayerCount, setLobbyPlayerCount] = useState<number>(0);
   const winInProgressRef = useRef(false);
+  const leaveGameRef = useRef<(() => Promise<void>) | null>(null);
 
   const [selectedRoom, setSelectedRoom] = useState<RoomConfig | null>(null);
   const [commissionRate, setCommissionRate] = useState<number>(15);
   const [appName, setAppName] = useState<string>('Nile BINGO');
-  const [appLogo, setAppLogo] = useState<string>('🎰');
-  const [appLogoPng, setAppLogoPng] = useState<string | null>(null);
+  const [appLogo, setAppLogo] = useState<string>('');
+  const [appLogoPng, setAppLogoPng] = useState<string | null>('/logo.png');
   const [botUsername, setBotUsername] = useState<string>('yenedating_bot');
   const [colorScheme, setColorScheme] = useState<string>('gold');
   const [rulesText, setRulesText] = useState<string>('');
@@ -167,6 +168,7 @@ function HomePage() {
   const gameStatusChannelRef = useRef<any>(null);
   const opponentWinnerRef = useRef<string | null>(null);
   const activeGameCodesRef = useRef<Set<string>>(new Set());
+  const activeStakesRef = useRef<Set<number>>(new Set());
   const gameEndTimersRef = useRef<Record<string, number>>({});
   const prevIsPlayingRef = useRef<Record<string, boolean>>({});
 
@@ -494,8 +496,8 @@ function HomePage() {
 
     const isSelected = selectedCards.includes(num);
 
-    if (!isSelected && selectedCards.length >= 5) {
-      showToast(t ? t('max_5_cards') : 'Maximum of 5 cards allowed', 'error');
+    if (!isSelected && selectedCards.length >= 2) {
+      showToast(t ? t('max_5_cards') : 'Maximum of 2 cards allowed', 'error');
       return;
     }
 
@@ -614,8 +616,21 @@ function HomePage() {
           .update({ status: 'finished' })
           .eq('status', 'active')
           .lt('created_at', new Date(Date.now() - 10 * 60 * 1000).toISOString());
-        const { data } = await supabase.from('games').select('code').eq('status', 'active');
-        if (data) activeGameCodesRef.current = new Set(data.map(g => g.code));
+        const { data } = await supabase.from('games').select('code, stake_id').eq('status', 'active');
+        if (data) {
+          activeGameCodesRef.current = new Set(data.map(g => g.code));
+          // Track which stake amounts currently have active games
+          const activeStakeIds = data.map(g => g.stake_id).filter(Boolean);
+          if (activeStakeIds.length > 0) {
+            const { data: stakes } = await supabase
+              .from('stakes')
+              .select('amount')
+              .in('id', activeStakeIds);
+            activeStakesRef.current = new Set(stakes?.map(s => Number(s.amount)) || []);
+          } else {
+            activeStakesRef.current = new Set();
+          }
+        }
       } catch {}
     };
     fetchActive();
@@ -633,17 +648,23 @@ function HomePage() {
       const sg = startGameplayRef.current;
       const cr = commissionRateRef.current;
       const activeCodes = activeGameCodesRef.current;
+      const activeStakes = activeStakesRef.current;
+      // Check if this room's stake has an active game (one-at-a-time per stake)
+      const isSrLocked = sr ? activeStakes.has(sr.entry) : false;
       const isSrPlaying = sr ? hasAnyActiveGameForRoom(sr.id, activeCodes) : false;
-      if (sr) setSelectedRoomActive(isSrPlaying);
+      if (sr) setSelectedRoomActive(isSrPlaying || isSrLocked);
       const now = Date.now();
       const timers = gameEndTimersRef.current;
       const prev = prevIsPlayingRef.current;
       setRooms(prevRooms => prevRooms.map(r => {
         const period = getRoomPeriod(r.id);
         const isPlaying = hasAnyActiveGameForRoom(r.id, activeCodes);
+        // Stake is locked if another game with same entry fee is active
+        const isLocked = activeStakes.has(r.entry);
 
-        // Detect active→inactive transition: start 45s card selection timer
-        if (prev[r.id] === true && !isPlaying) {
+        // Detect active→inactive transition: start 50s card selection timer
+        // Only start timer when stake is NOT locked by another game
+        if (prev[r.id] === true && !isPlaying && !isLocked) {
           timers[r.id] = now + 50000;
         }
         prev[r.id] = isPlaying;
@@ -658,15 +679,18 @@ function HomePage() {
           remaining = getRoomCountdown(period);
         }
 
-        if (!isPlaying && remaining <= 1 && sr && sr.id === r.id && !ig) {
+        // Don't auto-start if stake is locked by another active game
+        if (!isPlaying && !isLocked && remaining <= 1 && sr && sr.id === r.id && !ig) {
           if (ir) sg(false);
           else if (isr) sg(true);
         }
         const roomComm = r.commission ?? cr;
-        return { ...r, status: isPlaying ? 'playing' : 'starting_soon', countdown: remaining, winAmount: (r.entry * r.players) * (1 - roomComm / 100) };
+        // Show as 'playing' if either this room's cycle game is active OR the stake is locked
+        const displayStatus = (isPlaying || isLocked) ? 'playing' : 'starting_soon';
+        return { ...r, status: displayStatus, countdown: remaining, winAmount: (r.entry * r.players) * (1 - roomComm / 100) };
       }));
-      // Update game ID every tick — only when user hasn't registered and room has no active game
-      if (sr && !ig && !ir && !isr && !isSrPlaying) {
+      // Update game ID every tick — only when user hasn't registered, room has no active game, AND stake is not locked
+      if (sr && !ig && !ir && !isr && !isSrPlaying && !isSrLocked) {
         void (async () => {
           const serverGameId = await getCurrentLobbyGameId(sr.id);
           if (serverGameId) {
@@ -781,7 +805,7 @@ function HomePage() {
           return updated;
         });
       }
-    }, 2100);
+    }, 3000);
     return () => { if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; } };
   }, [inGame, opponentWinner, showWinModal, language, isWatching, gameId, selectedStake, addGameToHistory, playerCards, autoMark, autoWin, deterministicSequence, appointedCard]);
 
@@ -998,6 +1022,8 @@ function HomePage() {
                 } catch {}
                 await refreshWallet();
                 setTimeout(() => { void refreshWallet(); }, 500);
+                // Exit game after wallet is refreshed — countdown won't do it during pending win
+                leaveGameRef.current?.();
               }, 5500);
             } else {
               // Immediate finalization
@@ -1048,7 +1074,7 @@ function HomePage() {
     const period = getRoomPeriod(room.id);
     const currentCycle = Math.floor(currentSec / period);
     const currentGameCode = generateDeterministicGameId(room.id, currentCycle);
-    // Only block if current cycle's game is actually active (not a stale game from a previous cycle)
+    // Block if current cycle's game is actually active (not a stale game from a previous cycle)
     if (activeGameCodesRef.current.has(currentGameCode)) {
       showToast('Game in progress. Please wait for it to finish.', 'info');
       return;
@@ -1085,9 +1111,9 @@ function HomePage() {
   const playWithCard = useCallback(async () => {
     if (selectedCards.length === 0) return;
 
-    // Check if a game is already active for this room (any recent cycle)
+    // Check if a game is already active for this room (any recent cycle) or stake is locked
     const roomForCheck = selectedRoomRef.current;
-    if (roomForCheck && hasAnyActiveGameForRoom(roomForCheck.id, activeGameCodesRef.current)) {
+    if (roomForCheck && (hasAnyActiveGameForRoom(roomForCheck.id, activeGameCodesRef.current) || activeStakesRef.current.has(roomForCheck.entry))) {
       showToast('Game already in progress. Please wait for the current game to finish.', 'info');
       return;
     }
@@ -1175,7 +1201,8 @@ function HomePage() {
   const leaveGame = useCallback(async () => {
     if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
     // Capture pre-reset state for history check before we reset everything
-    const shouldRecordLoss = inGame && !isWatching && gameId && !showWinModal && !opponentWinner;
+    // Never record a loss if the user has a pending win - the finalize call will handle it
+    const shouldRecordLoss = inGame && !isWatching && gameId && !showWinModal && !opponentWinner && !isPendingWin;
     // Reset all state synchronously BEFORE any async operations
     // to prevent re-renders with inGame=true and opponentWinner=null from
     // re-creating the draw interval or keeping the live poll active
@@ -1201,7 +1228,10 @@ function HomePage() {
     await refreshWallet();
     setTakenCards([]); setLobbyPlayerCount(0);
     if (realtimeChannelRef.current) { supabase.removeChannel(realtimeChannelRef.current); realtimeChannelRef.current = null; }
-  }, [inGame, isWatching, gameId, showWinModal, opponentWinner, selectedStake, addGameToHistory, profile?.id, refreshWallet]);
+  }, [inGame, isWatching, gameId, showWinModal, opponentWinner, selectedStake, addGameToHistory, profile?.id, refreshWallet, isPendingWin]);
+
+  // Keep ref in sync so triggerWin can call leaveGame without circular dependency
+  useEffect(() => { leaveGameRef.current = leaveGame; }, [leaveGame]);
 
   const handleLeaveAttempt = useCallback(() => {
     if (isWatching) leaveGame();
@@ -1246,11 +1276,13 @@ function HomePage() {
         addGameToHistory(gameId, selectedStake || 10, 'loss');
         setOpponentWinner(null);
       }
-      leaveGame(); return;
+      // Don't leave game if there's a pending win - the finalize call will handle exit
+      if (!isPendingWin) leaveGame();
+      return;
     }
     const timer = setTimeout(() => setResultCountdown(prev => (prev !== null ? prev - 1 : null)), 1000);
     return () => clearTimeout(timer);
-  }, [resultCountdown, showWinModal, opponentWinner, leaveGame, addGameToHistory, gameId, selectedStake]);
+  }, [resultCountdown, showWinModal, opponentWinner, leaveGame, addGameToHistory, gameId, selectedStake, isPendingWin]);
 
   // ============ REFERRAL ============
   useEffect(() => {
@@ -1317,7 +1349,7 @@ function HomePage() {
     if (activeTab === 'scores') return <ScoresTab profile={profile} wallet={wallet} dbLeaderboard={dbLeaderboard} t={t} />;
     if (activeTab === 'history') return <HistoryTab stakeHistory={stakeHistory} t={t} />;
     if (activeTab === 'wallet') return <WalletTab wallet={wallet} walletView={walletView} onSetWalletView={setWalletView} botUsername={botUsername} referralEnabled={referralEnabled} referralBonus={referralBonus} referralCount={referralCount} inviteLink={inviteLink} copiedLink={copiedLink} withdrawMinAmount={withdrawMinAmount} withdrawRequiredGames={withdrawRequiredGames} t={t} onCopyRefLink={copyRefLink} onSimulateReferral={simulateReferralJoin} onRefreshWallet={refreshWallet} />;
-    if (activeTab === 'profile') return <ProfileTab profile={profile} wallet={wallet} stakeHistory={stakeHistory} language={language} t={t} onSetLanguage={setLanguage} onUpdateAvatar={updateAvatar} />;
+    if (activeTab === 'profile') return <ProfileTab profile={profile} wallet={wallet} stakeHistory={stakeHistory} language={language} t={t} onSetLanguage={setLanguage} onUpdateAvatar={updateAvatar} onUpdateName={updateName} />;
 
     // Game tab
     if (inGame) {
@@ -1409,7 +1441,7 @@ function HomePage() {
 
   if (telegramAvailable === false) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0c1322] p-8">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-navy p-8">
         <div className="text-center max-w-sm">
           <div className="text-6xl mb-6">📱</div>
           <h1 className="text-lg font-black text-white mb-4 leading-relaxed">ቴሌግራም ያስፈልጋል</h1>
@@ -1421,7 +1453,7 @@ function HomePage() {
     );
   }
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="text-center">{appLogoPng ? <img src={appLogoPng} alt="Logo" className="h-12 w-12 object-contain mx-auto mb-4" /> : <div className="text-4xl font-black mb-4 animate-pulse" style={{ color: getThemeColor() }}>{appLogo}</div>}<div className="text-4xl font-black mb-4 animate-pulse" style={{ color: getThemeColor() }}>{appName}</div><div className="text-gray-400 text-sm">{t('loading')}</div></div></div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center bg-gradient-navy"><div className="text-center">{appLogoPng ? <img src={appLogoPng} alt="Logo" className="h-12 w-12 object-contain mx-auto mb-4 drop-shadow-[0_0_12px_rgba(254,232,0,0.3)]" /> : <div className="text-4xl font-black mb-4 animate-pulse" style={{ color: getThemeColor() }}>{appLogo}</div>}<div className="text-4xl font-black mb-4 animate-pulse drop-shadow-[0_0_12px_rgba(254,232,0,0.3)]" style={{ color: getThemeColor() }}>{appName}</div><div className="text-gray-400 text-sm">{t('loading')}</div></div></div>;
 
   return (
     <div className="min-h-screen pb-20">

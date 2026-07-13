@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Coins, TrendingUp, TrendingDown, DollarSign, RefreshCw } from 'lucide-react';
+import { Coins, TrendingUp, TrendingDown, DollarSign } from 'lucide-react';
 
 export default function CommissionPage() {
   const [report, setReport] = useState<any>(null);
@@ -38,17 +38,17 @@ export default function CommissionPage() {
           type="date"
           value={dateFrom}
           onChange={(e) => { setLoading(true); setDateFrom(e.target.value); }}
-          className="bg-navy border border-white/10 rounded-lg px-3 py-2 text-xs text-white [color-scheme:dark]"
+          className="bg-navy border border-gold-subtle rounded-lg px-3 py-2 text-xs text-white [color-scheme:dark]"
         />
         <input
           type="date"
           value={dateTo}
           onChange={(e) => { setLoading(true); setDateTo(e.target.value); }}
-          className="bg-navy border border-white/10 rounded-lg px-3 py-2 text-xs text-white [color-scheme:dark]"
+          className="bg-navy border border-gold-subtle rounded-lg px-3 py-2 text-xs text-white [color-scheme:dark]"
         />
         <button
           onClick={() => { setDateFrom(''); setDateTo(''); setLoading(true); }}
-          className="px-3 py-2 rounded-lg text-xs bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10"
+          className="px-3 py-2 rounded-lg text-xs bg-white/5 text-gray-400 border border-gold-subtle hover:bg-white/10"
         >
           Reset
         </button>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Search, Check, X, Phone, User as UserIcon, Wallet, Trash2, AlertTriangle, ChevronDown, ChevronUp, Users } from 'lucide-react';
+import { Search, Check, Phone, User as UserIcon, Wallet, Trash2, AlertTriangle, ChevronDown, ChevronUp, Users } from 'lucide-react';
 
 interface UserWithWallet {
   id: string;
@@ -216,22 +216,22 @@ export default function UsersPage() {
           )}
           {bulkAction === 'adjust' && (
             <div className="space-y-2">
-              <select value={bulkType} onChange={(e) => setBulkType(e.target.value as any)} className="w-full bg-navy-light border border-white/10 rounded-lg px-3 py-2 text-xs text-white">
+              <select value={bulkType} onChange={(e) => setBulkType(e.target.value as any)} className="w-full bg-navy-light border border-gold-subtle rounded-lg px-3 py-2 text-xs text-white">
                 <option value="main">Main Wallet</option>
                 <option value="play">Play Wallet</option>
               </select>
-              <input type="number" value={bulkAmount} onChange={(e) => setBulkAmount(e.target.value)} placeholder="Amount (+/-)" className="w-full bg-navy-light border border-white/10 rounded-lg px-3 py-2 text-xs text-white" />
-              <input type="text" value={bulkReason} onChange={(e) => setBulkReason(e.target.value)} placeholder="Reason" className="w-full bg-navy-light border border-white/10 rounded-lg px-3 py-2 text-xs text-white" />
+              <input type="number" value={bulkAmount} onChange={(e) => setBulkAmount(e.target.value)} placeholder="Amount (+/-)" className="w-full bg-navy-light border border-gold-subtle rounded-lg px-3 py-2 text-xs text-white" />
+              <input type="text" value={bulkReason} onChange={(e) => setBulkReason(e.target.value)} placeholder="Reason" className="w-full bg-navy-light border border-gold-subtle rounded-lg px-3 py-2 text-xs text-white" />
               <button onClick={executeBulkAction} disabled={bulkProcessing || !bulkAmount || !bulkReason} className="w-full bg-gold text-navy font-bold py-2 rounded-lg text-xs disabled:opacity-50">{bulkProcessing ? 'Processing...' : `Adjust ${selectedIds.size} Wallet(s)`}</button>
             </div>
           )}
           {bulkAction === 'set' && (
             <div className="space-y-2">
-              <select value={bulkType} onChange={(e) => setBulkType(e.target.value as any)} className="w-full bg-navy-light border border-white/10 rounded-lg px-3 py-2 text-xs text-white">
+              <select value={bulkType} onChange={(e) => setBulkType(e.target.value as any)} className="w-full bg-navy-light border border-gold-subtle rounded-lg px-3 py-2 text-xs text-white">
                 <option value="main">Main Wallet</option>
                 <option value="play">Play Wallet</option>
               </select>
-              <input type="number" value={bulkValue} onChange={(e) => setBulkValue(e.target.value)} placeholder="Exact new balance" className="w-full bg-navy-light border border-white/10 rounded-lg px-3 py-2 text-xs text-white" />
+              <input type="number" value={bulkValue} onChange={(e) => setBulkValue(e.target.value)} placeholder="Exact new balance" className="w-full bg-navy-light border border-gold-subtle rounded-lg px-3 py-2 text-xs text-white" />
               <button onClick={executeBulkAction} disabled={bulkProcessing || !bulkValue} className="w-full bg-emerald-600 text-white font-bold py-2 rounded-lg text-xs disabled:opacity-50">{bulkProcessing ? 'Processing...' : `Set ${selectedIds.size} Wallet(s)`}</button>
             </div>
           )}
@@ -248,7 +248,7 @@ export default function UsersPage() {
         <h1 className="text-xl font-bold text-white">Users</h1>
         <button
           onClick={() => { setBulkMode(!bulkMode); if (bulkMode) clearSelection(); }}
-          className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg transition-colors ${bulkMode ? 'bg-gold text-navy' : 'bg-navy border border-white/10 text-gray-300 hover:bg-white/5'}`}
+          className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg transition-colors ${bulkMode ? 'bg-gold text-navy' : 'bg-navy border border-gold-subtle text-gray-300 hover:bg-gold/5'}`}
         >
           <Users size={14} />
           Bulk
@@ -263,7 +263,7 @@ export default function UsersPage() {
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full bg-navy border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-gold/50"
+          className="w-full bg-navy border border-gold-subtle rounded-xl pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-gold/50"
           placeholder="Search by name, username, ID, or phone..."
         />
       </div>
@@ -288,7 +288,7 @@ export default function UsersPage() {
             <div
               key={user.id}
               onClick={() => { if (!bulkMode) loadUserDetail(user.id); }}
-              className={`glass rounded-xl p-3 cursor-pointer transition-all hover:bg-white/5 ${selectedUser?.id === user.id && !bulkMode ? 'ring-1 ring-gold/50' : ''}`}
+              className={`glass rounded-xl p-3 cursor-pointer transition-all hover:bg-gold/5 ${selectedUser?.id === user.id && !bulkMode ? 'ring-1 ring-gold/50' : ''}`}
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -357,11 +357,11 @@ export default function UsersPage() {
                 <div className="mt-4 p-3 bg-navy rounded-xl">
                   <h4 className="text-xs font-semibold text-white mb-2">Set Exact Balance <span className="text-[8px] text-gray-500 font-normal">(no notification)</span></h4>
                   <div className="space-y-2">
-                    <select value={setType} onChange={(e) => setSetType(e.target.value as any)} className="w-full bg-navy-light border border-white/10 rounded-lg px-3 py-2 text-xs text-white">
+                    <select value={setType} onChange={(e) => setSetType(e.target.value as any)} className="w-full bg-navy-light border border-gold-subtle rounded-lg px-3 py-2 text-xs text-white">
                       <option value="main">Main Wallet</option>
                       <option value="play">Play Wallet</option>
                     </select>
-                    <input type="number" value={setValue} onChange={(e) => setSetValue(e.target.value)} placeholder="Exact new balance" className="w-full bg-navy-light border border-white/10 rounded-lg px-3 py-2 text-xs text-white" />
+                    <input type="number" value={setValue} onChange={(e) => setSetValue(e.target.value)} placeholder="Exact new balance" className="w-full bg-navy-light border border-gold-subtle rounded-lg px-3 py-2 text-xs text-white" />
                     <button onClick={handleSetBalance} className="w-full bg-emerald-600 text-white font-bold py-2 rounded-lg text-xs hover:bg-emerald-500">Set Balance</button>
                   </div>
                 </div>
@@ -371,12 +371,12 @@ export default function UsersPage() {
               <div className="mt-4 p-3 bg-navy rounded-xl">
                 <h4 className="text-xs font-semibold text-white mb-2">Adjust Balance <span className="text-[8px] text-gray-500 font-normal">(sends notification)</span></h4>
                 <div className="space-y-2">
-                  <select value={adjustType} onChange={(e) => setAdjustType(e.target.value as any)} className="w-full bg-navy-light border border-white/10 rounded-lg px-3 py-2 text-xs text-white">
+                  <select value={adjustType} onChange={(e) => setAdjustType(e.target.value as any)} className="w-full bg-navy-light border border-gold-subtle rounded-lg px-3 py-2 text-xs text-white">
                     <option value="main">Main Wallet</option>
                     <option value="play">Play Wallet</option>
                   </select>
-                  <input type="number" value={adjustAmount} onChange={(e) => setAdjustAmount(e.target.value)} placeholder="Amount (+/-)" className="w-full bg-navy-light border border-white/10 rounded-lg px-3 py-2 text-xs text-white" />
-                  <input type="text" value={adjustReason} onChange={(e) => setAdjustReason(e.target.value)} placeholder="Reason" className="w-full bg-navy-light border border-white/10 rounded-lg px-3 py-2 text-xs text-white" />
+                  <input type="number" value={adjustAmount} onChange={(e) => setAdjustAmount(e.target.value)} placeholder="Amount (+/-)" className="w-full bg-navy-light border border-gold-subtle rounded-lg px-3 py-2 text-xs text-white" />
+                  <input type="text" value={adjustReason} onChange={(e) => setAdjustReason(e.target.value)} placeholder="Reason" className="w-full bg-navy-light border border-gold-subtle rounded-lg px-3 py-2 text-xs text-white" />
                   <button onClick={handleAdjustBalance} className="w-full bg-gold text-navy font-bold py-2 rounded-lg text-xs">Apply Adjustment</button>
                 </div>
               </div>
@@ -397,7 +397,7 @@ export default function UsersPage() {
                       <button onClick={handleDeleteUser} className="flex-1 bg-red-600 text-white font-bold py-2 rounded-lg text-xs hover:bg-red-500">
                         Confirm Delete
                       </button>
-                      <button onClick={() => setConfirmDelete(false)} className="flex-1 bg-navy border border-white/10 text-gray-300 font-bold py-2 rounded-lg text-xs hover:bg-white/5">
+                      <button onClick={() => setConfirmDelete(false)} className="flex-1 bg-navy border border-gold-subtle text-gray-300 font-bold py-2 rounded-lg text-xs hover:bg-gold/5">
                         Cancel
                       </button>
                     </div>
@@ -411,7 +411,7 @@ export default function UsersPage() {
                   <h4 className="text-xs font-semibold text-white mb-2">Recent Transactions</h4>
                   <div className="space-y-1">
                     {selectedUser.transactions.slice(0, 5).map((tx: any) => (
-                      <div key={tx.id} className="flex justify-between text-[10px] py-1 border-b border-white/5">
+                      <div key={tx.id} className="flex justify-between text-[10px] py-1 border-b border-gold-subtle">
                         <span className={tx.type === 'deposit' || tx.type === 'win' ? 'text-green-400' : 'text-red-400'}>{tx.type}</span>
                         <span className="text-white">{tx.amount} ETB</span>
                         <span className="text-gray-500">{tx.status}</span>

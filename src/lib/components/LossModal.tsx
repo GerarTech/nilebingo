@@ -33,7 +33,7 @@ export default function LossModal({
       <div className="flex justify-end">
         <button
           onClick={(e) => { e.stopPropagation(); onSkip(); }}
-          className="text-xs font-black text-gray-400 hover:text-white bg-[#141f33] border border-[#233c66]/40 px-3.5 py-1.5 rounded-xl transition-all uppercase cursor-pointer"
+          className="text-xs font-black text-gray-400 hover:text-white bg-[#141f33] border border-gold-subtle px-3.5 py-1.5 rounded-xl transition-all uppercase cursor-pointer gold-border-hover"
         >
           Skip {countdown !== null && `(${countdown}s)`}
         </button>
@@ -51,15 +51,15 @@ export default function LossModal({
         </div>
 
         <div className="space-y-2.5">
-          <div className="flex items-center justify-between bg-[#141f33]/80 border border-red-500/20 px-5 py-4 rounded-2xl shadow-lg">
-            <span className="font-extrabold text-[#FEE800] text-sm tracking-wide flex items-center gap-1.5">
+          <div className="flex items-center justify-between bg-[#141f33]/80 border border-gold-medium px-5 py-4 rounded-2xl shadow-gold-glow-sm gold-border-hover">
+            <span className="font-extrabold text-gold text-sm tracking-wide flex items-center gap-1.5">
               <span>👑</span> {opponentName}
             </span>
-            <span className="font-black text-amber-500 text-sm">
+            <span className="font-black text-gold text-sm">
               +{winAmount.toLocaleString()} {t('birr')}
             </span>
           </div>
-          <div className="flex items-center justify-between bg-[#141f33]/80 border border-white/5 opacity-50 px-5 py-4 rounded-2xl shadow-lg">
+          <div className="flex items-center justify-between bg-[#141f33]/80 border border-gold-subtle opacity-50 px-5 py-4 rounded-2xl">
             <span className="font-extrabold text-white text-sm tracking-wide flex items-center gap-1.5 font-sans">
               <span>👤</span> You
             </span>
@@ -70,7 +70,7 @@ export default function LossModal({
         </div>
 
         {gameCards.map((card, cIndex) => (
-          <div key={cIndex} className="bg-[#141f33]/40 border border-[#233c66]/20 p-4 rounded-3xl shadow-xl">
+          <div key={cIndex} className="bg-[#141f33]/40 border border-gold-subtle p-4 rounded-3xl shadow-xl gold-border-hover">
             <BingoGrid card={card} drawnNumbers={drawnNumbers} compact={true} />
           </div>
         ))}
@@ -78,12 +78,12 @@ export default function LossModal({
 
       <div className="max-w-sm w-full mx-auto mt-auto pt-4" onClick={e => e.stopPropagation()}>
         <div className="text-center">
-          <div className="text-[10px] uppercase font-black tracking-widest text-amber-500 tracking-wide select-none animate-pulse">
+          <div className="text-[10px] uppercase font-black tracking-widest text-gold tracking-wide select-none animate-pulse">
             STARTING IN {countdown ?? 3}S
           </div>
-          <div className="w-full bg-[#141f33] h-2.5 rounded-full overflow-hidden mt-2.5 border border-[#233c66]/40 shadow-inner">
+          <div className="w-full bg-[#141f33] h-2.5 rounded-full overflow-hidden mt-2.5 border border-gold-subtle shadow-inner">
             <div
-              className="bg-gradient-to-r from-amber-500 via-[#ff5a00] to-orange-600 h-full rounded-full transition-all duration-1000 ease-linear shadow-sm"
+              className="bg-gradient-gold h-full rounded-full transition-all duration-1000 ease-linear shadow-gold-glow-sm"
               style={{ width: `${((countdown ?? 5) / 5) * 100}%` }}
             />
           </div>

@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const { userId, language, avatar } = await request.json();
+    const { userId, language, avatar, firstName } = await request.json();
 
     if (!userId) {
       return NextResponse.json({ error: 'userId is required' }, { status: 400 });
@@ -101,6 +101,7 @@ export async function PATCH(request: NextRequest) {
     const updates: Record<string, string> = {};
     if (language) updates.language = language;
     if (avatar) updates.photo_url = avatar;
+    if (firstName) updates.first_name = firstName;
 
     if (Object.keys(updates).length > 0) {
       const { data: profile, error: updateError } = await supabase

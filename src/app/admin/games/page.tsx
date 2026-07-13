@@ -62,13 +62,13 @@ export default function GamesPage() {
             value={search}
             onChange={(e) => handleSearch(e.target.value)}
             placeholder="Search by game code or ID..."
-            className="w-full bg-navy-light border border-white/10 rounded-lg pl-9 pr-3 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
+            className="w-full bg-navy-light border border-gold-subtle rounded-lg pl-9 pr-3 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
           />
         </div>
         <button
           onClick={() => setAutoRefresh(!autoRefresh)}
           className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-medium transition-colors ${
-            autoRefresh ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'
+            autoRefresh ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-white/5 text-gray-400 border border-gold-subtle hover:bg-white/10'
           }`}
         >
           <RefreshCw size={12} className={autoRefresh ? 'animate-spin' : ''} />
@@ -85,7 +85,7 @@ export default function GamesPage() {
               <div
                 key={game.id}
                 onClick={() => loadGameDetail(game.id)}
-                className={`glass rounded-xl p-3 cursor-pointer transition-all hover:bg-white/5 ${selectedGame?.id === game.id ? 'ring-1 ring-gold/50' : ''}`}
+                className={`glass rounded-xl p-3 cursor-pointer transition-all hover:bg-gold/5 ${selectedGame?.id === game.id ? 'ring-1 ring-gold/50' : ''}`}
               >
                 <div className="flex items-center justify-between">
                   <div>
@@ -144,7 +144,7 @@ export default function GamesPage() {
                   <h4 className="text-xs font-semibold text-white mb-2 flex items-center gap-1"><Users size={12} /> Players ({selectedGame.players.length})</h4>
                   <div className="space-y-1">
                     {selectedGame.players.map((p: any) => (
-                      <div key={p.id} className="flex justify-between text-[10px] py-1 border-b border-white/5">
+                      <div key={p.id} className="flex justify-between text-[10px] py-1 border-b border-gold-subtle">
                         <span className="text-white">{p.profiles?.username || p.profiles?.first_name || 'Unknown'}</span>
                         <span className="text-gray-500">{p.is_watching ? 'Watching' : 'Playing'}</span>
                       </div>

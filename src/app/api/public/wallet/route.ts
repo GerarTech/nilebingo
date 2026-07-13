@@ -57,7 +57,7 @@ export async function PATCH(request: NextRequest) {
 
     const rpcMethod = type === 'main_balance' ? 'adjust_main_balance' : 'adjust_play_balance';
 
-    const { data: newBalance, error: rpcError } = await supabase.rpc(rpcMethod, {
+    const { data: _newBalance, error: rpcError } = await supabase.rpc(rpcMethod, {
       p_user_id: userId,
       p_amount: amount,
     });

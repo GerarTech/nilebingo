@@ -8,7 +8,7 @@ interface BingoGridProps {
   drawnNumbers: number[];
   winningCells?: boolean[][];
   interactive?: boolean;
-  onCellClick?: (row: number, col: number) => void;
+  onCellClick?: (_row: number, _col: number) => void;
   compact?: boolean;
 }
 
@@ -20,7 +20,6 @@ export default function BingoGrid({
   onCellClick,
   compact = false,
 }: BingoGridProps) {
-  // card is 5 rows x 5 cols
   const isCalled = (num: number) => num === 0 || drawnNumbers.includes(num);
   const isWinning = (row: number, col: number) => winningCells?.[row]?.[col] ?? false;
 
@@ -39,21 +38,15 @@ export default function BingoGrid({
 
   return (
     <div className={`w-full mx-auto ${compact ? 'max-w-[280px]' : 'max-w-sm'} ${shouldShake ? 'animate-grid-shake' : ''} transition-transform duration-300`}>
-      {/* Column headers with specific background colors from screenshot */}
+      {/* Column headers — gold BINGO letters */}
       <div className={`grid grid-cols-5 gap-1.5 px-0.5 ${compact ? 'mb-1.5' : 'mb-2.5'}`}>
-        {COLUMN_LABELS.map((label, idx) => (
+        {COLUMN_LABELS.map((label) => (
           <div
             key={label}
             className={`
-              text-center font-black rounded-xl text-white shadow-md flex items-center justify-center select-none aspect-square
+              text-center font-black rounded-xl text-navy shadow-gold-glow-sm flex items-center justify-center select-none aspect-square
               ${compact ? 'text-[11px]' : 'text-base'}
-              ${
-                idx === 0 ? 'bg-[#5c4df0] shadow-[#5c4df0]/20' :
-                idx === 1 ? 'bg-[#2563eb] shadow-[#2563eb]/20' :
-                idx === 2 ? 'bg-[#db2777] shadow-[#db2777]/20' :
-                idx === 3 ? 'bg-[#10b981] shadow-[#10b981]/20' :
-                'bg-[#f97316] shadow-[#f97316]/20'
-              }
+              bg-gradient-gold
             `}
           >
             {label}
@@ -61,16 +54,13 @@ export default function BingoGrid({
         ))}
       </div>
 
-      {/* Grid - 5 rows x 5 cols with Tactile 3D Coupon cells */}
+      {/* Grid — navy cells with gold accents */}
       <div className={`grid grid-cols-5 ${compact ? 'gap-1' : 'gap-1.5'}`}>
         {card.map((row, rowIdx) =>
           row.map((num, colIdx) => {
             const called = isCalled(num);
             const winning = isWinning(rowIdx, colIdx);
             const isFree = num === 0;
-
-            // Deterministic selection of aesthetic green or orange for called numbers to mimic uploaded screenshot
-            const isGreenStyle = (rowIdx + colIdx) % 2 === 0;
 
             return (
               <button
@@ -81,14 +71,14 @@ export default function BingoGrid({
                   bingo-cell ${called || isFree ? 'marked' : ''}
                   w-full flex items-center justify-center rounded-xl font-black transition-all duration-150 select-none aspect-square relative overflow-visible
                   ${compact ? 'text-[11.5px]' : 'text-base'}
-                  ${called 
-                    ? isGreenStyle
-                      ? 'bg-[#10b981] text-white border-b-[3.5px] border-[#047857] shadow-md shadow-[#10b981]/20'
-                      : 'bg-[#ff5a00] text-white border-b-[3.5px] border-[#d94600] shadow-md shadow-[#ff5a00]/20'
-                    : 'bg-[#f8fafc] text-[#0f172a] border border-[#cbd5e1] border-b-[3.5px] border-b-[#cbd5e1] hover:bg-[#f1f5f9] hover:border-b-[#b8c5d6] active:translate-y-[1px] active:border-b-[1.5px]'
+                  ${called
+                    ? isFree
+                      ? 'bg-[#283782] text-gold border-b-[3.5px] border-[#1e2d6e] shadow-gold-glow-sm'
+                      : 'bg-[#283782] text-gold border-b-[3.5px] border-[#1e2d6e] shadow-gold-glow-sm'
+                    : 'bg-[#1a2a5c] text-white/90 border border-[#283782]/60 border-b-[3.5px] border-b-[#1a2050] hover:bg-[#1e2d6e] hover:border-gold-subtle active:translate-y-[1px] active:border-b-[1.5px] transition-colors'
                   }
-                  ${winning ? 'ring-3 ring-amber-400 scale-[1.04] animate-bounce shadow-xl shadow-amber-400/20 z-10' : ''}
-                  ${isFree ? 'bg-[#10b981] text-white border-b-[3.5px] border-[#047857] shadow-lg shadow-[#10b981]/20' : ''}
+                  ${winning ? 'ring-2 ring-gold shadow-gold-glow scale-[1.04] animate-bounce z-10' : ''}
+                  ${isFree ? 'bg-[#283782] text-gold border-b-[3.5px] border-[#1e2d6e] shadow-gold-glow-sm' : ''}
                   ${interactive && !called && !isFree ? 'cursor-pointer' : ''}
                 `}
               >

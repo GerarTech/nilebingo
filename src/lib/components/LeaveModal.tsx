@@ -25,7 +25,7 @@ export default function LeaveModal({ show, stake, onResume, onForfeit, onClose, 
           {t('leave_warning')} <span className="text-amber-400 font-bold">{stake.toLocaleString()} {t('birr')}</span> {t('will_be_lost')}
         </p>
         <div className="grid grid-cols-2 gap-3 mt-6">
-          <button onClick={onResume} className="bg-[#14223d] border border-white/5 hover:bg-white/5 text-gray-300 font-extrabold py-3 rounded-xl text-xs transition-all uppercase tracking-wider cursor-pointer">
+          <button onClick={onResume} className="bg-[#14223d] border border-gold-subtle hover:bg-white/5 text-gray-300 font-extrabold py-3 rounded-xl text-xs transition-all uppercase tracking-wider cursor-pointer gold-border-hover">
             Resume Play
           </button>
           <button onClick={onForfeit} className="bg-gradient-to-r from-red-600 to-rose-700 text-white font-black py-3 rounded-xl text-xs transition-all uppercase tracking-wider cursor-pointer shadow-lg shadow-red-600/15">

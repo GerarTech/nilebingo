@@ -24,32 +24,22 @@ export async function POST(request: NextRequest) {
     const commands = config?.commands || {};
 
     const methodKey = String(method).toLowerCase();
-    let minAmount = 50;
-    let maxAmount = 5000;
     let bankName = 'CBE';
 
     if (methodKey === 'telebirr') {
-      minAmount = 10;
-      maxAmount = Number(commands.telebirr_max) || 1000;
       bankName = 'Telebirr';
     } else if (methodKey === 'cbe') {
-      minAmount = 50;
-      maxAmount = Number(commands.cbe_max) || 5000;
       bankName = 'CBE';
     } else if (bankId) {
       const banks: any[] = commands.banks || [];
       const bank = banks.find((b: any) => b.id === bankId);
       if (bank) {
         bankName = bank.name || bankId;
-        maxAmount = Number(bank.max) || 5000;
       }
     }
 
-    if (depositAmount < minAmount) {
-      return NextResponse.json({ error: `Minimum deposit is ${minAmount} ETB.` }, { status: 400 });
-    }
-    if (depositAmount > maxAmount) {
-      return NextResponse.json({ error: `Maximum deposit is ${maxAmount} ETB.` }, { status: 400 });
+    if (depositAmount < 20) {
+      return NextResponse.json({ error: 'Minimum deposit is 20 ETB.' }, { status: 400 });
     }
 
     const { data: existingTx } = await supabase

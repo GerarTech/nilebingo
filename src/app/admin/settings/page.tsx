@@ -55,8 +55,8 @@ interface GameRoom {
 }
 
 export default function SettingsPage() {
-  const [adminChatId, setAdminChatId] = useState('');
-  const [adminPassword, setAdminPassword] = useState('');
+  const [adminChatId, _setAdminChatId] = useState('');
+  const [adminPassword, _setAdminPassword] = useState('');
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'commands' | 'messages' | 'game_config' | 'branding' | 'gateways' | 'bias' | 'notifications' | 'promotions'>('commands');
@@ -84,8 +84,8 @@ export default function SettingsPage() {
     contact_received: '✅ Thank you! Your contact has been shared with our support team.',
     balance_info: '💰 *Your Balance*\n\nMain Wallet: 0 ETB (Withdrawable)\nPlay Wallet: 0 ETB (Non-withdrawable, Play only)\nTotal: 0 ETB',
     deposit_choose: '💳 *Choose payment method:*\n\nSelect your preferred option below:',
-    deposit_cbe_info: '*CBE Deposit Instructions*\n\nAccount: 1000256789123\nName: Nile Bingo\nBank: CBE\n\n1. Send your deposit using CBE Birr\n2. Copy/forward the full SMS confirmation here\n3. Admin will verify and credit your balance\n\nMin deposit: 10 ETB',
-    deposit_telebirr_info: '*Telebirr Deposit Instructions*\n\nNumber: 0925502345\nName: Ashe\n\n1. Send up to 1000 ETB using Telebirr\n2. Copy/forward the full SMS confirmation here\n3. Admin will verify and credit your balance\n\nMin deposit: 10 ETB',
+    deposit_cbe_info: '*CBE Deposit Instructions*\n\nAccount: 1000256789123\nName: Nile Bingo\nBank: CBE\n\n1. Send your deposit using CBE Birr\n2. Copy/forward the full SMS confirmation here\n3. Admin will verify and credit your balance\n\nMin deposit: 20 ETB',
+    deposit_telebirr_info: '*Telebirr Deposit Instructions*\n\nNumber: 0925502345\nName: Ashe\n\n1. Send your deposit using Telebirr\n2. Copy/forward the full SMS confirmation here\n3. Admin will verify and credit your balance\n\nMin deposit: 20 ETB',
     withdraw_info: '*Withdraw Funds*\n\nWithdrawals are processed manually by our team.\n\nRequirements:\n• Main Wallet balance only (Play Wallet cannot be withdrawn)\n• Minimum withdrawal: {min_amount} ETB\n• You must have played at least {required_games} games\n\nTo request a withdrawal, please contact support with:\n• Amount to withdraw\n• Your preferred receiving method\n\nWe process withdrawals within 24 hours.',
     contact_info: '*Contact Support*\n\nEmail: {support_email}\nTelegram: {support_telegram}',
     winning_patterns_info: '*Winning Patterns*\n\n1. Horizontal Line\n2. Vertical Line\n3. Diagonal Line\n4. Four Corners\n5. Blackout\n\nFirst to complete a pattern wins!',
@@ -111,7 +111,7 @@ export default function SettingsPage() {
     maxPlayers: 100,
     commission: undefined,
   });
-  const [savingGame, setSavingGame] = useState(false);
+  const [_savingGame, setSavingGame] = useState(false);
 
   // Gateway specific state
   const [withdrawRequiredGames, setWithdrawRequiredGames] = useState<number>(5);
@@ -137,8 +137,8 @@ export default function SettingsPage() {
   // Branding specific state
   const [botName, setBotName] = useState('Nile BINGO');
   const [appName, setAppName] = useState('Nile BINGO');
-  const [appLogo, setAppLogo] = useState('🎰');
-  const [appLogoPng, setAppLogoPng] = useState<string | null>(null);
+  const [appLogo, setAppLogo] = useState('');
+  const [appLogoPng, setAppLogoPng] = useState<string | null>('/logo.png');
   const [colorScheme, setColorScheme] = useState('gold');
   const [welcomeImage, setWelcomeImage] = useState<string | null>(null);
   const [botDescriptionImage, setBotDescriptionImage] = useState<string | null>(null);
@@ -427,7 +427,7 @@ export default function SettingsPage() {
             <input
               type="text"
               value={adminChatId}
-              className="w-full bg-navy border border-white/10 rounded-lg px-4 py-2 text-sm text-gray-400 focus:outline-none"
+              className="w-full bg-navy border border-gold-subtle rounded-lg px-4 py-2 text-sm text-gray-400 focus:outline-none"
               disabled
             />
           </div>
@@ -437,14 +437,14 @@ export default function SettingsPage() {
             <input
               type="password"
               value={adminPassword}
-              className="w-full bg-navy border border-white/10 rounded-lg px-4 py-2 text-sm text-gray-400 focus:outline-none"
+              className="w-full bg-navy border border-gold-subtle rounded-lg px-4 py-2 text-sm text-gray-400 focus:outline-none"
               disabled
             />
           </div>
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-2 border-b border-white/10 overflow-x-auto pb-1">
+        <div className="flex gap-2 border-b border-gold-subtle overflow-x-auto pb-1">
           <button
             onClick={() => setActiveTab('commands')}
             className={`px-4 py-2 text-xs font-medium transition-all shrink-0 ${activeTab === 'commands' ? 'text-gold border-b-2 border-gold font-bold' : 'text-gray-400 hover:text-white'}`}
@@ -516,7 +516,7 @@ export default function SettingsPage() {
                     type="text"
                     value={value as string}
                     onChange={(e) => updateCommand(key as keyof BotCommands, e.target.value)}
-                    className="flex-1 bg-navy-light border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
+                    className="flex-1 bg-navy-light border border-gold-subtle rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
                   />
                 </div>
               ))}
@@ -540,7 +540,7 @@ export default function SettingsPage() {
               {Object.entries(messages).map(([key, value]) => {
                 if (key === 'bot_description') {
                   return (
-                    <div key={key} className="bg-navy-light p-3 rounded-lg border border-white/5">
+                    <div key={key} className="bg-navy-light p-3 rounded-lg border border-gold-subtle">
                       <label className="text-[10px] text-gray-500 block mb-1">{key}</label>
                       <div className="mb-2">
                         <p className="text-[8.5px] text-gray-500 mb-1.5">Bot Description Image (shown with the description)</p>
@@ -559,7 +559,7 @@ export default function SettingsPage() {
                         />
                         {botDescriptionImage && (
                           <div className="mt-1.5 flex items-center gap-2">
-                            <img src={botDescriptionImage} alt="Description Preview" className="w-10 h-10 rounded-lg border border-white/10 object-contain bg-navy" />
+                            <img src={botDescriptionImage} alt="Description Preview" className="w-10 h-10 rounded-lg border border-gold-subtle object-contain bg-navy" />
                             <button onClick={() => setBotDescriptionImage(null)} className="text-[10px] text-red-400 hover:text-red-300">Remove</button>
                           </div>
                         )}
@@ -568,7 +568,7 @@ export default function SettingsPage() {
                         value={value as string}
                         onChange={(e) => updateMessage(key as keyof BotMessages, e.target.value)}
                         rows={3}
-                        className="w-full bg-navy border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-gold/50 resize-y"
+                        className="w-full bg-navy border border-gold-subtle rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-gold/50 resize-y"
                       />
                     </div>
                   );
@@ -580,7 +580,7 @@ export default function SettingsPage() {
                       value={value as string}
                       onChange={(e) => updateMessage(key as keyof BotMessages, e.target.value)}
                       rows={3}
-                      className="w-full bg-navy-light border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-gold/50 resize-y"
+                      className="w-full bg-navy-light border border-gold-subtle rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-gold/50 resize-y"
                     />
                   </div>
                 );
@@ -599,7 +599,7 @@ export default function SettingsPage() {
             <h3 className="text-xs font-semibold text-white">Deposit, Withdraw & Referral Gateway Configurations</h3>
 
             {/* Withdraw lock */}
-            <div className="bg-navy-light p-3 rounded-lg border border-white/5 space-y-2">
+            <div className="bg-navy-light p-3 rounded-lg border border-gold-subtle space-y-2">
               <label className="text-xs text-white font-bold uppercase tracking-wider block">🔒 Withdrawal Security Lock</label>
               <div className="space-y-1">
                 <label className="text-[10px] text-gray-400 block">Games Required to Play Before Withdrawal Is Allowed</label>
@@ -607,7 +607,7 @@ export default function SettingsPage() {
                   type="number"
                   value={withdrawRequiredGames}
                   onChange={(e) => setWithdrawRequiredGames(Math.max(0, parseInt(e.target.value, 10) || 0))}
-                  className="w-full bg-navy border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
+                  className="w-full bg-navy border border-gold-subtle rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
                   placeholder="e.g. 5"
                 />
                 <p className="text-[8.5px] text-gray-500">Limits withdrawals so users must engage with the bingo rooms before checking out.</p>
@@ -618,7 +618,7 @@ export default function SettingsPage() {
                     type="number"
                     value={withdrawMinAmount}
                     onChange={(e) => setWithdrawMinAmount(Math.max(0, parseInt(e.target.value, 10) || 0))}
-                    className="w-full bg-navy border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
+                    className="w-full bg-navy border border-gold-subtle rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
                     placeholder="e.g. 50"
                   />
                   <p className="text-[8.5px] text-gray-500">Minimum ETB amount users can withdraw per request.</p>
@@ -626,7 +626,7 @@ export default function SettingsPage() {
               </div>
 
             {/* Admin Bot Security */}
-            <div className="bg-navy-light p-3 rounded-lg border border-white/5 space-y-2">
+            <div className="bg-navy-light p-3 rounded-lg border border-gold-subtle space-y-2">
               <label className="text-xs text-white font-bold uppercase tracking-wider block">🔐 Admin Bot Access</label>
               <div className="space-y-1">
                 <label className="text-[10px] text-gray-400 block">Authorized Admin Chat IDs (comma or space separated)</label>
@@ -634,7 +634,7 @@ export default function SettingsPage() {
                   type="text"
                   value={adminChatIds}
                   onChange={(e) => setAdminChatIds(e.target.value)}
-                  className="w-full bg-navy border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
+                  className="w-full bg-navy border border-gold-subtle rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
                   placeholder="e.g. 123456789, 987654321"
                 />
                 <p className="text-[8.5px] text-gray-500">Only these Telegram chat IDs can access the admin bot. Add the numeric IDs separated by commas or spaces.</p>
@@ -642,12 +642,12 @@ export default function SettingsPage() {
             </div>
 
             {/* Dynamic Banks */}
-            <div className="bg-navy-light p-3 rounded-lg border border-white/5 space-y-3">
+            <div className="bg-navy-light p-3 rounded-lg border border-gold-subtle space-y-3">
               <label className="text-xs text-white font-bold uppercase tracking-wider block">🏛️ Payment Gateways (Dynamic Banks)</label>
               <p className="text-[8.5px] text-gray-500">These banks appear as deposit options in the Telegram bot. Add one for each payment method.</p>
               
               {banks.map((bank, idx) => (
-                <div key={bank.id} className="bg-navy/50 p-2 rounded-lg border border-white/5 space-y-2">
+                <div key={bank.id} className="bg-navy/50 p-2 rounded-lg border border-gold-subtle space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-white font-medium">{bank.icon} {bank.name}</span>
                     <button onClick={() => setBanks(prev => prev.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-300 cursor-pointer">
@@ -657,38 +657,38 @@ export default function SettingsPage() {
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="text-[9px] text-gray-400 block">Account / Number</label>
-                      <input type="text" value={bank.account} onChange={(e) => { const copy = [...banks]; copy[idx] = {...copy[idx], account: e.target.value}; setBanks(copy); }} className="w-full bg-navy border border-white/10 rounded-lg px-2 py-1 text-[11px] text-white focus:outline-none focus:border-gold/50" />
+                      <input type="text" value={bank.account} onChange={(e) => { const copy = [...banks]; copy[idx] = {...copy[idx], account: e.target.value}; setBanks(copy); }} className="w-full bg-navy border border-gold-subtle rounded-lg px-2 py-1 text-[11px] text-white focus:outline-none focus:border-gold/50" />
                     </div>
                     <div>
                       <label className="text-[9px] text-gray-400 block">Recipient Name</label>
-                      <input type="text" value={bank.recipient} onChange={(e) => { const copy = [...banks]; copy[idx] = {...copy[idx], recipient: e.target.value}; setBanks(copy); }} className="w-full bg-navy border border-white/10 rounded-lg px-2 py-1 text-[11px] text-white focus:outline-none focus:border-gold/50" />
+                      <input type="text" value={bank.recipient} onChange={(e) => { const copy = [...banks]; copy[idx] = {...copy[idx], recipient: e.target.value}; setBanks(copy); }} className="w-full bg-navy border border-gold-subtle rounded-lg px-2 py-1 text-[11px] text-white focus:outline-none focus:border-gold/50" />
                     </div>
                     <div>
                       <label className="text-[9px] text-gray-400 block">Max Amount (ETB)</label>
-                      <input type="text" value={bank.max} onChange={(e) => { const copy = [...banks]; copy[idx] = {...copy[idx], max: e.target.value}; setBanks(copy); }} className="w-full bg-navy border border-white/10 rounded-lg px-2 py-1 text-[11px] text-white focus:outline-none focus:border-gold/50" />
+                      <input type="text" value={bank.max} onChange={(e) => { const copy = [...banks]; copy[idx] = {...copy[idx], max: e.target.value}; setBanks(copy); }} className="w-full bg-navy border border-gold-subtle rounded-lg px-2 py-1 text-[11px] text-white focus:outline-none focus:border-gold/50" />
                     </div>
                     <div>
                       <label className="text-[9px] text-gray-400 block">Icon (emoji)</label>
-                      <input type="text" value={bank.icon} onChange={(e) => { const copy = [...banks]; copy[idx] = {...copy[idx], icon: e.target.value}; setBanks(copy); }} className="w-full bg-navy border border-white/10 rounded-lg px-2 py-1 text-[11px] text-white focus:outline-none focus:border-gold/50" />
+                      <input type="text" value={bank.icon} onChange={(e) => { const copy = [...banks]; copy[idx] = {...copy[idx], icon: e.target.value}; setBanks(copy); }} className="w-full bg-navy border border-gold-subtle rounded-lg px-2 py-1 text-[11px] text-white focus:outline-none focus:border-gold/50" />
                     </div>
                     <div>
                       <label className="text-[9px] text-gray-400 block">Check.et Code</label>
-                      <input type="text" value={bank.check_et_code || ''} onChange={(e) => { const copy = [...banks]; copy[idx] = {...copy[idx], check_et_code: e.target.value}; setBanks(copy); }} className="w-full bg-navy border border-white/10 rounded-lg px-2 py-1 text-[11px] text-white focus:outline-none focus:border-gold/50" placeholder="e.g. cbe, telebirr" />
+                      <input type="text" value={bank.check_et_code || ''} onChange={(e) => { const copy = [...banks]; copy[idx] = {...copy[idx], check_et_code: e.target.value}; setBanks(copy); }} className="w-full bg-navy border border-gold-subtle rounded-lg px-2 py-1 text-[11px] text-white focus:outline-none focus:border-gold/50" placeholder="e.g. cbe, telebirr" />
                     </div>
                   </div>
                 </div>
               ))}
 
               {/* Add new bank form */}
-              <div className="bg-navy/30 p-2 rounded-lg border border-dashed border-white/10 space-y-2">
+              <div className="bg-navy/30 p-2 rounded-lg border border-dashed border-gold-subtle space-y-2">
                 <span className="text-[10px] text-gray-400 block">Add new payment gateway</span>
                 <div className="grid grid-cols-2 gap-2">
-                  <input type="text" placeholder="Name (e.g. CBE)" value={newBank.name} onChange={(e) => setNewBank(p => ({...p, name: e.target.value}))} className="w-full bg-navy border border-white/10 rounded-lg px-2 py-1 text-[11px] text-white focus:outline-none focus:border-gold/50" />
-                  <input type="text" placeholder="Icon (e.g. 🏦)" value={newBank.icon} onChange={(e) => setNewBank(p => ({...p, icon: e.target.value}))} className="w-full bg-navy border border-white/10 rounded-lg px-2 py-1 text-[11px] text-white focus:outline-none focus:border-gold/50" />
-                  <input type="text" placeholder="Account Number" value={newBank.account} onChange={(e) => setNewBank(p => ({...p, account: e.target.value}))} className="w-full bg-navy border border-white/10 rounded-lg px-2 py-1 text-[11px] text-white focus:outline-none focus:border-gold/50" />
-                  <input type="text" placeholder="Recipient Name" value={newBank.recipient} onChange={(e) => setNewBank(p => ({...p, recipient: e.target.value}))} className="w-full bg-navy border border-white/10 rounded-lg px-2 py-1 text-[11px] text-white focus:outline-none focus:border-gold/50" />
-                  <input type="text" placeholder="Max Amount" value={newBank.max} onChange={(e) => setNewBank(p => ({...p, max: e.target.value}))} className="w-full bg-navy border border-white/10 rounded-lg px-2 py-1 text-[11px] text-white focus:outline-none focus:border-gold/50" />
-                  <input type="text" placeholder="Check.et Code (e.g. cbe)" value={newBank.check_et_code || ''} onChange={(e) => setNewBank(p => ({...p, check_et_code: e.target.value}))} className="w-full bg-navy border border-white/10 rounded-lg px-2 py-1 text-[11px] text-white focus:outline-none focus:border-gold/50" />
+                  <input type="text" placeholder="Name (e.g. CBE)" value={newBank.name} onChange={(e) => setNewBank(p => ({...p, name: e.target.value}))} className="w-full bg-navy border border-gold-subtle rounded-lg px-2 py-1 text-[11px] text-white focus:outline-none focus:border-gold/50" />
+                  <input type="text" placeholder="Icon (e.g. 🏦)" value={newBank.icon} onChange={(e) => setNewBank(p => ({...p, icon: e.target.value}))} className="w-full bg-navy border border-gold-subtle rounded-lg px-2 py-1 text-[11px] text-white focus:outline-none focus:border-gold/50" />
+                  <input type="text" placeholder="Account Number" value={newBank.account} onChange={(e) => setNewBank(p => ({...p, account: e.target.value}))} className="w-full bg-navy border border-gold-subtle rounded-lg px-2 py-1 text-[11px] text-white focus:outline-none focus:border-gold/50" />
+                  <input type="text" placeholder="Recipient Name" value={newBank.recipient} onChange={(e) => setNewBank(p => ({...p, recipient: e.target.value}))} className="w-full bg-navy border border-gold-subtle rounded-lg px-2 py-1 text-[11px] text-white focus:outline-none focus:border-gold/50" />
+                  <input type="text" placeholder="Max Amount" value={newBank.max} onChange={(e) => setNewBank(p => ({...p, max: e.target.value}))} className="w-full bg-navy border border-gold-subtle rounded-lg px-2 py-1 text-[11px] text-white focus:outline-none focus:border-gold/50" />
+                  <input type="text" placeholder="Check.et Code (e.g. cbe)" value={newBank.check_et_code || ''} onChange={(e) => setNewBank(p => ({...p, check_et_code: e.target.value}))} className="w-full bg-navy border border-gold-subtle rounded-lg px-2 py-1 text-[11px] text-white focus:outline-none focus:border-gold/50" />
                 </div>
                 <button onClick={() => {
                   if (!newBank.name || !newBank.account) return;
@@ -702,7 +702,7 @@ export default function SettingsPage() {
             </div>
 
             {/* Check.et Auto-Verification */}
-            <div className="bg-navy-light p-3 rounded-lg border border-white/5 space-y-2">
+            <div className="bg-navy-light p-3 rounded-lg border border-gold-subtle space-y-2">
               <label className="text-xs text-white font-bold uppercase tracking-wider block">🤖 Check.et Auto-Verification</label>
               <p className="text-[8.5px] text-gray-500">Automatically verify deposits using the <a href="https://check.et" target="_blank" className="text-gold underline">Check.et</a> API. When a user submits a deposit, the system checks with Check.et that the transaction exists and the amount &amp; receiving account match. If verified, the deposit is approved instantly — no manual review needed.</p>
               <div className="flex items-center gap-2 mt-1">
@@ -713,7 +713,7 @@ export default function SettingsPage() {
             </div>
 
             {/* Referrals */}
-            <div className="bg-navy-light p-3 rounded-lg border border-white/5 space-y-3">
+            <div className="bg-navy-light p-3 rounded-lg border border-gold-subtle space-y-3">
               <label className="text-xs text-white font-bold uppercase tracking-wider block">👥 Referral Reward Policy</label>
               <div className="grid grid-cols-2 gap-2">
                 <div>
@@ -722,7 +722,7 @@ export default function SettingsPage() {
                     type="number"
                     value={referralBonus}
                     onChange={(e) => setReferralBonus(Math.max(0, parseFloat(e.target.value) || 0))}
-                    className="w-full bg-navy border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
+                    className="w-full bg-navy border border-gold-subtle rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
                   />
                 </div>
                 <div>
@@ -731,7 +731,7 @@ export default function SettingsPage() {
                     type="number"
                     value={referralMinDeposit}
                     onChange={(e) => setReferralMinDeposit(Math.max(0, parseFloat(e.target.value) || 0))}
-                    className="w-full bg-navy border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
+                    className="w-full bg-navy border border-gold-subtle rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
                   />
                 </div>
               </div>
@@ -751,7 +751,7 @@ export default function SettingsPage() {
             <h3 className="text-xs font-semibold text-white">Platform Commission & Rooms Settings</h3>
 
             {/* Platform Commission input */}
-            <div className="p-3 bg-navy-light rounded-xl border border-white/5 space-y-2">
+            <div className="p-3 bg-navy-light rounded-xl border border-gold-subtle space-y-2">
               <div className="flex justify-between items-center">
                 <label className="text-xs text-gray-300 font-bold uppercase tracking-wider">PLATFORM COMMISSION PERCENT (%)</label>
                 <span className="text-xs text-gold font-bold font-mono">{commission}%</span>
@@ -777,13 +777,13 @@ export default function SettingsPage() {
                   const roomComm = roomEffectiveCommission(room);
                   const maxWin = (room.entry * room.players) * (1 - roomComm / 100);
                   return (
-                    <div key={room.id} className="p-3 bg-navy-light border border-white/5 rounded-xl space-y-2">
+                    <div key={room.id} className="p-3 bg-navy-light border border-gold-subtle rounded-xl space-y-2">
                       <div className="flex justify-between items-center">
                         <input
                           type="text"
                           value={room.name}
                           onChange={(e) => updateRoomField(idx, 'name', e.target.value)}
-                          className="bg-transparent border-b border-white/10 text-xs font-bold text-white focus:outline-none focus:border-gold px-1 py-0.5"
+                          className="bg-transparent border-b border-gold-subtle text-xs font-bold text-white focus:outline-none focus:border-gold px-1 py-0.5"
                         />
                         <button
                           onClick={() => deleteRoom(room.id)}
@@ -800,7 +800,7 @@ export default function SettingsPage() {
                             type="number"
                             value={room.entry}
                             onChange={(e) => updateRoomField(idx, 'entry', Math.max(0, parseFloat(e.target.value) || 0))}
-                            className="w-full bg-navy border border-white/10 rounded-md px-2 py-1 text-white text-xs"
+                            className="w-full bg-navy border border-gold-subtle rounded-md px-2 py-1 text-white text-xs"
                           />
                         </div>
                         <div>
@@ -809,7 +809,7 @@ export default function SettingsPage() {
                             type="number"
                             value={room.players}
                             onChange={(e) => updateRoomField(idx, 'players', Math.max(1, parseInt(e.target.value, 10) || 1))}
-                            className="w-full bg-navy border border-white/10 rounded-md px-2 py-1 text-white text-xs"
+                            className="w-full bg-navy border border-gold-subtle rounded-md px-2 py-1 text-white text-xs"
                           />
                         </div>
                         <div>
@@ -819,7 +819,7 @@ export default function SettingsPage() {
                             value={room.commission ?? ''}
                             placeholder={`${commission}%`}
                             onChange={(e) => updateRoomField(idx, 'commission', e.target.value === '' ? undefined : Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)))}
-                            className="w-full bg-navy border border-white/10 rounded-md px-2 py-1 text-white text-xs"
+                            className="w-full bg-navy border border-gold-subtle rounded-md px-2 py-1 text-white text-xs"
                           />
                         </div>
                         <div className="flex flex-col justify-end">
@@ -834,7 +834,7 @@ export default function SettingsPage() {
             </div>
 
             {/* Add room form */}
-            <div className="p-3 bg-navy-light/40 border border-white/5 rounded-xl space-y-2">
+            <div className="p-3 bg-navy-light/40 border border-gold-subtle rounded-xl space-y-2">
               <h4 className="text-[11px] font-bold text-gray-300 uppercase">✙ CREATE NEW ROOM</h4>
               <div className="grid grid-cols-2 gap-2 text-[10px]">
                 <div>
@@ -844,7 +844,7 @@ export default function SettingsPage() {
                     value={newRoom.name}
                     onChange={(e) => setNewRoom(prev => ({ ...prev, name: e.target.value }))}
                     placeholder="e.g., Ultimate Room"
-                    className="w-full bg-navy border border-white/10 rounded-md px-2.5 py-1.5 text-white"
+                    className="w-full bg-navy border border-gold-subtle rounded-md px-2.5 py-1.5 text-white"
                   />
                 </div>
                 <div>
@@ -853,7 +853,7 @@ export default function SettingsPage() {
                     type="number"
                     value={newRoom.entry}
                     onChange={(e) => setNewRoom(prev => ({ ...prev, entry: Math.max(0, parseFloat(e.target.value) || 0) }))}
-                    className="w-full bg-navy border border-white/10 rounded-md px-2.5 py-1.5 text-white"
+                    className="w-full bg-navy border border-gold-subtle rounded-md px-2.5 py-1.5 text-white"
                   />
                 </div>
                 <div>
@@ -862,7 +862,7 @@ export default function SettingsPage() {
                     type="number"
                     value={newRoom.players}
                     onChange={(e) => setNewRoom(prev => ({ ...prev, players: Math.max(1, parseInt(e.target.value, 10) || 1) }))}
-                    className="w-full bg-navy border border-white/10 rounded-md px-2.5 py-1.5 text-white"
+                    className="w-full bg-navy border border-gold-subtle rounded-md px-2.5 py-1.5 text-white"
                   />
                 </div>
                 <div>
@@ -872,7 +872,7 @@ export default function SettingsPage() {
                     value={newRoom.commission ?? ''}
                     placeholder={`${commission}%`}
                     onChange={(e) => setNewRoom(prev => ({ ...prev, commission: e.target.value === '' ? undefined : Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)) }))}
-                    className="w-full bg-navy border border-white/10 rounded-md px-2.5 py-1.5 text-white"
+                    className="w-full bg-navy border border-gold-subtle rounded-md px-2.5 py-1.5 text-white"
                   />
                 </div>
                 <div className="flex items-end">
@@ -893,7 +893,7 @@ export default function SettingsPage() {
             </button>
 
             {/* Jackpot Settings */}
-            <div className="p-3 bg-navy-light rounded-xl border border-white/5 space-y-3">
+            <div className="p-3 bg-navy-light rounded-xl border border-gold-subtle space-y-3">
               <h4 className="text-xs font-semibold text-white flex items-center gap-1.5">
                 <Trophy size={12} className="text-gold" />
                 Progressive Jackpot
@@ -913,7 +913,7 @@ export default function SettingsPage() {
                       type="number" step="0.1" min="0" max="100"
                       value={jackpotPercent}
                       onChange={e => setJackpotPercent(parseFloat(e.target.value) || 0)}
-                      className="w-full bg-navy border border-white/10 rounded-md px-2.5 py-1.5 text-white text-xs"
+                      className="w-full bg-navy border border-gold-subtle rounded-md px-2.5 py-1.5 text-white text-xs"
                     />
                   </div>
                   <div className="flex items-center justify-between bg-navy rounded-md px-3 py-2">
@@ -925,7 +925,7 @@ export default function SettingsPage() {
             </div>
 
             {/* Mini-Games Settings */}
-            <div className="p-3 bg-navy-light rounded-xl border border-white/5 space-y-3">
+            <div className="p-3 bg-navy-light rounded-xl border border-gold-subtle space-y-3">
               <h4 className="text-xs font-semibold text-white flex items-center gap-1.5">
                 <Trophy size={12} className="text-gold" />
                 Mini-Games (Inter-round)
@@ -945,14 +945,14 @@ export default function SettingsPage() {
                       type="number" step="0.1" min="1" max="10"
                       value={miniGameMultiplier}
                       onChange={e => setMiniGameMultiplier(parseFloat(e.target.value) || 1)}
-                      className="w-full bg-navy border border-white/10 rounded-md px-2.5 py-1.5 text-white text-xs"
+                      className="w-full bg-navy border border-gold-subtle rounded-md px-2.5 py-1.5 text-white text-xs"
                     />
                   </div>
                 </div>
               )}
             </div>
 
-            <div className="p-3 bg-navy-light rounded-xl border border-white/5 space-y-2">
+            <div className="p-3 bg-navy-light rounded-xl border border-gold-subtle space-y-2">
               <label className="text-[10px] text-gray-400 uppercase block">Game Rules (How to Play)</label>
               <p className="text-[8.5px] text-gray-500">Displayed in the web app Rules modal. Leave empty to use default translated rules.</p>
               <textarea
@@ -960,7 +960,7 @@ export default function SettingsPage() {
                 value={rulesText}
                 onChange={e => setRulesText(e.target.value)}
                 placeholder="Enter custom game rules text (supports basic HTML tags like &lt;br&gt;, &lt;b&gt;, etc.)"
-                className="w-full bg-navy border border-white/10 rounded-lg px-3 py-2 text-xs text-white font-mono leading-relaxed focus:outline-none focus:border-gold/50 resize-y"
+                className="w-full bg-navy border border-gold-subtle rounded-lg px-3 py-2 text-xs text-white font-mono leading-relaxed focus:outline-none focus:border-gold/50 resize-y"
               />
             </div>
           </div>
@@ -978,7 +978,7 @@ export default function SettingsPage() {
                 type="text"
                 value={botName}
                 onChange={(e) => setBotName(e.target.value)}
-                className="w-full bg-navy-light border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-gold/50"
+                className="w-full bg-navy-light border border-gold-subtle rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-gold/50"
                 placeholder="e.g., Nile BINGO"
               />
             </div>
@@ -989,7 +989,7 @@ export default function SettingsPage() {
                 type="text"
                 value={appName}
                 onChange={(e) => setAppName(e.target.value)}
-                className="w-full bg-navy-light border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-gold/50"
+                className="w-full bg-navy-light border border-gold-subtle rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-gold/50"
                 placeholder="e.g., Nile BINGO"
               />
             </div>
@@ -1000,8 +1000,8 @@ export default function SettingsPage() {
                 type="text"
                 value={appLogo}
                 onChange={(e) => setAppLogo(e.target.value)}
-                className="w-full bg-navy-light border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-gold/50"
-                placeholder="e.g., 🎰 or 🎮"
+                className="w-full bg-navy-light border border-gold-subtle rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-gold/50"
+                placeholder="Optional emoji fallback"
               />
             </div>
 
@@ -1023,7 +1023,7 @@ export default function SettingsPage() {
               />
               {appLogoPng && (
                 <div className="mt-2 flex items-center gap-2">
-                  <img src={appLogoPng} alt="Logo Preview" className="w-10 h-10 rounded-lg border border-white/10 object-contain bg-navy-light" />
+                  <img src={appLogoPng} alt="Logo Preview" className="w-10 h-10 rounded-lg border border-gold-subtle object-contain bg-navy-light" />
                   <button onClick={() => setAppLogoPng(null)} className="text-[10px] text-red-400 hover:text-red-300">Remove</button>
                 </div>
               )}
@@ -1047,7 +1047,7 @@ export default function SettingsPage() {
               />
               {welcomeImage && (
                 <div className="mt-2 flex items-center gap-2">
-                  <img src={welcomeImage} alt="Welcome Preview" className="w-10 h-10 rounded-lg border border-white/10 object-contain bg-navy-light" />
+                  <img src={welcomeImage} alt="Welcome Preview" className="w-10 h-10 rounded-lg border border-gold-subtle object-contain bg-navy-light" />
                   <button onClick={() => setWelcomeImage(null)} className="text-[10px] text-red-400 hover:text-red-300">Remove</button>
                 </div>
               )}
@@ -1058,7 +1058,7 @@ export default function SettingsPage() {
               <select
                 value={colorScheme}
                 onChange={(e) => setColorScheme(e.target.value)}
-                className="w-full bg-navy-light border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-gold/50"
+                className="w-full bg-navy-light border border-gold-subtle rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-gold/50"
               >
                 <option value="gold">Gold & Deep Blue (Default)</option>
                 <option value="emerald">Emerald Green & Forest</option>
@@ -1068,7 +1068,7 @@ export default function SettingsPage() {
               </select>
             </div>
 
-            <div className="bg-navy-light p-3 rounded-lg border border-white/5 space-y-2">
+            <div className="bg-navy-light p-3 rounded-lg border border-gold-subtle space-y-2">
               <label className="text-[10px] text-gray-400 uppercase block">Referral Program Status</label>
               <div className="flex items-center gap-3">
                 <button
@@ -1082,12 +1082,12 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            <div className="bg-navy-light p-3 rounded-lg border border-white/5 space-y-2">
+            <div className="bg-navy-light p-3 rounded-lg border border-gold-subtle space-y-2">
               <label className="text-[10px] text-gray-400 uppercase block">Signup Bonus (ETB)</label>
               <p className="text-[8.5px] text-gray-500">New users get this amount credited to their play balance on first signup.</p>
               <input type="number" min="0" max="1000" step="1" value={signupBonus}
                 onChange={e => setSignupBonus(Number(e.target.value) || 0)}
-                className="w-full bg-navy border border-white/10 rounded-md px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
+                className="w-full bg-navy border border-gold-subtle rounded-md px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
               />
             </div>
 
@@ -1107,7 +1107,7 @@ export default function SettingsPage() {
             </h3>
 
             {/* Daily Streak */}
-            <div className="p-3 bg-navy-light rounded-xl border border-white/5 space-y-3">
+            <div className="p-3 bg-navy-light rounded-xl border border-gold-subtle space-y-3">
               <h4 className="text-xs font-semibold text-white">Daily Win Streak</h4>
               <p className="text-[9px] text-gray-500">Reward players with increasing bonuses for consecutive daily wins.</p>
               <div className="flex items-center justify-between">
@@ -1125,7 +1125,7 @@ export default function SettingsPage() {
                       type="text"
                       value={streakRewards}
                       onChange={e => setStreakRewards(e.target.value)}
-                      className="w-full bg-navy border border-white/10 rounded-md px-2.5 py-1.5 text-white text-xs"
+                      className="w-full bg-navy border border-gold-subtle rounded-md px-2.5 py-1.5 text-white text-xs"
                       placeholder="e.g., 5,5,5,10,10,15,25"
                     />
                     <p className="text-[8px] text-gray-500 mt-0.5">Day 1, Day 2, Day 3, ... Day 7+ reward. Each entry = the bonus amount for that consecutive win day.</p>
@@ -1135,7 +1135,7 @@ export default function SettingsPage() {
             </div>
 
             {/* 3-Win Combo */}
-            <div className="p-3 bg-navy-light rounded-xl border border-white/5 space-y-3">
+            <div className="p-3 bg-navy-light rounded-xl border border-gold-subtle space-y-3">
               <h4 className="text-xs font-semibold text-white">3-Win Combo Bonus</h4>
               <p className="text-[9px] text-gray-500">A bonus reward when a player wins 3 consecutive games within the same session.</p>
               <div className="flex items-center justify-between">
@@ -1153,7 +1153,7 @@ export default function SettingsPage() {
                       type="number" step="1" min="0"
                       value={comboBonus}
                       onChange={e => setComboBonus(parseFloat(e.target.value) || 0)}
-                      className="w-full bg-navy border border-white/10 rounded-md px-2.5 py-1.5 text-white text-xs"
+                      className="w-full bg-navy border border-gold-subtle rounded-md px-2.5 py-1.5 text-white text-xs"
                     />
                   </div>
                 </div>
@@ -1161,7 +1161,7 @@ export default function SettingsPage() {
             </div>
 
             {/* Happy Hour */}
-            <div className="p-3 bg-navy-light rounded-xl border border-white/5 space-y-3">
+            <div className="p-3 bg-navy-light rounded-xl border border-gold-subtle space-y-3">
               <h4 className="text-xs font-semibold text-white">Happy Hour</h4>
               <p className="text-[9px] text-gray-500">Override commission % during a specific daily time window. Players see a special label.</p>
               <div className="flex items-center justify-between">
@@ -1175,7 +1175,7 @@ export default function SettingsPage() {
                 <div className="space-y-3 ml-2 border-l-2 border-gold/30 pl-3">
                   <div>
                     <label className="text-[10px] text-gray-400 block mb-0.5">Room (targeted)</label>
-                    <select value={happyHourRoom} onChange={e => setHappyHourRoom(e.target.value)} className="w-full bg-navy border border-white/10 rounded-md px-2.5 py-1.5 text-white text-xs">
+                    <select value={happyHourRoom} onChange={e => setHappyHourRoom(e.target.value)} className="w-full bg-navy border border-gold-subtle rounded-md px-2.5 py-1.5 text-white text-xs">
                       {roomsList.map(r => (
                         <option key={r.name} value={r.name.toLowerCase()}>{r.name}</option>
                       ))}
@@ -1187,7 +1187,7 @@ export default function SettingsPage() {
                       type="text"
                       value={happyHourLabel}
                       onChange={e => setHappyHourLabel(e.target.value)}
-                      className="w-full bg-navy border border-white/10 rounded-md px-2.5 py-1.5 text-white text-xs"
+                      className="w-full bg-navy border border-gold-subtle rounded-md px-2.5 py-1.5 text-white text-xs"
                       placeholder="e.g., Happy Hour 🎉"
                     />
                   </div>
@@ -1198,7 +1198,7 @@ export default function SettingsPage() {
                         type="number" min="0" max="23" step="1"
                         value={happyHourStart}
                         onChange={e => setHappyHourStart(Math.max(0, Math.min(23, parseInt(e.target.value) || 0)))}
-                        className="w-full bg-navy border border-white/10 rounded-md px-2.5 py-1.5 text-white text-xs"
+                        className="w-full bg-navy border border-gold-subtle rounded-md px-2.5 py-1.5 text-white text-xs"
                       />
                     </div>
                     <div>
@@ -1207,7 +1207,7 @@ export default function SettingsPage() {
                         type="number" min="0" max="23" step="1"
                         value={happyHourEnd}
                         onChange={e => setHappyHourEnd(Math.max(0, Math.min(23, parseInt(e.target.value) || 0)))}
-                        className="w-full bg-navy border border-white/10 rounded-md px-2.5 py-1.5 text-white text-xs"
+                        className="w-full bg-navy border border-gold-subtle rounded-md px-2.5 py-1.5 text-white text-xs"
                       />
                     </div>
                   </div>
@@ -1217,7 +1217,7 @@ export default function SettingsPage() {
                       type="number" step="0.1" min="0" max="100"
                       value={happyHourCommission}
                       onChange={e => setHappyHourCommission(parseFloat(e.target.value) || 0)}
-                      className="w-full bg-navy border border-white/10 rounded-md px-2.5 py-1.5 text-white text-xs"
+                      className="w-full bg-navy border border-gold-subtle rounded-md px-2.5 py-1.5 text-white text-xs"
                     />
                   </div>
                 </div>
@@ -1236,7 +1236,7 @@ export default function SettingsPage() {
             </p>
 
             {notifChannels.map((ch, idx) => (
-              <div key={ch.id} className="bg-navy-light p-3 rounded-lg border border-white/5 space-y-2">
+              <div key={ch.id} className="bg-navy-light p-3 rounded-lg border border-gold-subtle space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <button
@@ -1262,23 +1262,23 @@ export default function SettingsPage() {
                   <div>
                     <label className="text-[9px] text-gray-400 block">Channel Label</label>
                     <input type="text" value={ch.label} onChange={(e) => { const c = [...notifChannels]; c[idx] = { ...c[idx], label: e.target.value }; setNotifChannels(c); }}
-                      className="w-full bg-navy border border-white/10 rounded-lg px-2 py-1 text-[11px] text-white" placeholder="e.g. Finance Dept" />
+                      className="w-full bg-navy border border-gold-subtle rounded-lg px-2 py-1 text-[11px] text-white" placeholder="e.g. Finance Dept" />
                   </div>
                   <div>
                     <label className="text-[9px] text-gray-400 block">Bot Token</label>
                     <input type="text" value={ch.bot_token} onChange={(e) => { const c = [...notifChannels]; c[idx] = { ...c[idx], bot_token: e.target.value }; setNotifChannels(c); }}
-                      className="w-full bg-navy border border-white/10 rounded-lg px-2 py-1 text-[11px] text-white font-mono" placeholder="123:ABCdef..." />
+                      className="w-full bg-navy border border-gold-subtle rounded-lg px-2 py-1 text-[11px] text-white font-mono" placeholder="123:ABCdef..." />
                   </div>
                   <div className="col-span-2">
                     <label className="text-[9px] text-gray-400 block">Chat IDs (comma / space separated)</label>
                     <input type="text" value={ch.chat_ids} onChange={(e) => { const c = [...notifChannels]; c[idx] = { ...c[idx], chat_ids: e.target.value }; setNotifChannels(c); }}
-                      className="w-full bg-navy border border-white/10 rounded-lg px-2 py-1 text-[11px] text-white" placeholder="e.g. 123456789, 987654321" />
+                      className="w-full bg-navy border border-gold-subtle rounded-lg px-2 py-1 text-[11px] text-white" placeholder="e.g. 123456789, 987654321" />
                   </div>
                 </div>
                 {!ch.all_events && (
                   <div className="flex flex-wrap gap-1.5 mt-1">
                     {['deposit_pending','deposit_approved','deposit_rejected','withdraw_pending','withdraw_approved','withdraw_rejected','game_started','game_winner','game_winner_appointed','user_registered','balance_adjustment'].map(ev => (
-                      <label key={ev} className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] cursor-pointer select-none transition-colors ${ch.events.includes(ev) ? 'bg-gold/20 text-gold border border-gold/30' : 'bg-navy text-gray-400 border border-white/10'}`}>
+                      <label key={ev} className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] cursor-pointer select-none transition-colors ${ch.events.includes(ev) ? 'bg-gold/20 text-gold border border-gold/30' : 'bg-navy text-gray-400 border border-gold-subtle'}`}>
                         <input type="checkbox" checked={ch.events.includes(ev)} onChange={() => {
                           const c = [...notifChannels];
                           if (c[idx].events.includes(ev)) c[idx].events = c[idx].events.filter((e: string) => e !== ev);
@@ -1316,7 +1316,7 @@ export default function SettingsPage() {
             <h3 className="text-xs font-semibold text-white">Biased Client-Side Draw Engine</h3>
             <p className="text-[9px] text-gray-500">Configure certain game sessions to draw numbers in favor of a specific card. This seeded randomness forces the designated card to win BINGO.</p>
 
-            <div className="bg-navy-light p-3 rounded-lg border border-white/5 space-y-3">
+            <div className="bg-navy-light p-3 rounded-lg border border-gold-subtle space-y-3">
               <h4 className="text-[10px] font-bold text-gold uppercase">Appoint Winner for Upcoming/Active Game</h4>
               <div className="grid grid-cols-3 gap-2 text-[10px]">
                 <div>
@@ -1325,7 +1325,7 @@ export default function SettingsPage() {
                     type="text"
                     id="appoint_game_id"
                     placeholder="e.g. bronze"
-                    className="w-full bg-navy border border-white/10 rounded-md px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
+                    className="w-full bg-navy border border-gold-subtle rounded-md px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
                   />
                 </div>
                 <div>
@@ -1336,7 +1336,7 @@ export default function SettingsPage() {
                     min="1"
                     max="200"
                     placeholder="e.g. 58"
-                    className="w-full bg-navy border border-white/10 rounded-md px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
+                    className="w-full bg-navy border border-gold-subtle rounded-md px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
                   />
                 </div>
                 <div>
@@ -1348,7 +1348,7 @@ export default function SettingsPage() {
                     max="75"
                     placeholder="e.g. 12"
                     defaultValue="20"
-                    className="w-full bg-navy border border-white/10 rounded-md px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
+                    className="w-full bg-navy border border-gold-subtle rounded-md px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-gold/50"
                   />
                 </div>
               </div>
@@ -1384,7 +1384,7 @@ export default function SettingsPage() {
               <label className="text-xs text-gray-300 font-bold uppercase tracking-wider block">Active Appointed Rules ({Object.keys(appointedWinners).length})</label>
               <div className="space-y-1.5 max-h-[40vh] overflow-y-auto">
                 {Object.entries(appointedWinners).map(([gId, rule]) => (
-                  <div key={gId} className="flex items-center justify-between p-2.5 bg-navy-light border border-white/5 rounded-lg text-xs">
+                  <div key={gId} className="flex items-center justify-between p-2.5 bg-navy-light border border-gold-subtle rounded-lg text-xs">
                     <div>
                       <span className="text-[10px] text-gray-400 font-bold">GAME ID / ROOM:</span> <span className="font-mono text-white ml-1 font-bold">{gId}</span>
                     </div>
@@ -1413,7 +1413,7 @@ export default function SettingsPage() {
                   </div>
                 ))}
                 {Object.keys(appointedWinners).length === 0 && (
-                  <div className="text-gray-500 text-xs italic text-center py-4 bg-navy-light/45 border border-white/5 rounded-lg">No active appointed winner overrides defined. All games currently use fair, un-biased seeded drawing sequences.</div>
+                  <div className="text-gray-500 text-xs italic text-center py-4 bg-navy-light/45 border border-gold-subtle rounded-lg">No active appointed winner overrides defined. All games currently use fair, un-biased seeded drawing sequences.</div>
                 )}
               </div>
             </div>

@@ -338,13 +338,17 @@ export async function POST(request: NextRequest) {
       const shouldFinalize = finalizeRequested || (existingWinners.length > 0 && collectionExpired);
 
       if (shouldFinalize) {
-        // Finalize: split prize among all recorded winners and finish game
+        // Finalize: split prize equally among all recorded winners and finish game
         const realWinners = existingWinners.filter((w: any) => w.user_id);
         const winnerCount = Math.max(realWinners.length, 1);
-        const sharePerWinner = Math.floor(winAmount / winnerCount);
+        const baseShare = Math.floor(winAmount / winnerCount);
+        const remainder = winAmount - (baseShare * winnerCount);
 
-        for (const w of realWinners) {
+        for (let i = 0; i < realWinners.length; i++) {
+          const w = realWinners[i];
           const uid = w.user_id;
+          // Give the first winner any remainder from the split so total is exact
+          const sharePerWinner = i === 0 ? baseShare + remainder : baseShare;
           const bal = await supabase.rpc('adjust_main_balance', { p_user_id: uid, p_amount: sharePerWinner });
           if (bal.error) {
             console.error(`adjust_main_balance error for ${uid}:`, bal.error);
@@ -390,8 +394,8 @@ export async function POST(request: NextRequest) {
         await supabase.from('game_card_reservations').delete().eq('game_code', gameByCode.code);
 
         // Return this caller's share
-        const callerWin = existingWinners.find((w: any) => w.user_id === userId);
-        const callerShare = callerWin ? sharePerWinner : 0;
+        const callerIdx = realWinners.findIndex((w: any) => w.user_id === userId);
+        const callerShare = callerIdx >= 0 ? (callerIdx === 0 ? baseShare + remainder : baseShare) : 0;
 
         return NextResponse.json({
           success: true,

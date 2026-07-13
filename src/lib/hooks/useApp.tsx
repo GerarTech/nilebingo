@@ -55,6 +55,7 @@ interface AppContextType extends AppState {
   refreshWallet: () => Promise<void>;
   updateBalance: (amount: number, type: 'play_balance' | 'main_balance') => Promise<void>;
   updateAvatar: (avatar: string) => Promise<void>;
+  updateName: (name: string) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -332,6 +333,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [state.profile]);
 
+  const updateName = useCallback(async (name: string) => {
+    if (!state.profile) return;
+    setState(prev => ({
+      ...prev,
+      profile: prev.profile ? { ...prev.profile, first_name: name } : null,
+    }));
+    try {
+      await fetch('/api/public/init', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: state.profile.id, firstName: name }),
+      });
+    } catch (e) {
+      console.warn('Could not persist name update to Supabase:', e);
+    }
+  }, [state.profile]);
+
   return (
     <AppContext.Provider
       value={{
@@ -344,6 +362,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         refreshWallet,
         updateBalance,
         updateAvatar,
+        updateName,
       }}
     >
       {children}

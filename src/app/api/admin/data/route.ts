@@ -5,7 +5,7 @@ import { createClient } from '@supabase/supabase-js';
 export const dynamic = 'force-dynamic';
 
 import {
-  verifyAdmin,
+  checkAdminAuth,
   getDashboardStats,
   getAnalytics,
   getUsers,
@@ -38,8 +38,9 @@ if (!supabaseUrl || !supabaseServiceKey) throw new Error('Missing Supabase envir
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 function checkAuth(request: NextRequest): boolean {
-  const cookie = request.cookies.get('admin_token')?.value;
-  return !!cookie && verifyAdmin(cookie);
+  const cookie = request.cookies.get('admin_session')?.value || request.cookies.get('admin_token')?.value;
+  const { authorized } = checkAdminAuth(cookie);
+  return authorized;
 }
 
 export async function GET(request: NextRequest) {
@@ -221,7 +222,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(result);
       }
       case 'finish_game': {
-        const { data, error } = await supabase
+        const { error } = await supabase
           .from('games')
           .update({ status: 'finished' })
           .eq('id', body.gameId);

@@ -10,23 +10,24 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const currentUserId = searchParams.get('userId') || '';
 
-    const { data: wins } = await supabase
+    const { data: allGames } = await supabase
       .from('game_history')
-      .select('user_id, win_amount')
-      .gt('win_amount', 0);
+      .select('user_id, win_amount');
 
-    if (!wins || wins.length === 0) {
+    if (!allGames || allGames.length === 0) {
       return NextResponse.json({ leaderboard: [] });
     }
 
-    const earningsMap: Record<string, number> = {};
+    const gamesPlayedMap: Record<string, number> = {};
     const winsCountMap: Record<string, number> = {};
-    for (const w of wins) {
-      earningsMap[w.user_id] = (earningsMap[w.user_id] || 0) + Number(w.win_amount);
-      winsCountMap[w.user_id] = (winsCountMap[w.user_id] || 0) + 1;
+    for (const g of allGames) {
+      gamesPlayedMap[g.user_id] = (gamesPlayedMap[g.user_id] || 0) + 1;
+      if (Number(g.win_amount) > 0) {
+        winsCountMap[g.user_id] = (winsCountMap[g.user_id] || 0) + 1;
+      }
     }
 
-    const userIds = Object.keys(earningsMap);
+    const userIds = Object.keys(gamesPlayedMap);
     const { data: profiles } = await supabase
       .from('profiles')
       .select('id, username, first_name, photo_url')
@@ -38,12 +39,12 @@ export async function GET(request: NextRequest) {
       .map(id => ({
         id,
         username: profileMap.get(id)?.first_name || profileMap.get(id)?.username || 'Anonymous',
-        earnings: earningsMap[id],
-        totalWins: winsCountMap[id],
+        gamesPlayed: gamesPlayedMap[id],
+        totalWins: winsCountMap[id] || 0,
         avatar: profileMap.get(id)?.photo_url || '👤',
         isUser: id === currentUserId,
       }))
-      .sort((a, b) => b.earnings - a.earnings)
+      .sort((a, b) => b.gamesPlayed - a.gamesPlayed)
       .slice(0, 50);
 
     return NextResponse.json({ leaderboard: entries }, {

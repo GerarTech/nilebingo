@@ -124,7 +124,7 @@ export default function DashboardPage() {
             </div>
             <table className="w-full mt-4 text-[10px]">
               <thead>
-                <tr className="text-gray-500 border-b border-white/5">
+                <tr className="text-gray-500 border-b border-gold-subtle">
                   <th className="text-left py-1">Date</th>
                   <th className="text-right py-1">Users</th>
                   <th className="text-right py-1">Games</th>
@@ -134,7 +134,7 @@ export default function DashboardPage() {
               </thead>
               <tbody>
                 {(analytics.dailyChart || []).slice().reverse().map(day => (
-                  <tr key={day.date} className="border-b border-white/5 text-gray-300">
+                  <tr key={day.date} className="border-b border-gold-subtle text-gray-300">
                     <td className="py-1.5">{day.date}</td>
                     <td className="text-right">{day.activeUsers}</td>
                     <td className="text-right">{day.games}</td>

@@ -8,7 +8,7 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.
 if (!supabaseUrl || !supabaseServiceKey) throw new Error('Missing Supabase environment variables');
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     const { data } = await supabase
       .from('bot_config')
@@ -21,8 +21,8 @@ export async function GET(request: NextRequest) {
     // Provide sensible fallbacks for commission, rooms, and branding
     const commission = typeof config.commission === 'number' ? config.commission : 15;
     const appName = config.appName || 'Nile BINGO';
-    const appLogo = config.appLogo || '🎰';
-    const appLogoPng = config.appLogoPng || null;
+    const appLogo = config.appLogo || '';
+    const appLogoPng = config.appLogoPng || '/logo.png';
     const botUsername = process.env.TELEGRAM_BOT_USERNAME || '';
     const colorScheme = config.colorScheme || 'gold';
     const referralEnabled = config.referralEnabled !== false;
@@ -65,8 +65,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ 
       commission: 15,
       appName: 'Nile BINGO',
-      appLogo: '🎰',
-      appLogoPng: null,
+      appLogo: '',
+      appLogoPng: '/logo.png',
       colorScheme: 'gold',
       referralEnabled: true,
       referralBonus: 1,

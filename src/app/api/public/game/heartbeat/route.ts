@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const gameId = searchParams.get('gameId');
-    const userId = searchParams.get('userId');
+    const _userId = searchParams.get('userId');
 
     if (!gameId) {
       return NextResponse.json({ error: 'gameId is required' }, { status: 400 });

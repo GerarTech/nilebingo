@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
         .maybeSingle();
 
       if (existing) {
-        const { data: updated, error: updateError } = await supabase
+        const { data: updated, error: _updateError } = await supabase
           .from('games')
           .update({
             status: 'finished',

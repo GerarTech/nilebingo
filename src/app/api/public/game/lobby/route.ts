@@ -23,7 +23,7 @@ function hashUUIDToInteger(uuid: string): number {
   return -((Math.abs(hash) % 900000) + 100000);
 }
 
-function getRoomPeriod(roomId: string): number {
+function getRoomPeriod(_roomId: string): number {
   return 45;
 }
 
@@ -54,13 +54,54 @@ export async function GET(request: NextRequest) {
       const cycle = Math.floor(currentSec / period);
       const sharedGameId = generateDeterministicGameId(roomId, cycle);
       const remaining = period - (currentSec % period) || period;
+
+      // Check if any game with the same stake is already active (one-at-a-time per stake)
+      let gameLocked = false;
+      let activeGameCode: string | null = null;
+      try {
+        // Look up the room's entry amount from bot_config
+        const { data: configData } = await supabase.from('bot_config').select('commands').eq('id', 'main').single();
+        const config = configData?.commands || {};
+        const rooms = Array.isArray(config.rooms) ? config.rooms : [];
+        const matchingRoom = rooms.find((r: any) => r.id === roomId);
+        if (matchingRoom && typeof matchingRoom.entry === 'number') {
+          const entryAmount = Number(matchingRoom.entry);
+          // Find the stake ID for this entry amount
+          const { data: stakeData } = await supabase
+            .from('stakes')
+            .select('id')
+            .eq('amount', entryAmount)
+            .limit(1);
+          if (stakeData && stakeData.length > 0) {
+            // Check if there's an active game with this stake
+            const { data: activeGame } = await supabase
+              .from('games')
+              .select('code')
+              .eq('stake_id', stakeData[0].id)
+              .eq('status', 'active')
+              .limit(1)
+              .maybeSingle();
+            if (activeGame) {
+              gameLocked = true;
+              activeGameCode = activeGame.code;
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to check stake lock:', e);
+      }
+
+      // If stake is locked, return the active game's code so clients see the locked game
+      const returnGameId = gameLocked && activeGameCode ? activeGameCode : sharedGameId;
+
       return NextResponse.json({
         success: true,
-        gameId: sharedGameId,
+        gameId: returnGameId,
         roomId,
         cycle,
         period,
         countdown: remaining,
+        gameLocked,
         serverTime: new Date().toISOString(),
       });
     }
@@ -201,8 +242,8 @@ export async function POST(request: NextRequest) {
           .eq('user_id', userId);
 
         const currentActiveCount = (userCurrent || []).filter(r => r.card_number > 0).length;
-        if (currentActiveCount >= 5) {
-          return NextResponse.json({ error: 'Maximum of 5 cards allowed' }, { status: 400 });
+        if (currentActiveCount >= 2) {
+          return NextResponse.json({ error: 'Maximum of 2 cards allowed' }, { status: 400 });
         }
 
         // Try to insert new reservation
@@ -269,6 +310,31 @@ export async function POST(request: NextRequest) {
       if (!gameId || !userId || !Array.isArray(selectedCards) || selectedCards.length === 0) {
         return NextResponse.json({ error: 'gameId, userId, and selectedCards array are required' }, { status: 400 });
       }
+
+      // Reject if another game with the same stake is already active (one-at-a-time per stake)
+      try {
+        const { data: currentGame } = await supabase
+          .from('games')
+          .select('stake_id')
+          .eq('code', gameId)
+          .maybeSingle();
+        if (currentGame?.stake_id) {
+          const { data: activeConflict } = await supabase
+            .from('games')
+            .select('id, code')
+            .eq('stake_id', currentGame.stake_id)
+            .eq('status', 'active')
+            .neq('code', gameId)
+            .limit(1)
+            .maybeSingle();
+          if (activeConflict) {
+            return NextResponse.json({ error: 'Another game with the same stake is already in progress. Please wait for it to finish.' }, { status: 409 });
+          }
+        }
+      } catch (e) {
+        console.warn('Stake lock check in reserve_cards failed:', e);
+      }
+
       // Verify ALL selected cards are not taken by OTHER users
       const { data: existing } = await supabase
         .from('game_card_reservations')
@@ -348,6 +414,30 @@ export async function POST(request: NextRequest) {
 
       if (existingFinished) {
         return NextResponse.json({ error: 'This game cycle has already finished. Please wait for the next round.' }, { status: 409 });
+      }
+
+      // Reject registration if another game with the same stake is already active (one-at-a-time per stake)
+      try {
+        const { data: currentGame } = await supabase
+          .from('games')
+          .select('stake_id')
+          .eq('code', gameId)
+          .maybeSingle();
+        if (currentGame?.stake_id) {
+          const { data: activeConflict } = await supabase
+            .from('games')
+            .select('id, code')
+            .eq('stake_id', currentGame.stake_id)
+            .eq('status', 'active')
+            .neq('code', gameId)
+            .limit(1)
+            .maybeSingle();
+          if (activeConflict) {
+            return NextResponse.json({ error: 'Another game with the same stake is already in progress. Please wait for it to finish.' }, { status: 409 });
+          }
+        }
+      } catch (e) {
+        console.warn('Stake lock check failed:', e);
       }
 
       // Look up room-specific commission from bot_config

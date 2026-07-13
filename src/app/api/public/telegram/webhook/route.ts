@@ -68,7 +68,7 @@ async function getBotCommands(): Promise<Record<string, any>> {
     telebirr_max: '1000',
     cbe_account: 'CHANGE_ME',
     cbe_name: 'CHANGE_ME',
-    cbe_max: '5000',
+    cbe_max: '500000',
     withdraw_required_games: '5',
     referral_bonus: '10',
     referral_min_deposit: '50',
@@ -356,7 +356,7 @@ const EN = {
   deposit_choose: '💳 *Deposit Funds*\n\nSelect your preferred payment method below:',
   deposit_cbe: 'CBE (Commercial Bank of Ethiopia)',
   deposit_telebirr: 'Telebirr',
-  deposit_amount_prompt: '💵 *Enter Amount*\n\nHow much would you like to deposit?\n\nMinimum: *{min} ETB*\nMaximum: *{max} ETB*\n\nPlease reply with the amount only (e.g., `200`).',
+  deposit_amount_prompt: '💵 *Enter Amount*\n\nHow much would you like to deposit?\n\nMinimum: *{min} ETB*\n\nPlease reply with the amount only (e.g., `200`).',
   deposit_txid_prompt: '📝 *Transaction Reference*\n\nSend your payment to the account below, then reply with the transaction/reference ID:\n\n🏦 *{bank_name}*\nAccount: `{account}`\nRecipient: {recipient}\nAmount: *{amount} ETB*\n\nOnce you\'ve sent the payment, type the transaction ID you received.',
   deposit_submitted: '⏳ *Deposit Submitted*\n\nYour deposit of *{amount} ETB* via *{bank}* has been received and is pending review.\n\n🆔 Reference: `{txid}`\n\nOur team will verify and approve it shortly. You\'ll receive a notification once credited! ✅',
   withdraw_info: '💸 *Withdraw Funds*\n\nOnly your *Main Balance* can be withdrawn. Play balance is for gameplay only.\n\n📋 *Requirements:*\n• Play at least {required_games} games first\n• Minimum withdrawal: {min_amount} ETB\n\nReady to withdraw? Reply with the *amount* you\'d like to withdraw.',
@@ -380,7 +380,7 @@ const EN = {
   admin_no_pending: 'No pending transactions at the moment.',
   admin_no_users: 'No users found yet.',
   admin_help: '*🔐 Admin Commands*\n\n/admin_stats — Dashboard statistics\n/admin_users — Recent 10 users\n/admin_pending — View pending transactions\n/approve_<tx_id> — Approve a transaction\n/reject_<tx_id> — Reject a transaction\n/broadcast <message> — Send message to all users\n/admin_help — Show this help',
-  invite: '🎉 *Invite Friends & Earn!*\n\nHere\'s your exclusive invite link:\n<{refLink}>\n\n*How it works:*\n• Share your link with friends\n• They join and share their phone number\n• You instantly get *{refBonus} ETB* in your Play Wallet\n\nNo minimum deposit required — just invite and play! 🚀',
+  invite: '🎉 *Invite Friends & Earn!*\n\nHere\'s your exclusive invite link:\n\n`{refLink}`\n\n*How it works:*\n• Share your link with friends\n• They join and share their phone number\n• You instantly get *{refBonus} ETB* in your Play Wallet\n\nNo minimum deposit required — just invite and play! 🚀',
 };
 
 const AM = {
@@ -403,7 +403,7 @@ const AM = {
   deposit_choose: '💳 *ገንዘብ ማስገቢያ*\n\nየሚፈልጉትን የክፍያ ዘዴ ይምረጡ:',
   deposit_cbe: 'CBE ባንክ',
   deposit_telebirr: 'ቴሌብር',
-  deposit_amount_prompt: '💵 *መጠን ያስገቡ*\n\nምን ያህል ማስገባት ይፈልጋሉ?\n\nዝቅተኛ: *{min} ETB*\nከፍተኛ: *{max} ETB*\n\nእባክዎ መጠኑን ብቻ ይፃፉ (ለምሳሌ `200`)።',
+  deposit_amount_prompt: '💵 *መጠን ያስገቡ*\n\nምን ያህል ማስገባት ይፈልጋሉ?\n\nዝቅተኛ: *{min} ETB*\n\nእባክዎ መጠኑን ብቻ ይፃፉ (ለምሳሌ `200`)።',
   deposit_txid_prompt: '📝 *የግብይት ማረጋገጫ*\n\nገንዘቡን ከታች ወደተመለከተው ሂሳብ ከላኩ በኋላ፣ የግብይት መለያ ቁጥሩን (Transaction ID) ይላኩ:\n\n🏦 *{bank_name}*\nሂሳብ: `{account}`\nተቀባይ: {recipient}\nመጠን: *{amount} ETB*\n\nገንዘቡን ከላኩ በኋላ የተቀበሉትን የግብይት መለያ ቁጥር ይላኩ።',
   deposit_submitted: '⏳ *ገንዘብ ማስገቢያ ተልኳል*\n\nየ *{amount} ETB* ገንዘብ ማስገቢያዎ በ*{bank}* በኩል ደርሷል እና በመገምገም ላይ ነው።\n\n🆔 ማመሳከሪያ: `{txid}`\n\nቡድናችን በቅርቡ ያረጋግጠዋል። ሲፀድቅ ማሳወቂያ ያገኛሉ! ✅',
   withdraw_info: '💸 *ገንዘብ ማውጣት*\n\nየ*ዋና ቀሪ* ሂሳብዎ ውስጥ ያለው ገንዘብ ብቻ ነው ማውጣት የሚቻለው። የጨዋታ ቀሪ ለጨዋታ ብቻ ነው።\n\n📋 *መስፈርቶች:*\n• ቢያንስ {required_games} ጨዋታዎችን ይጫወቱ\n• ዝቅተኛ ማውጫ: {min_amount} ETB\n\nለማውጣት እባክዎ የሚፈልጉትን *መጠን* ይፃፉ።',
@@ -418,7 +418,7 @@ const AM = {
   transactions_empty: '📒 *ግብይቶች*\n\nእስካሁን ምንም ግብይት የለም። መጫወት ይጀምሩ!',
   broadcast_usage: '📢 *መልእክት ማሰራጫ*\n\nአጠቃቀም: `/broadcast መልእክትዎ`\n\nለሁሉም ተመዝጋቢዎች መልእክት ይላኩ።',
   broadcast_done: '✅ መልእክት ለ{count} ተጠቃሚዎች ተልኳል።',
-  invite: '🎉 *ጓደኞችን ጋብዙ እና ያግኙ!*\n\nየእርስዎ ልዩ የግብዣ አገናኝ ይኸውና:\n<{refLink}>\n\n*እንዴት እንደሚሰራ:*\n• አገናኝዎን ከጓደኞችዎ ጋር ያጋሩ\n• ይቀላቀላሉ እና ስልክ ቁጥራቸውን ያጋራሉ\n• ወዲያውኑ *{refBonus} ETB* በጨዋታ ቦርሳዎ ውስጥ ያገኛሉ\n\nምንም ዝቅተኛ ተቀማጭ አያስፈልግም — ይጋብዙ እና ይጫወቱ! 🚀',
+  invite: '🎉 *ጓደኞችን ጋብዙ እና ያግኙ!*\n\nየእርስዎ ልዩ የግብዣ አገናኝ ይህንና:\n\n`{refLink}`\n\n*እንዴት እንደሚሰራ:*\n• አገናኝዎን ከጓደኞችዎ ጋር ያጋሩ\n• ይቀላቀላሉ እና ስልክ ቁጥራቸውን ያጋራሉ\n• ወዲያውኑ *{refBonus} ETB* በጨዋታ ቦርሳዎ ውስጥ ያገኛሉ\n\nምንም ዝቅተኛ ተቀማጭ አያስፈልግም — ይጋብዙ እና ይጫወቱ! 🚀',
 };
 
 function getText(lang: 'en' | 'am', key: string): string {
@@ -846,14 +846,12 @@ export async function POST(request: NextRequest) {
       if (data === 'deposit_cbe') {
         await answerCallbackQuery(callbackQuery.id);
         await safeUpdateState(String(from.id), 'waiting_deposit_amount', { bank_id: 'cbe' });
-        const cbeMax = commands.cbe_max || '5000';
-        const msgText = getText(lang, 'deposit_amount_prompt').replace('{min}', '50').replace('{max}', cbeMax);
+        const msgText = getText(lang, 'deposit_amount_prompt').replace('{min}', '20');
         await sendMessage(chatId, msgText, { parse_mode: 'Markdown', reply_markup: { keyboard: [[{ text: 'Cancel ❌' }]], resize_keyboard: true, one_time_keyboard: false } });
       } else if (data === 'deposit_telebirr') {
         await answerCallbackQuery(callbackQuery.id);
         await safeUpdateState(String(from.id), 'waiting_deposit_amount', { bank_id: 'telebirr' });
-        const telebirrMax = commands.telebirr_max || '1000';
-        const msgText = getText(lang, 'deposit_amount_prompt').replace('{min}', '10').replace('{max}', telebirrMax);
+        const msgText = getText(lang, 'deposit_amount_prompt').replace('{min}', '20');
         await sendMessage(chatId, msgText, { parse_mode: 'Markdown', reply_markup: { keyboard: [[{ text: 'Cancel ❌' }]], resize_keyboard: true, one_time_keyboard: false } });
       } else if (data === 'lang_en') {
         await answerCallbackQuery(callbackQuery.id, 'Language set to English');
@@ -865,10 +863,7 @@ export async function POST(request: NextRequest) {
         const bankId = data.replace('deposit_bank_', '');
         await answerCallbackQuery(callbackQuery.id);
         await safeUpdateState(String(from.id), 'waiting_deposit_amount', { bank_id: bankId });
-        const banks: any[] = commands.banks || [];
-        const bank = banks.find((b: any) => b.id === bankId);
-        const maxAmt = bank?.max || '5000';
-        const msgText = getText(lang, 'deposit_amount_prompt').replace('{min}', '50').replace('{max}', maxAmt);
+        const msgText = getText(lang, 'deposit_amount_prompt').replace('{min}', '20');
         await sendMessage(chatId, msgText, { parse_mode: 'Markdown', reply_markup: { keyboard: [[{ text: 'Cancel ❌' }]], resize_keyboard: true, one_time_keyboard: false } });
       } else if (data.startsWith('deposit_cbe_amount_')) {
         const amount = parseFloat(data.replace('deposit_cbe_amount_', ''));
@@ -1194,15 +1189,9 @@ export async function POST(request: NextRequest) {
         const banks: any[] = commands.banks || [];
         const bankId = stateData.bank_id || 'cbe';
         const bank = banks.find((b: any) => b.id === bankId);
-        const minDeposit = bank?.min ?? (bankId === 'telebirr' ? 10 : 50);
-        const maxDeposit = bank?.max ?? (bankId === 'telebirr' ? Number(commands.telebirr_max || 1000) : Number(commands.cbe_max || 5000));
 
-        if (amount < minDeposit) {
-          await sendMessage(chatId, `❌ Minimum deposit is *${minDeposit} ETB*. Please enter a larger amount.`, { parse_mode: 'Markdown', reply_markup: { keyboard: [[{ text: 'Cancel ❌' }]], resize_keyboard: true, one_time_keyboard: false } });
-          return NextResponse.json({ ok: true });
-        }
-        if (amount > maxDeposit) {
-          await sendMessage(chatId, `❌ Maximum deposit is *${maxDeposit} ETB*. Please enter a smaller amount.`, { parse_mode: 'Markdown', reply_markup: { keyboard: [[{ text: 'Cancel ❌' }]], resize_keyboard: true, one_time_keyboard: false } });
+        if (amount < 20) {
+          await sendMessage(chatId, `❌ Minimum deposit is *20 ETB*. Please enter a larger amount.`, { parse_mode: 'Markdown', reply_markup: { keyboard: [[{ text: 'Cancel ❌' }]], resize_keyboard: true, one_time_keyboard: false } });
           return NextResponse.json({ ok: true });
         }
 
@@ -1777,13 +1766,9 @@ export async function POST(request: NextRequest) {
         const trimmed = text.trim();
         const parsed = parseFloat(trimmed.replace(/,/g, ''));
         if (!isNaN(parsed) && parsed > 0 && userProfile) {
-          const cbeMax = Number(commands.cbe_max) || 5000;
-          const telebirrMax = Number(commands.telebirr_max) || 1000;
-          const maxAllowed = Math.max(cbeMax, telebirrMax);
-          if (parsed > maxAllowed) {
-            await sendMessage(chatId, `❌ Maximum deposit is ${maxAllowed.toLocaleString()} ETB. Please enter a smaller amount.`, { parse_mode: 'Markdown', reply_markup: getMainKeyboard(lang) });
+          if (parsed < 20) {
+            await sendMessage(chatId, `❌ Minimum deposit is *20 ETB*. Please enter a larger amount.`, { parse_mode: 'Markdown', reply_markup: getMainKeyboard(lang) });
           } else {
-            const msgText = getText(lang, 'deposit_choose').replace('{min}', '10').replace('{max}', String(maxAllowed));
             await sendMessage(chatId, `💵 *Amount Received: ${parsed.toLocaleString()} ETB*\n\nNow select your payment method below:`, {
               parse_mode: 'Markdown',
               reply_markup: {

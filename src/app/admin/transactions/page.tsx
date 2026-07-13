@@ -65,7 +65,7 @@ export default function TransactionsPage() {
         <button
           onClick={() => setAutoRefresh(!autoRefresh)}
           className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-medium transition-colors ${
-            autoRefresh ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'
+            autoRefresh ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-white/5 text-gray-400 border border-gold-subtle hover:bg-white/10'
           }`}
         >
           <RefreshCw size={12} className={autoRefresh ? 'animate-spin' : ''} />
@@ -76,14 +76,14 @@ export default function TransactionsPage() {
 
       {/* Filters */}
       <div className="flex gap-2 mb-4 flex-wrap">
-        <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="bg-navy border border-white/10 rounded-lg px-3 py-2 text-xs text-white min-w-[110px]">
+        <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="bg-navy border border-gold-subtle rounded-lg px-3 py-2 text-xs text-white min-w-[110px]">
           <option value="">All Types</option>
           <option value="deposit">Deposit</option>
           <option value="withdraw">Withdraw</option>
           <option value="bet">Bet</option>
           <option value="win">Win</option>
         </select>
-        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="bg-navy border border-white/10 rounded-lg px-3 py-2 text-xs text-white min-w-[110px]">
+        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="bg-navy border border-gold-subtle rounded-lg px-3 py-2 text-xs text-white min-w-[110px]">
           <option value="">All Status</option>
           <option value="pending">Pending</option>
           <option value="completed">Completed</option>
@@ -94,19 +94,19 @@ export default function TransactionsPage() {
           value={filterBank}
           onChange={(e) => setFilterBank(e.target.value)}
           placeholder="Bank name..."
-          className="bg-navy border border-white/10 rounded-lg px-3 py-2 text-xs text-white min-w-[130px]"
+          className="bg-navy border border-gold-subtle rounded-lg px-3 py-2 text-xs text-white min-w-[130px]"
         />
         <input
           type="date"
           value={dateFrom}
           onChange={(e) => setDateFrom(e.target.value)}
-          className="bg-navy border border-white/10 rounded-lg px-3 py-2 text-xs text-white [color-scheme:dark]"
+          className="bg-navy border border-gold-subtle rounded-lg px-3 py-2 text-xs text-white [color-scheme:dark]"
         />
         <input
           type="date"
           value={dateTo}
           onChange={(e) => setDateTo(e.target.value)}
-          className="bg-navy border border-white/10 rounded-lg px-3 py-2 text-xs text-white [color-scheme:dark]"
+          className="bg-navy border border-gold-subtle rounded-lg px-3 py-2 text-xs text-white [color-scheme:dark]"
         />
         <div className="relative min-w-[180px]">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
@@ -115,7 +115,7 @@ export default function TransactionsPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search user or TX ID..."
-            className="bg-navy border border-white/10 rounded-lg pl-8 pr-3 py-2 text-xs text-white w-full"
+            className="bg-navy border border-gold-subtle rounded-lg pl-8 pr-3 py-2 text-xs text-white w-full"
           />
         </div>
       </div>
@@ -125,7 +125,7 @@ export default function TransactionsPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
-              <tr className="border-b border-white/5 text-gray-500">
+              <tr className="border-b border-gold-subtle text-gray-500">
                 <th className="text-left p-3 font-medium">User</th>
                 <th className="text-left p-3 font-medium">Type</th>
                 <th className="text-right p-3 font-medium">Amount</th>
@@ -138,7 +138,7 @@ export default function TransactionsPage() {
             </thead>
             <tbody>
                   {transactions.map((tx: any) => (
-                <tr key={tx.id} className="border-b border-white/5 hover:bg-white/5">
+                <tr key={tx.id} className="border-b border-gold-subtle hover:bg-gold/5">
                   <td className="p-3 text-white">
                     <div className="font-semibold">{tx.profiles?.first_name || tx.profiles?.username || 'Unknown'}</div>
                     <div className="text-[9px] text-gray-500">
