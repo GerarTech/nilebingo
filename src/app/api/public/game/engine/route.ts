@@ -124,8 +124,10 @@ export async function POST(request: NextRequest) {
 
       const drawnNumbers: number[] = game.drawn_numbers || [];
 
-      // Generate deterministic sequence from fixed seed
-      let seed = 12345;
+      // Generate deterministic sequence from game code (unique per game)
+      let seed = 0;
+      for (let i = 0; i < gameId.length; i++) seed = ((seed << 5) - seed + gameId.charCodeAt(i)) | 0;
+      if (seed === 0) seed = 12345;
       const rand = () => { seed = (seed * 1664525 + 1013904223) & 0xffffffff; return (seed >>> 0) / 0xffffffff; };
       const allBallsSorted = Array.from({ length: 75 }, (_, i) => i + 1);
       const seq: number[] = [];

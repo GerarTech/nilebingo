@@ -173,9 +173,12 @@ function HomePage() {
   const prevIsPlayingRef = useRef<Record<string, boolean>>({});
 
   // ============ DETERMINISTIC DRAW SEQUENCE ============
-  const FIXED_SEED = 12345;
+
   const getDeterministicDrawSequence = useCallback((gId: string, targetCardNum?: number | null) => {
-    let seed = FIXED_SEED;
+    // Derive seed from game code so every game has a unique draw order
+    let seed = 0;
+    for (let i = 0; i < gId.length; i++) seed = ((seed << 5) - seed + gId.charCodeAt(i)) | 0;
+    if (seed === 0) seed = 12345;
     const rand = () => { seed = (seed * 1664525 + 1013904223) & 0xffffffff; return (seed >>> 0) / 0xffffffff; };
     const allBalls = Array.from({ length: 75 }, (_, i) => i + 1);
     const seq: number[] = [];
@@ -674,7 +677,8 @@ function HomePage() {
 
         // Detect active→inactive transition: start 50s card selection timer
         // Only start timer when stake is NOT locked by another game
-        if (prev[r.id] === true && !isPlaying && !isLocked) {
+        // Don't start timer if user is still in-game for this room (leaveGame will set it when they return)
+        if (prev[r.id] === true && !isPlaying && !isLocked && !(ig && sr && sr.id === r.id)) {
           timers[r.id] = now + 50000;
         }
         prev[r.id] = isPlaying;
@@ -1277,6 +1281,7 @@ function HomePage() {
     // Start 50s post-game timer for the room we just left (reliable — polling transition detection can miss it)
     if (endedRoomId) {
       gameEndTimersRef.current[endedRoomId] = Date.now() + 50000;
+      prevIsPlayingRef.current[endedRoomId] = false;
     }
     if (shouldRecordLoss) addGameToHistory(gameId, selectedStake || 10, 'loss');
     const uid = profile?.id;

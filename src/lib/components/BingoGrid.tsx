@@ -40,15 +40,15 @@ export default function BingoGrid({
 
   return (
     <div className={`w-full mx-auto ${mini ? '' : compact ? 'max-w-[280px]' : 'max-w-sm'} ${shouldShake ? 'animate-grid-shake' : ''} transition-transform duration-300`}>
-      {/* Column headers — gold BINGO letters */}
+      {/* Column headers — navy BINGO letters with gold text (contrasts with gold marked cells) */}
       <div className={`grid grid-cols-5 ${mini ? 'gap-0.5' : compact ? 'gap-1.5' : 'gap-1.5'} px-0.5 ${compact ? 'mb-1.5' : 'mb-2.5'}`}>
         {COLUMN_LABELS.map((label) => (
           <div
             key={label}
             className={`
-              text-center font-black rounded-xl text-navy shadow-gold-glow-sm flex items-center justify-center select-none aspect-square
+              text-center font-black rounded-xl text-gold flex items-center justify-center select-none aspect-square
               ${mini ? 'text-[9px] rounded-lg' : compact ? 'text-[11px]' : 'text-base'}
-              bg-gradient-gold
+              bg-navy border border-gold/30 shadow-gold-glow-sm
             `}
           >
             {label}

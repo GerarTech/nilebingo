@@ -86,34 +86,35 @@ export default function WinModal({
           </div>
         )}
 
+        {/* Winning Card(s) — always show when available */}
+        {winners.filter(w => w.card && w.card.length > 0).length > 0 && (
+          <div className="space-y-3">
+            <div className="text-center">
+              <div className="text-[10px] font-black uppercase text-gold tracking-widest">Winning Card</div>
+            </div>
+            {winners.filter(w => w.card && w.card.length > 0).map((w, i) => {
+              const winningCells = getWinningCells(w.card, drawnNumbers);
+              return (
+                <div key={w.user_id || i} className="bg-[#141f33]/80 border border-gold-medium p-3 rounded-2xl gold-border-hover">
+                  {winners.length > 1 && (
+                    <div className="text-[9px] font-black text-gold/70 uppercase tracking-wider mb-2 text-center">
+                      {w.name}&apos;s Card
+                    </div>
+                  )}
+                  <BingoGrid
+                    card={w.card}
+                    drawnNumbers={drawnNumbers}
+                    winningCells={winningCells}
+                    compact
+                  />
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         {!isPending && (
           <>
-            {/* Winning Card(s) */}
-            {winners.filter(w => w.card && w.card.length > 0).length > 0 && (
-              <div className="space-y-3">
-                <div className="text-center">
-                  <div className="text-[10px] font-black uppercase text-gold tracking-widest">Winning Card</div>
-                </div>
-                {winners.filter(w => w.card && w.card.length > 0).map((w, i) => {
-                  const winningCells = getWinningCells(w.card, drawnNumbers);
-                  return (
-                    <div key={w.user_id || i} className="bg-[#141f33]/80 border border-gold-medium p-3 rounded-2xl gold-border-hover">
-                      {winners.length > 1 && (
-                        <div className="text-[9px] font-black text-gold/70 uppercase tracking-wider mb-2 text-center">
-                          {w.name}&apos;s Card
-                        </div>
-                      )}
-                      <BingoGrid
-                        card={w.card}
-                        drawnNumbers={drawnNumbers}
-                        winningCells={winningCells}
-                        compact
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            )}
 
             <div className="space-y-2.5">
               {winners.length > 0 ? (

@@ -111,12 +111,21 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'gameId is required' }, { status: 400 });
     }
 
-    // Clean up old reservations (>5 minutes old) to keep database tidy
+    // Clean up old reservations only for FINISHED games to keep database tidy
+    // Never delete reservations for lobby/active games as they are needed for Total Bet display
     try {
-      await supabase
-        .from('game_card_reservations')
-        .delete()
-        .lt('created_at', new Date(Date.now() - 300000).toISOString());
+      const { data: finishedGameCodes } = await supabase
+        .from('games')
+        .select('code')
+        .eq('status', 'finished');
+      if (finishedGameCodes && finishedGameCodes.length > 0) {
+        const codes = finishedGameCodes.map((g: any) => g.code);
+        await supabase
+          .from('game_card_reservations')
+          .delete()
+          .in('game_code', codes)
+          .lt('created_at', new Date(Date.now() - 300000).toISOString());
+      }
     } catch (e) {
       console.warn('Failed to prune old reservations:', e);
     }
