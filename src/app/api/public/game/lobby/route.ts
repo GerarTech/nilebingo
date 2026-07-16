@@ -596,16 +596,15 @@ export async function POST(request: NextRequest) {
         cardsToStore.push(getSeededCard(fallbackNum));
       }
 
-      // Upsert a single game_players row for this user.
-      // The card column stores one card; the game_card_reservations table tracks the
-      // full count of cards the user purchased (used for prize pool calculation).
+      // Upsert game_players row for this user.
       // Store the first selected card as the player's primary card.
+      // All cards are tracked in game_card_reservations for prize pool / win validation.
       await supabase
         .from('game_players')
         .upsert({
           game_id: dbGameId,
           user_id: userId,
-          card: cardsToStore[0],
+          card: cardsToStore[0] || cardsToStore[0],
           card_number: selectedCards ? selectedCards[0] || 0 : 0,
           is_watching: isSpectator || false,
           auto_mark: autoMark || false,

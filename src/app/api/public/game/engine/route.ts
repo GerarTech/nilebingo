@@ -241,7 +241,7 @@ export async function POST(request: NextRequest) {
         }, { status: 400 });
       }
 
-      // Get the player's card
+      // Get the player's record (for spectator check)
       const { data: gamePlayer } = await supabase
         .from('game_players')
         .select('card, is_watching')
@@ -251,21 +251,12 @@ export async function POST(request: NextRequest) {
 
       // During finalize, be more lenient — if player record is missing (e.g. race with leave_game),
       // fall back to the card already stored in the winners list from the initial call
-      let card: number[][] = [];
-      if (gamePlayer) {
-        if (gamePlayer.is_watching) {
-          return NextResponse.json({ error: 'Spectators cannot win' }, { status: 400 });
-        }
-        card = gamePlayer.card || [];
-      } else if (finalizeRequested) {
-        const recordedWinner = ((gameByCode as any).winners || []).find((w: any) => w.user_id === userId);
-        if (recordedWinner?.card) {
-          card = recordedWinner.card;
-        } else {
-          return NextResponse.json({ error: 'Player not found in this game' }, { status: 404 });
-        }
-      } else {
+      if (!gamePlayer && !finalizeRequested) {
         return NextResponse.json({ error: 'Player not found in this game' }, { status: 404 });
+      }
+
+      if (gamePlayer?.is_watching) {
+        return NextResponse.json({ error: 'Spectators cannot win' }, { status: 400 });
       }
 
       // Accept drawn numbers from client or fall back to DB
@@ -278,52 +269,82 @@ export async function POST(request: NextRequest) {
         const { data: gameData } = await supabase.from('games').select('drawn_numbers').eq('id', gameByCode.id).single();
         drawnNumbers = gameData?.drawn_numbers || [];
       }
-      if (!card || card.length === 0) {
+
+      // Collect ALL cards this user is playing with (supports multi-card games)
+      // 1) From game_card_reservations (authoritative — reflects actual purchased cards)
+      // 2) Fallback to game_players.card (single card stored during register_game)
+      // 3) During finalize, fallback to winners list
+      let allCards: number[][][] = [];
+      const { data: userReservations } = await supabase
+        .from('game_card_reservations')
+        .select('card_number')
+        .eq('game_code', gameByCode.code)
+        .eq('user_id', userId)
+        .gt('card_number', 0);
+
+      if (userReservations && userReservations.length > 0) {
+        allCards = userReservations.map((r: any) => getSeededCard(r.card_number));
+      } else if (gamePlayer?.card) {
+        allCards = [gamePlayer.card];
+      } else if (finalizeRequested) {
+        const recordedWinner = ((gameByCode as any).winners || []).find((w: any) => w.user_id === userId);
+        if (recordedWinner?.card) {
+          allCards = [recordedWinner.card];
+        }
+      }
+
+      if (allCards.length === 0) {
         return NextResponse.json({ error: 'No card found' }, { status: 400 });
       }
+
+      // Primary card reference (used for winner entry storage)
+      const card = allCards[0];
 
       // Skip pattern validation for appointed wins and for finalize requests
       // (the initial validate_win call already confirmed the pattern — re-validating
       //  during finalize can fail if drawn numbers state diverged slightly)
       if (!isAppointed && !finalizeRequested) {
         let hasWin = false;
-        for (let row = 0; row < card.length; row++) {
-          let complete = true;
-          for (let col = 0; col < card[row].length; col++) {
-            const cell = card[row][col];
-            if (cell === 0) continue;
-            if (!drawnNumbers.includes(cell)) { complete = false; break; }
+        for (const cardGrid of allCards) {
+          if (!cardGrid || cardGrid.length === 0) continue;
+          // Check rows
+          for (let row = 0; row < cardGrid.length; row++) {
+            let complete = true;
+            for (let col = 0; col < cardGrid[row].length; col++) {
+              const cell = cardGrid[row][col];
+              if (cell === 0) continue;
+              if (!drawnNumbers.includes(cell)) { complete = false; break; }
+            }
+            if (complete) { hasWin = true; break; }
           }
-          if (complete) { hasWin = true; break; }
-        }
-        if (!hasWin) {
+          if (hasWin) break;
+          // Check columns
           for (let col = 0; col < 5; col++) {
             let complete = true;
-            for (let row = 0; row < card.length; row++) {
-              const cell = card[row]?.[col];
+            for (let row = 0; row < cardGrid.length; row++) {
+              const cell = cardGrid[row]?.[col];
               if (cell === 0) continue;
               if (cell === undefined || !drawnNumbers.includes(cell)) { complete = false; break; }
             }
             if (complete) { hasWin = true; break; }
           }
-        }
-        if (!hasWin) {
-          let complete = true;
+          if (hasWin) break;
+          // Check main diagonal
+          let diag = true;
           for (let i = 0; i < 5; i++) {
-            const cell = card[i]?.[i];
+            const cell = cardGrid[i]?.[i];
             if (cell === 0) continue;
-            if (cell === undefined || !drawnNumbers.includes(cell)) { complete = false; break; }
+            if (cell === undefined || !drawnNumbers.includes(cell)) { diag = false; break; }
           }
-          if (complete) hasWin = true;
-        }
-        if (!hasWin) {
-          let complete = true;
+          if (diag) { hasWin = true; break; }
+          // Check anti-diagonal
+          let antiDiag = true;
           for (let i = 0; i < 5; i++) {
-            const cell = card[i]?.[4 - i];
+            const cell = cardGrid[i]?.[4 - i];
             if (cell === 0) continue;
-            if (cell === undefined || !drawnNumbers.includes(cell)) { complete = false; break; }
+            if (cell === undefined || !drawnNumbers.includes(cell)) { antiDiag = false; break; }
           }
-          if (complete) hasWin = true;
+          if (antiDiag) { hasWin = true; break; }
         }
         if (!hasWin) {
           return NextResponse.json({ win: false, error: 'No winning pattern found' }, { status: 400 });
