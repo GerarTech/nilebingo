@@ -178,7 +178,7 @@ export async function POST(request: NextRequest) {
       // Look up game by code (gameId from client is the code, not UUID)
       const { data: allGamesByCode } = await supabase
         .from('games')
-        .select('id, status, prize_pool, code, winner_id, stake_id, winners, winner_collect_until')
+        .select('id, status, prize_pool, code, winner_id, stake_id, winners, winner_collect_until, total_cards')
         .eq('code', gameId);
 
       if (!allGamesByCode || allGamesByCode.length === 0) {
@@ -330,11 +330,13 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Calculate prize pool
+      // Calculate prize pool — prefer live reservations, fall back to persisted total_cards
       const { data: stakeRow } = await supabase.from('stakes').select('amount').eq('id', gameByCode.stake_id).maybeSingle();
       const perCardStake = Number(stakeRow?.amount) || 10;
       const { data: cardCountData } = await supabase.from('game_card_reservations').select('id').eq('game_code', gameByCode.code).gt('card_number', 0);
-      const totalCardCount = Math.max(cardCountData?.length || 1, 1);
+      const reservedCardCount = cardCountData?.length || 0;
+      const storedCardCount = Number((gameByCode as any).total_cards) || 0;
+      const totalCardCount = Math.max(reservedCardCount, storedCardCount, 1);
       const totalBet = perCardStake * totalCardCount;
 
       // Apply Happy Hour commission override if active
@@ -349,19 +351,18 @@ export async function POST(request: NextRequest) {
         }
       } catch {}
 
-      // Only recalculate the prize pool on the initial validate_win call.
+      // Only recalculate the prize pool on the initial validate_win call when not yet set.
       // During finalize, card reservations may have already been deleted (by leave_game),
-      // which would cause the RPC to undercount cards and overwrite the correct prize pool
-      // with a value based on only 1 card (from the game_players fallback).
-      // The prize pool was already set correctly during register_game or the initial validate_win.
-      if (!finalizeRequested) {
+      // which would cause the RPC to undercount cards and overwrite the correct prize pool.
+      const existingPrizePool = Number(gameByCode.prize_pool) || 0;
+      if (!finalizeRequested && (existingPrizePool <= 0 || reservedCardCount > storedCardCount)) {
         try {
           await supabase.rpc('update_game_prize_pool', { p_game_code: gameByCode.code, p_stake_amt: perCardStake, p_commission: effectiveCommission ?? 15 });
         } catch {
           try { await supabase.rpc('update_game_prize_pool', { p_game_code: gameByCode.code, p_stake_amt: perCardStake }); } catch {}
         }
       }
-      const { data: freshGame } = await supabase.from('games').select('prize_pool').eq('id', gameByCode.id).maybeSingle();
+      const { data: freshGame } = await supabase.from('games').select('prize_pool, total_cards').eq('id', gameByCode.id).maybeSingle();
       const winAmount = Number(freshGame?.prize_pool) || (totalBet * (1 - (effectiveCommission ?? 15) / 100));
 
       // ------- MULTI-WINNER LOGIC -------

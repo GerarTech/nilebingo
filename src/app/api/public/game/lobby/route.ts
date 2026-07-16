@@ -404,29 +404,29 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'gameId and userId are required' }, { status: 400 });
       }
 
-      // Check if this user is recorded as a winner — if so, DON'T delete their card
-      // reservations yet. The finalize step (validate_win with finalize=true) needs
-      // the reservations to calculate the correct prize pool for multi-card games.
-      // The finalize step will delete all reservations for the game code when done.
-      let isWinner = false;
-      try {
-        const { data: game } = await supabase
-          .from('games')
-          .select('winners')
-          .eq('code', gameId)
-          .maybeSingle();
-        if (game?.winners) {
-          isWinner = (game.winners as any[]).some((w: any) => w.user_id === userId);
-        }
-      } catch {}
+      // Never remove reservations while the game is still active — validate_win needs them
+      // to compute the correct multi-card prize pool.
+      const { data: activeGame } = await supabase
+        .from('games')
+        .select('status, winners')
+        .eq('code', gameId)
+        .maybeSingle();
 
-      if (!isWinner) {
-        await supabase
-          .from('game_card_reservations')
-          .delete()
-          .eq('game_code', gameId)
-          .eq('user_id', userId);
+      if (activeGame?.status === 'active') {
+        const isWinner = Array.isArray(activeGame.winners)
+          && (activeGame.winners as any[]).some((w: any) => w.user_id === userId);
+        if (isWinner) {
+          return NextResponse.json({ success: true, skipped: 'active_winner' });
+        }
+        // Active game, not yet a recorded winner — keep reservations for prize calculation
+        return NextResponse.json({ success: true, skipped: 'active_game' });
       }
+
+      await supabase
+        .from('game_card_reservations')
+        .delete()
+        .eq('game_code', gameId)
+        .eq('user_id', userId);
 
       return NextResponse.json({ success: true });
     }
@@ -644,9 +644,20 @@ export async function POST(request: NextRequest) {
       }
 
       // Deduct stake from player's wallet server-side (play_balance first, then main_balance)
-      // Total deduction = per-card stake × number of cards
+      // Total deduction = per-card stake × number of cards (use reservations as source of truth)
       if (!isSpectator) {
-        const cardCount = cardsToStore.length || 1;
+        const { count: userReservedCount } = await supabase
+          .from('game_card_reservations')
+          .select('*', { count: 'exact', head: true })
+          .eq('game_code', gameId)
+          .eq('user_id', userId)
+          .gt('card_number', 0);
+        const cardCount = Math.max(
+          userReservedCount || 0,
+          selectedCards?.length || 0,
+          cardsToStore.length,
+          1,
+        );
         const totalDeduction = stakeAmount * cardCount;
         try {
           const { data: wallet } = await supabase

@@ -73,15 +73,10 @@ export async function POST(request: NextRequest) {
           .select()
           .single();
 
-        // Compute authoritative prize pool server-side using DB function (updates games.prize_pool)
-        try {
-          await supabase.rpc('update_game_prize_pool', { p_game_code: code, p_stake_amt: Number(stakeAmount) || 0 });
-          const { data: fresh } = await supabase.from('games').select('*').eq('id', existing.id).single();
-          game = fresh;
-        } catch (rpcErr) {
-          console.error('Error updating prize pool via RPC:', rpcErr);
-          game = updated;
-        }
+        // Do not recalculate prize pool here — reservations may already be deleted,
+        // which would undercount multi-card games. Wallet credit uses engine validate_win.
+        const { data: fresh } = await supabase.from('games').select('*').eq('id', existing.id).single();
+        game = fresh || updated;
       } else {
         code = providedCode;
       }

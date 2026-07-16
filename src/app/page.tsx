@@ -472,8 +472,9 @@ function HomePage() {
   }, [initialize]);
 
   // ============ REGISTER GAME ============
-  const registerLiveGame = useCallback(async (gId: string, stakeAmt: number, isSpec: boolean, cardsToPlay: number[][][]) => {
+  const registerLiveGame = useCallback(async (gId: string, stakeAmt: number, isSpec: boolean, cardNumbers: number[]) => {
     if (!profile || !isValidUUID(profile.id)) return;
+    const cardsToRegister = cardNumbers.length > 0 ? cardNumbers : selectedCardsRef.current;
     try {
       await fetch('/api/public/game/lobby', {
         method: 'POST',
@@ -485,13 +486,13 @@ function HomePage() {
           stakeAmount: stakeAmt,
           isSpectator: isSpec,
           autoMark,
-          selectedCards,
+          selectedCards: cardsToRegister,
         }),
       });
     } catch (e) {
       console.error('Failed to register live game on server:', e);
     }
-  }, [profile, autoMark, selectedCards]);
+  }, [profile, autoMark]);
 
   // ============ CARD TOGGLE (local-only — no server reservation until bet) ============
   const toggleCard = useCallback((num: number) => {
@@ -562,7 +563,10 @@ function HomePage() {
     // Prize pool uses same formula as waiting screen: fee * totalCards * (1 - commission/100)
     (async () => {
       try {
-        await registerLiveGame(activeGameId, entryFee, isSpectateMode, cardsToPlay);
+        const cardNumbersForRegister = selectedCardsRef.current.length > 0
+          ? [...selectedCardsRef.current]
+          : [...selectedCards];
+        await registerLiveGame(activeGameId, entryFee, isSpectateMode, cardNumbersForRegister);
         // Always query actual card reservation count for consistent prize calculation
         const { count: actualCardCount } = await supabase.from('game_card_reservations').select('*', { count: 'exact', head: true }).eq('game_code', activeGameId).gt('card_number', 0);
         const totalCards = Math.max(actualCardCount || 0, selectedCardsRef.current.length || 1, 1);
@@ -1354,6 +1358,9 @@ function HomePage() {
   useEffect(() => {
     if (resultCountdown === null) return;
     if (resultCountdown <= 0) {
+      // Wait for prize finalization — leaving early deletes card reservations and
+      // causes multi-card wins to credit as a single-card prize pool.
+      if (isPendingWin) return;
       if (showWinModal) setShowWinModal(false);
       if (opponentWinner) {
         // Record loss before resetting state so addGameToHistory runs with opponentWinner still set
