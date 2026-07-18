@@ -54,6 +54,7 @@ interface GameViewProps {
   onCancelLeave: () => void;
   onSkipResult: () => void;
   onMarkNumber: (num: number) => void;
+  opponentWinningCards?: number[][][];
 }
 
 export default function GameView({
@@ -64,7 +65,7 @@ export default function GameView({
   winningCells, commissionRate, prizePool, resultCountdown,
   t, onSetAutoMark, onSetAutoWin, onManualDraw,
   onBingo, onLeave, onLeaveAttempt, onForfeitExit, onCancelLeave,
-  onSkipResult, onMarkNumber,
+  onSkipResult, onMarkNumber, opponentWinningCards = [],
 }: GameViewProps) {
   const { soundEnabled, toggleSound, enqueue, playBingo } = useBingoAudio(language);
 
@@ -260,6 +261,7 @@ export default function GameView({
         countdown={resultCountdown}
         onSkip={onSkipResult}
         t={t}
+        opponentWinningCards={opponentWinningCards}
       />
 
       <LeaveModal

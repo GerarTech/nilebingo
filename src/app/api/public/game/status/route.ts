@@ -17,29 +17,36 @@ export async function GET(request: NextRequest) {
 
     const { data: games } = await supabase
       .from('games')
-      .select('id, status, winner_id')
+      .select('id, status, winner_id, winners')
       .eq('code', gameCode);
 
-    const finishedGame = (games || []).find(g => g.status === 'finished' && g.winner_id);
+    const finishedGame = (games || []).find(g => (g.status === 'finished' && g.winner_id) || (g.winners && (g.winners as any[]).length > 0));
 
     if (finishedGame) {
       let winnerName = 'Opponent';
+      const winnersList = (finishedGame.winners as any[]) || [];
+      const winnerId = finishedGame.winner_id || (winnersList[0] && winnersList[0].user_id);
       try {
-        const { data: winnerProfile } = await supabase
-          .from('profiles')
-          .select('first_name, username')
-          .eq('id', finishedGame.winner_id)
-          .maybeSingle();
-        if (winnerProfile) {
-          winnerName = winnerProfile.first_name || winnerProfile.username || 'Opponent';
+        if (winnerId) {
+          const { data: winnerProfile } = await supabase
+            .from('profiles')
+            .select('first_name, username')
+            .eq('id', winnerId)
+            .maybeSingle();
+          if (winnerProfile) {
+            winnerName = winnerProfile.first_name || winnerProfile.username || 'Opponent';
+          }
+        } else if (winnersList[0] && winnersList[0].name) {
+          winnerName = winnersList[0].name;
         }
       } catch {}
 
       return NextResponse.json({
         finished: true,
-        winner_id: finishedGame.winner_id,
+        winner_id: winnerId,
         winner_name: winnerName,
         game_id: finishedGame.id,
+        winners: winnersList,
       });
     }
 

@@ -15,11 +15,13 @@ interface LossModalProps {
   countdown: number | null;
   onSkip: () => void;
   t: (key: string) => string;
+  opponentWinningCards?: number[][][];
 }
 
 export default function LossModal({
   show, opponentName, stake, livePlayerCount, commissionRate, prizePool,
   gameCards, cardNumbers, drawnNumbers, countdown, onSkip, t,
+  opponentWinningCards = [],
 }: LossModalProps) {
   if (!show) return null;
 
@@ -69,11 +71,31 @@ export default function LossModal({
           </div>
         </div>
 
-        {gameCards.map((card, cIndex) => (
-          <div key={cIndex} className="bg-[#141f33]/40 border border-gold-subtle p-4 rounded-3xl shadow-xl gold-border-hover">
-            <BingoGrid card={card} drawnNumbers={drawnNumbers} compact={true} />
+        {opponentWinningCards && opponentWinningCards.length > 0 && (
+          <div className="space-y-2">
+            <div className="text-[9px] font-black uppercase text-amber-400 tracking-widest text-center flex items-center justify-center gap-1.5 bg-amber-500/10 py-1.5 rounded-xl border border-amber-500/20">
+              🏆 {opponentName}&apos;s Winning Card
+            </div>
+            {opponentWinningCards.map((card, cIndex) => (
+              <div key={`opp-${cIndex}`} className="bg-[#1c120c]/60 border border-amber-500/40 p-4 rounded-3xl shadow-xl">
+                <BingoGrid card={card} drawnNumbers={drawnNumbers} compact={true} />
+              </div>
+            ))}
           </div>
-        ))}
+        )}
+
+        <div className="space-y-2">
+          {opponentWinningCards && opponentWinningCards.length > 0 && (
+            <div className="text-[9px] font-black uppercase text-gray-400 tracking-widest text-center">
+              Your Card{gameCards.length > 1 ? 's' : ''}
+            </div>
+          )}
+          {gameCards.map((card, cIndex) => (
+            <div key={`user-${cIndex}`} className="bg-[#141f33]/40 border border-gold-subtle p-4 rounded-3xl shadow-xl opacity-85">
+              <BingoGrid card={card} drawnNumbers={drawnNumbers} compact={true} />
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="max-w-sm w-full mx-auto mt-auto pt-4" onClick={e => e.stopPropagation()}>

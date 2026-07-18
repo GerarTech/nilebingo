@@ -130,6 +130,7 @@ function HomePage() {
   const [dbLeaderboard, setDbLeaderboard] = useState<any[]>([]);
   const [otherPlayers, setOtherPlayers] = useState<VirtualPlayer[]>([]);
   const [opponentWinner, setOpponentWinner] = useState<string | null>(null);
+  const [opponentWinningCards, setOpponentWinningCards] = useState<number[][][]>([]);
   const [appointedCard, setAppointedCard] = useState<{cardNumber: number, afterBalls: number} | null>(null);
 
   const [isRegistered, setIsRegistered] = useState<boolean>(false);
@@ -707,6 +708,16 @@ function HomePage() {
         const displayStatus = (isPlaying || isLocked) ? 'playing' : 'starting_soon';
         return { ...r, status: displayStatus, countdown: remaining, winAmount: (r.entry * r.players) * (1 - roomComm / 100) };
       }));
+
+      // If we are in lobby and registered/spectating, and the game starts on the server, join immediately
+      if (sr && !ig && (ir || isr)) {
+        const isGameStartedOnServer = activeCodes.has(gameIdRef.current) || isSrPlaying;
+        if (isGameStartedOnServer) {
+          console.log('[RoomTick] Game already started on server, joining immediately');
+          sg(isr && !ir);
+        }
+      }
+
       // Update game ID every tick — when user is in lobby (not playing, not registered) and room has a locked stake or no active game
       if (sr && !ig && !ir && !isr) {
         void (async () => {
@@ -870,6 +881,17 @@ function HomePage() {
         if (data.winner_id && data.winner_id !== profile?.id) {
           if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
           setOpponentWinner(data.winner_name || 'Opponent');
+          const winners = data.winners || [];
+          const currentUserId = profile?.id;
+          const winningCardsList: number[][][] = [];
+          winners.forEach((w: any) => {
+            if (w.user_id !== currentUserId && w.card) {
+              winningCardsList.push(w.card);
+            }
+          });
+          if (winningCardsList.length > 0) {
+            setOpponentWinningCards(winningCardsList);
+          }
         }
       } catch {}
     }, 1000);
@@ -894,9 +916,19 @@ function HomePage() {
           const isWinner = winners.some((w: any) => w.user_id === currentUserId);
           const otherFirstWinner = winners.find((w: any) => w.user_id !== currentUserId);
 
+          const otherWinningCards: number[][][] = [];
+          winners.forEach((w: any) => {
+            if (w.user_id !== currentUserId && w.card) {
+              otherWinningCards.push(w.card);
+            }
+          });
+
           // Game finished, opponent won
           if (record.status === 'finished' && record.winner_id && record.winner_id !== currentUserId) {
             if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+            if (otherWinningCards.length > 0) {
+              setOpponentWinningCards(otherWinningCards);
+            }
             try {
               const { data: winnerProfile } = await supabase.from('profiles').select('first_name, username').eq('id', record.winner_id).maybeSingle();
               setOpponentWinner(winnerProfile?.first_name || winnerProfile?.username || 'Another player');
@@ -909,6 +941,9 @@ function HomePage() {
           // Game still active but another player claimed a win (collection window) — stop immediately
           if (record.status === 'active' && !isWinner && otherFirstWinner) {
             if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+            if (otherWinningCards.length > 0) {
+              setOpponentWinningCards(otherWinningCards);
+            }
             setOpponentWinner(otherFirstWinner.name || 'Another player');
           }
         })
@@ -1281,7 +1316,7 @@ function HomePage() {
     drawnRef.current = []; setSelectedStake(null); setSelectedCards([]); setRecentCalled([]);
     setShowWinModal(false); setWinningCards([]); setWinningCells([]); setAllWinners([]);
     setIsPendingWin(false); setWinMessage(''); setFinalWinAmount(0); setTotalWinAmount(0); setWinnerCount(1);
-    setOtherPlayers([]); setOpponentWinner(null); setSelectedRoom(null);
+    setOtherPlayers([]); setOpponentWinner(null); setOpponentWinningCards([]); setSelectedRoom(null);
     // Start 50s post-game timer for the room we just left (reliable — polling transition detection can miss it)
     if (endedRoomId) {
       gameEndTimersRef.current[endedRoomId] = Date.now() + 50000;
@@ -1366,6 +1401,7 @@ function HomePage() {
         // Record loss before resetting state so addGameToHistory runs with opponentWinner still set
         addGameToHistory(gameId, selectedStake || 10, 'loss');
         setOpponentWinner(null);
+        setOpponentWinningCards([]);
       }
       // Always leave game when countdown hits 0 — go straight to home view
       leaveGame();
@@ -1469,6 +1505,7 @@ function HomePage() {
             onCancelLeave={() => setShowLeaveModal(false)}
             onSkipResult={() => { setShowWinModal(false); setOpponentWinner(null); leaveGame(); }}
             onMarkNumber={handleMarkNumber}
+            opponentWinningCards={opponentWinningCards}
           />
         </>
       );
