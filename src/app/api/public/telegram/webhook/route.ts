@@ -163,7 +163,7 @@ async function sendPhoto(chatId: string | number, photoDataUrl: string, caption:
   }
 }
 
-/** Send a deposit-pending alert to admin bot and notification channels */
+/** Send a deposit-pending alert to admin bot */
 async function sendAdminDepositAlert(text: string, txId?: string) {
   let finalText = text;
   try {
@@ -197,13 +197,6 @@ async function sendAdminDepositAlert(text: string, txId?: string) {
         });
         const json = await res.json();
         if (json.ok) {
-          // Successfully sent with buttons, also notify channels
-          try {
-            const { notifyEvent } = await import('@/lib/server/admin');
-            const plain = finalText.replace(/\*+/g, '');
-            const body = plain.indexOf('\n\n') !== -1 ? plain.substring(plain.indexOf('\n\n') + 2) : plain;
-            await notifyEvent('deposit_pending', body);
-          } catch (e) { /* ignore */ }
           return;
         }
       }
@@ -216,12 +209,6 @@ async function sendAdminDepositAlert(text: string, txId?: string) {
       });
     } catch (e) { /* ignore */ }
   }
-  try {
-    const { notifyEvent } = await import('@/lib/server/admin');
-    const plain = finalText.replace(/\*+/g, '');
-    const body = plain.indexOf('\n\n') !== -1 ? plain.substring(plain.indexOf('\n\n') + 2) : plain;
-    await notifyEvent('deposit_pending', body);
-  } catch (e) { /* ignore */ }
 }
 
 const CHECK_ET_BANK_CODES: Record<string, string> = {
@@ -283,10 +270,10 @@ async function verifyWithCheckET(bankCode: string, transactionNumber: string, ac
       return { verified: false, reason: `Amount mismatch: expected ${expectedAmount} ETB, found ${isNaN(verifiedAmount) ? 'N/A' : verifiedAmount} ETB` };
     }
 
-    if (accountNumber && receipt.receiver_account) {
+    if (accountNumber && receipt.receiver_account && bankCode !== 'telebirr') {
       const cleanExpected = accountNumber.replace(/\D/g, '');
       const cleanActual = String(receipt.receiver_account).replace(/\D/g, '');
-      if (cleanActual !== cleanExpected) {
+      if (cleanActual !== cleanExpected && !cleanActual.includes(cleanExpected) && !cleanExpected.includes(cleanActual)) {
         return { verified: false, reason: `Receiver account mismatch: expected "${accountNumber}", found "${receipt.receiver_account}"` };
       }
     }

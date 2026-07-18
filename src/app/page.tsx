@@ -172,6 +172,7 @@ function HomePage() {
   const activeStakesRef = useRef<Set<number>>(new Set());
   const gameEndTimersRef = useRef<Record<string, number>>({});
   const prevIsPlayingRef = useRef<Record<string, boolean>>({});
+  const locallyEndedGamesRef = useRef<Set<string>>(new Set());
 
   // ============ DETERMINISTIC DRAW SEQUENCE ============
 
@@ -620,9 +621,12 @@ function HomePage() {
       try {
         const { data } = await supabase.from('games').select('code, stake_id').eq('status', 'active');
         if (data) {
-          activeGameCodesRef.current = new Set(data.map(g => g.code));
+          // Filter out games that ended locally so "playing" badge disappears instantly
+          const locallyEnded = locallyEndedGamesRef.current;
+          const filtered = data.filter(g => !locallyEnded.has(g.code));
+          activeGameCodesRef.current = new Set(filtered.map(g => g.code));
           // Track which stake amounts currently have active games
-          const activeStakeIds = data.map(g => g.stake_id).filter(Boolean);
+          const activeStakeIds = filtered.map(g => g.stake_id).filter(Boolean);
           if (activeStakeIds.length > 0) {
             const { data: stakes } = await supabase
               .from('stakes')
@@ -778,6 +782,13 @@ function HomePage() {
       if (nextIndex >= 75) {
         if (intervalRef.current) clearInterval(intervalRef.current);
         activeGameCodesRef.current.delete(gameId);
+        locallyEndedGamesRef.current.add(gameId);
+        const endedRoom = selectedRoomRef.current;
+        if (endedRoom) {
+          activeStakesRef.current.delete(endedRoom.entry);
+          gameEndTimersRef.current[endedRoom.id] = Date.now() + 50000;
+          prevIsPlayingRef.current[endedRoom.id] = false;
+        }
         addGameToHistory(gameId, selectedStake || 10, 'loss');
         fetch('/api/public/game/lobby', {
           method: 'POST',
@@ -880,6 +891,15 @@ function HomePage() {
         const data = await res.json();
         if (data.winner_id && data.winner_id !== profile?.id) {
           if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+          // Immediately mark game as ended — remove "playing" badge and start 50s timer
+          locallyEndedGamesRef.current.add(gameId);
+          activeGameCodesRef.current.delete(gameId);
+          const endedRoom = selectedRoomRef.current;
+          if (endedRoom) {
+            activeStakesRef.current.delete(endedRoom.entry);
+            gameEndTimersRef.current[endedRoom.id] = Date.now() + 50000;
+            prevIsPlayingRef.current[endedRoom.id] = false;
+          }
           setOpponentWinner(data.winner_name || 'Opponent');
           const winners = data.winners || [];
           const currentUserId = profile?.id;
@@ -926,6 +946,15 @@ function HomePage() {
           // Game finished, opponent won
           if (record.status === 'finished' && record.winner_id && record.winner_id !== currentUserId) {
             if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+            // Immediately mark game as ended — remove "playing" badge and start 50s timer
+            locallyEndedGamesRef.current.add(gameId);
+            activeGameCodesRef.current.delete(gameId);
+            const endedRoom = selectedRoomRef.current;
+            if (endedRoom) {
+              activeStakesRef.current.delete(endedRoom.entry);
+              gameEndTimersRef.current[endedRoom.id] = Date.now() + 50000;
+              prevIsPlayingRef.current[endedRoom.id] = false;
+            }
             if (otherWinningCards.length > 0) {
               setOpponentWinningCards(otherWinningCards);
             }
@@ -941,6 +970,15 @@ function HomePage() {
           // Game still active but another player claimed a win (collection window) — stop immediately
           if (record.status === 'active' && !isWinner && otherFirstWinner) {
             if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+            // Immediately mark game as ended — remove "playing" badge and start 50s timer
+            locallyEndedGamesRef.current.add(gameId);
+            activeGameCodesRef.current.delete(gameId);
+            const endedRoom2 = selectedRoomRef.current;
+            if (endedRoom2) {
+              activeStakesRef.current.delete(endedRoom2.entry);
+              gameEndTimersRef.current[endedRoom2.id] = Date.now() + 50000;
+              prevIsPlayingRef.current[endedRoom2.id] = false;
+            }
             if (otherWinningCards.length > 0) {
               setOpponentWinningCards(otherWinningCards);
             }
@@ -1023,6 +1061,14 @@ function HomePage() {
     try {
       if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
       activeGameCodesRef.current.delete(gameId);
+      // Immediately mark game as ended — remove "playing" badge and start 50s timer
+      locallyEndedGamesRef.current.add(gameId);
+      const endedRoom = selectedRoomRef.current;
+      if (endedRoom) {
+        activeStakesRef.current.delete(endedRoom.entry);
+        gameEndTimersRef.current[endedRoom.id] = Date.now() + 50000;
+        prevIsPlayingRef.current[endedRoom.id] = false;
+      }
       setWinningCards(cards);
       // For appointed wins, mark all drawn numbers as winning cells (pattern may not exist yet)
       setWinningCells(isAppointed && cards[0] ? cards[0].map(row => row.map(n => n === 0 || drawn.includes(n))) : getWinningCells(cards[0] || [], drawn));
@@ -1312,6 +1358,7 @@ function HomePage() {
     // to prevent re-renders with inGame=true and opponentWinner=null from
     // re-creating the draw interval or keeping the live poll active
     lockedGameIdRef.current = null;
+    locallyEndedGamesRef.current.clear();
     setInGame(false); setIsWatching(false); setGameCard([]); setDrawnNumbers([]);
     drawnRef.current = []; setSelectedStake(null); setSelectedCards([]); setRecentCalled([]);
     setShowWinModal(false); setWinningCards([]); setWinningCells([]); setAllWinners([]);
