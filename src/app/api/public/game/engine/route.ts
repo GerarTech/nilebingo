@@ -307,8 +307,33 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'No card found' }, { status: 400 });
       }
 
-      // Primary card reference (used for winner entry storage)
-      const card = allCards[0];
+      // Find the actual winning card (the one with a complete pattern)
+      let card = allCards[0];
+      if (!isAppointed && allCards.length > 1) {
+        for (const cardGrid of allCards) {
+          if (!cardGrid || cardGrid.length === 0) continue;
+          // Check rows
+          for (let row = 0; row < cardGrid.length; row++) {
+            let complete = true;
+            for (let col = 0; col < cardGrid[row].length; col++) {
+              const cell = cardGrid[row][col];
+              if (cell === 0) continue;
+              if (!drawnNumbers.includes(cell)) { complete = false; break; }
+            }
+            if (complete) { card = cardGrid; break; }
+          }
+          // Check columns
+          for (let col = 0; col < 5; col++) {
+            let complete = true;
+            for (let row = 0; row < cardGrid.length; row++) {
+              const cell = cardGrid[row]?.[col];
+              if (cell === 0) continue;
+              if (cell === undefined || !drawnNumbers.includes(cell)) { complete = false; break; }
+            }
+            if (complete) { card = cardGrid; break; }
+          }
+        }
+      }
 
       // Skip pattern validation for appointed wins and for finalize requests
       // (the initial validate_win call already confirmed the pattern — re-validating

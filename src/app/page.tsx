@@ -173,6 +173,7 @@ function HomePage() {
   const gameEndTimersRef = useRef<Record<string, number>>({});
   const prevIsPlayingRef = useRef<Record<string, boolean>>({});
   const locallyEndedGamesRef = useRef<Set<string>>(new Set());
+  const gameStartTimeRef = useRef<number>(0);
 
   // ============ DETERMINISTIC DRAW SEQUENCE ============
 
@@ -544,6 +545,8 @@ function HomePage() {
 
     setUserMarkedNumbers([0]); setGameId(activeGameId); setDrawnNumbers([]); drawnRef.current = [];
     setRecentCalled([]); setOpponentWinner(null);
+    // Record server-synchronized game start time for cross-device ball sync
+    gameStartTimeRef.current = Date.now() + (serverTimeOffsetRef.current ?? 0);
 
     // IMMEDIATELY transition to active gameplay screen to eliminate ANY network-related lag
     const virtualCompetitors: VirtualPlayer[] = [];
@@ -771,12 +774,14 @@ function HomePage() {
     return () => clearInterval(tick);
   }, [inGame, selectedRoom, getCurrentLobbyGameId, getRoomCountdown]);
 
-  // ============ DRAW INTERVAL ============
+  // ============ DRAW INTERVAL (timestamp-based cross-device sync) ============
   useEffect(() => {
     if (!inGame || opponentWinner || showWinModal || deterministicSequence.length === 0) {
       if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
       return;
     }
+    // Use 250ms polling — when caught up it's a lightweight no-op;
+    // when behind (background tab, slow device) it catches up at ~4 balls/sec
     intervalRef.current = setInterval(() => {
       // Bail out immediately if another player already won (prevents any further draws)
       if (opponentWinnerRef.current) {
@@ -785,6 +790,17 @@ function HomePage() {
       }
       const currentDrawn = drawnRef.current;
       const nextIndex = currentDrawn.length;
+
+      // Timestamp-based sync: calculate how many balls SHOULD have been drawn
+      const gameStart = gameStartTimeRef.current;
+      if (gameStart > 0) {
+        const now = Date.now() + (serverTimeOffsetRef.current ?? 0);
+        const elapsed = now - gameStart;
+        const expectedIndex = Math.max(0, Math.floor(elapsed / 3000));
+        // Don't draw if we're caught up or ahead of schedule
+        if (nextIndex >= expectedIndex) return;
+      }
+
       if (nextIndex >= 75) {
         if (intervalRef.current) clearInterval(intervalRef.current);
         activeGameCodesRef.current.delete(gameId);
@@ -851,7 +867,7 @@ function HomePage() {
           return updated;
         });
       }
-    }, 3000);
+    }, 250);
     return () => { if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; } };
   }, [inGame, opponentWinner, showWinModal, language, isWatching, gameId, selectedStake, addGameToHistory, playerCards, autoMark, autoWin, deterministicSequence, appointedCard]);
 
@@ -1078,6 +1094,21 @@ function HomePage() {
       setWinningCards(cards);
       // For appointed wins, mark all drawn numbers as winning cells (pattern may not exist yet)
       setWinningCells(isAppointed && cards[0] ? cards[0].map(row => row.map(n => n === 0 || drawn.includes(n))) : getWinningCells(cards[0] || [], drawn));
+      // Pre-populate winners and estimated prize immediately so WinModal doesn't flash +0
+      const estCardCount = selectedCardsRef.current.length || playerCards.length || 1;
+      const estEntryFee = selectedRoom?.entry || 10;
+      const estStake = selectedStake || estEntryFee * estCardCount;
+      const estCommission = selectedRoom?.commission ?? commissionRate;
+      const estPrize = Math.max(0, estStake * (1 - estCommission / 100));
+      setFinalWinAmount(estPrize);
+      setTotalWinAmount(estPrize);
+      setWinnerCount(1);
+      setAllWinners([{
+        user_id: profile?.id || '',
+        name: profile?.first_name || profile?.username || 'You',
+        card: cards[0] || playerCards[0] || [],
+        won_at: new Date().toISOString(),
+      }]);
       setShowWinModal(true);
 
       if (profile?.id) {
@@ -1365,6 +1396,7 @@ function HomePage() {
     // re-creating the draw interval or keeping the live poll active
     lockedGameIdRef.current = null;
     locallyEndedGamesRef.current.clear();
+    gameStartTimeRef.current = 0;
     setInGame(false); setIsWatching(false); setGameCard([]); setDrawnNumbers([]);
     drawnRef.current = []; setSelectedStake(null); setSelectedCards([]); setRecentCalled([]);
     setShowWinModal(false); setWinningCards([]); setWinningCells([]); setAllWinners([]);

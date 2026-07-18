@@ -201,7 +201,7 @@ async function sendAdminDepositAlert(text: string, txId?: string) {
             const { notifyEvent } = await import('@/lib/server/admin');
             const plain = finalText.replace(/\*+/g, '');
             const body = plain.indexOf('\n\n') !== -1 ? plain.substring(plain.indexOf('\n\n') + 2) : plain;
-            await notifyEvent('deposit_pending', body, 'Markdown', true);
+            await notifyEvent('deposit_pending', body);
           } catch (e) { /* ignore */ }
           return;
         }
