@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getSeededCard } from '@/lib/server/bingo';
 import { getEffectiveCommission, getComboConfig, type HappyHourConfig, type WinComboConfig } from '@/lib/server/promotions';
+import { calculateWinnerShare } from '@/lib/server/prize';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -176,10 +177,19 @@ export async function POST(request: NextRequest) {
       const finalizeRequested = body.finalize === true;
 
       // Look up game by code (gameId from client is the code, not UUID)
-      const { data: allGamesByCode } = await supabase
+      let allGamesByCode: any[] | null = null;
+      let gameQuery: any = await supabase
         .from('games')
         .select('id, status, prize_pool, code, winner_id, stake_id, winners, winner_collect_until, total_cards')
         .eq('code', gameId);
+
+      if (gameQuery.error && (gameQuery.error.message.includes('total_cards') || gameQuery.error.code === '42703')) {
+        gameQuery = await supabase
+          .from('games')
+          .select('id, status, prize_pool, code, winner_id, stake_id, winners, winner_collect_until')
+          .eq('code', gameId);
+      }
+      allGamesByCode = gameQuery.data;
 
       if (!allGamesByCode || allGamesByCode.length === 0) {
         return NextResponse.json({ error: 'Game not found' }, { status: 404 });
@@ -383,8 +393,11 @@ export async function POST(request: NextRequest) {
           try { await supabase.rpc('update_game_prize_pool', { p_game_code: gameByCode.code, p_stake_amt: perCardStake }); } catch {}
         }
       }
-      const { data: freshGame } = await supabase.from('games').select('prize_pool, total_cards').eq('id', gameByCode.id).maybeSingle();
-      const winAmount = Number(freshGame?.prize_pool) || (totalBet * (1 - (effectiveCommission ?? 15) / 100));
+      let freshGameQuery: any = await supabase.from('games').select('prize_pool, total_cards').eq('id', gameByCode.id).maybeSingle();
+      if (freshGameQuery.error && (freshGameQuery.error.message.includes('total_cards') || freshGameQuery.error.code === '42703')) {
+        freshGameQuery = await supabase.from('games').select('prize_pool').eq('id', gameByCode.id).maybeSingle();
+      }
+      const freshGame = freshGameQuery.data;
 
       // ------- MULTI-WINNER LOGIC -------
       const existingWinners: any[] = (gameByCode as any).winners || [];
@@ -432,8 +445,6 @@ export async function POST(request: NextRequest) {
         // Finalize: split prize equally among all recorded winners and finish game
         const realWinners = existingWinners.filter((w: any) => w.user_id);
         const winnerCount = Math.max(realWinners.length, 1);
-        const baseShare = Math.floor(winAmount / winnerCount);
-        const remainder = winAmount - (baseShare * winnerCount);
 
         // Track credit results — only finalize the game if ALL credits succeed
         let allCreditsSucceeded = true;
@@ -442,8 +453,15 @@ export async function POST(request: NextRequest) {
         for (let i = 0; i < realWinners.length; i++) {
           const w = realWinners[i];
           const uid = w.user_id;
-          // Give the first winner any remainder from the split so total is exact
-          const sharePerWinner = i === 0 ? baseShare + remainder : baseShare;
+          // Strictly calculate the winner's share applying commission and total stake from the game record
+          const gameRecordForPrize = {
+            ...gameByCode,
+            ...freshGame,
+            commission: effectiveCommission ?? gameByCode.commission ?? 15,
+            total_cards: totalCardCount,
+            stake_amount: perCardStake,
+          };
+          const sharePerWinner = calculateWinnerShare(gameRecordForPrize, totalBet, winnerCount, i);
           const bal = await supabase.rpc('adjust_main_balance', { p_user_id: uid, p_amount: sharePerWinner });
           if (bal.error) {
             console.error(`adjust_main_balance error for ${uid}:`, bal.error);
@@ -520,14 +538,22 @@ export async function POST(request: NextRequest) {
         await supabase.from('game_card_reservations').delete().eq('game_code', gameByCode.code);
 
         // Return this caller's share
+        const gameRecordForPrize = {
+          ...gameByCode,
+          ...freshGame,
+          commission: effectiveCommission ?? gameByCode.commission ?? 15,
+          total_cards: totalCardCount,
+          stake_amount: perCardStake,
+        };
         const callerIdx = realWinners.findIndex((w: any) => w.user_id === userId);
-        const callerShare = callerIdx >= 0 ? (callerIdx === 0 ? baseShare + remainder : baseShare) : 0;
+        const callerShare = callerIdx >= 0 ? calculateWinnerShare(gameRecordForPrize, totalBet, winnerCount, callerIdx) : 0;
+        const totalWinAmount = calculateWinnerShare(gameRecordForPrize, totalBet, 1, 0);
 
         return NextResponse.json({
           success: true,
           win: true,
           winAmount: callerShare,
-          totalWinAmount: winAmount,
+          totalWinAmount: totalWinAmount,
           winnerCount,
           winners: existingWinners,
           message: winnerCount > 1
@@ -857,24 +883,24 @@ export async function POST(request: NextRequest) {
         }
       } catch {}
 
-      // Use the prize pool already stored on the game record.
-      // Do NOT call update_game_prize_pool here — reservations may have been deleted
-      // (which would zero out the card count and overwrite the correct prize pool).
-      const winAmount = Number(game.prize_pool) || 0;
-
-      if (winAmount <= 0) {
-        return NextResponse.json({ error: 'Prize pool is zero' }, { status: 400 });
-      }
+      // Calculate prize pool strictly using our centralized function
+      const gameRecordForPrize = {
+        ...game,
+        commission: effectiveCommission,
+      };
 
       const realWinners = winners.filter((w: any) => w.user_id);
       const winnerCount = Math.max(realWinners.length, 1);
-      const baseShare = Math.floor(winAmount / winnerCount);
-      const remainder = winAmount - (baseShare * winnerCount);
+
+      const sampleShare = calculateWinnerShare(gameRecordForPrize, 0, winnerCount, 0);
+      if (sampleShare <= 0) {
+        return NextResponse.json({ error: 'Prize pool is zero' }, { status: 400 });
+      }
 
       let credited = 0;
       for (let i = 0; i < realWinners.length; i++) {
         const w = realWinners[i];
-        const share = i === 0 ? baseShare + remainder : baseShare;
+        const share = calculateWinnerShare(gameRecordForPrize, 0, winnerCount, i);
         const bal = await supabase.rpc('adjust_main_balance', { p_user_id: w.user_id, p_amount: share });
         if (bal.error) {
           console.error(`recover_win: adjust_main_balance error for ${w.user_id}:`, bal.error);
@@ -901,6 +927,8 @@ export async function POST(request: NextRequest) {
         if (finalWinnerId) updateData.winner_id = finalWinnerId;
         await supabase.from('games').update(updateData).eq('id', game.id);
       }
+
+      const winAmount = calculateWinnerShare(gameRecordForPrize, 0, 1, 0);
 
       return NextResponse.json({
         success: true,

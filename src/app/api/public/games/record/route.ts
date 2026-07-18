@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { calculateWinnerShare } from '@/lib/server/prize';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -118,10 +119,10 @@ export async function POST(request: NextRequest) {
 
     if (game) {
       try {
-        // For wins, use the provided prize (individual win amount) if available, otherwise fall back to game's prize_pool
+        // For wins, use the provided prize (individual win amount) if available, or strictly calculate using our centralized function
         // For losses, use the negative of the user's own stake
         const winAmount = isWin
-          ? Number(prize ?? game.prize_pool ?? totalStake * (1 - 15 / 100))
+          ? Number(prize ?? calculateWinnerShare(game, totalStake, 1, 0))
           : -totalStake;
         const effectiveStake = isWin ? totalStake : totalStake;
 
