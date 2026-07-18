@@ -1,10 +1,6 @@
--- Migration 023: Add total_stake and total_cards columns to games table
--- This allows persistent and accurate post-game prize and wallet balance calculations.
+-- Migration 024: Update update_game_prize_pool to round to 2 decimal places instead of whole integers.
+-- This ensures precise prize pools like 8.50 birr instead of rounding to 9.00 or 8.00.
 
-ALTER TABLE games ADD COLUMN IF NOT EXISTS total_cards INTEGER DEFAULT 0;
-ALTER TABLE games ADD COLUMN IF NOT EXISTS total_stake NUMERIC(10,2) DEFAULT 0;
-
--- Update update_game_prize_pool RPC to calculate and persist total_stake and total_cards
 CREATE OR REPLACE FUNCTION update_game_prize_pool(p_game_code TEXT, p_stake_amt NUMERIC, p_commission NUMERIC DEFAULT NULL)
 RETURNS NUMERIC AS $$
 DECLARE

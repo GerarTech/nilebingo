@@ -33,12 +33,16 @@ function calculateWinnerShare(gameRecord, totalStakeFallback, winnerCount = 1, w
   }
 
   totalStake = Number(totalStake) || 0;
-  const calculatedPrizePool = Math.round(totalStake * (1 - commissionRate / 100));
-  const winnersCount = Math.max(1, Number(winnerCount) || 1);
-  const baseShare = Math.floor(calculatedPrizePool / winnersCount);
-  const remainder = calculatedPrizePool - (baseShare * winnersCount);
+  // Get exact prize pool in cents to avoid floats and retain exact decimal precision
+  const prizePoolExact = totalStake * (1 - commissionRate / 100);
+  const prizePoolCents = Math.round(prizePoolExact * 100);
 
-  return winnerIndex === 0 ? baseShare + remainder : baseShare;
+  const winnersCount = Math.max(1, Number(winnerCount) || 1);
+  const baseShareCents = Math.floor(prizePoolCents / winnersCount);
+  const remainderCents = prizePoolCents - (baseShareCents * winnersCount);
+
+  const shareCents = winnerIndex === 0 ? baseShareCents + remainderCents : baseShareCents;
+  return Number((shareCents / 100).toFixed(2));
 }
 
 /**

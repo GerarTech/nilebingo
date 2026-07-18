@@ -775,7 +775,7 @@ export async function POST(request: NextRequest) {
     const chatId = message?.chat?.id || callbackQuery?.message?.chat?.id;
     const from = body.message?.from || body.callback_query?.from;
     const text = (body.message?.text || '').trim();
-    const lang = getUserLang(from);
+    let lang = getUserLang(from);
 
     if (!chatId) {
       return NextResponse.json({ ok: true });
@@ -855,9 +855,23 @@ export async function POST(request: NextRequest) {
         await sendMessage(chatId, msgText, { parse_mode: 'Markdown', reply_markup: { keyboard: [[{ text: 'Cancel ❌' }]], resize_keyboard: true, one_time_keyboard: false } });
       } else if (data === 'lang_en') {
         await answerCallbackQuery(callbackQuery.id, 'Language set to English');
+        if (from?.id) {
+          try {
+            await supabase.from('profiles').update({ language: 'en' }).eq('telegram_id', String(from.id));
+          } catch (e) {
+            console.error('Error persisting language setting (en):', e);
+          }
+        }
         await sendMessage(chatId, 'Use the buttons below:', getMainKeyboard('en'));
       } else if (data === 'lang_am') {
         await answerCallbackQuery(callbackQuery.id, 'Language set to Amharic');
+        if (from?.id) {
+          try {
+            await supabase.from('profiles').update({ language: 'am' }).eq('telegram_id', String(from.id));
+          } catch (e) {
+            console.error('Error persisting language setting (am):', e);
+          }
+        }
         await sendMessage(chatId, 'Use the buttons below:', getMainKeyboard('am'));
       } else if (data.startsWith('deposit_bank_')) {
         const bankId = data.replace('deposit_bank_', '');
@@ -1139,6 +1153,9 @@ export async function POST(request: NextRequest) {
         .eq('telegram_id', telegramIdCheck)
         .maybeSingle();
       userProfile = prof;
+      if (prof?.language === 'am' || prof?.language === 'en') {
+        lang = prof.language;
+      }
     }
 
     // Intercept normal messages if phone is missing and they are not the admin,
