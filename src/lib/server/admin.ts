@@ -60,7 +60,7 @@ export function clearNotifyChannelsCache() {
 }
 
 /** Send a message to all notification channels subscribed to a given event */
-export async function notifyEvent(event: NotifyEvent, text: string, parseMode = 'Markdown') {
+export async function notifyEvent(event: NotifyEvent, text: string, parseMode = 'Markdown', skipEnvAdmin = false) {
   const channels = await getNotifyChannels();
   const envBotToken = process.env.ADMIN_BOT_TOKEN;
   const envChatId = process.env.ADMIN_CHAT_ID;
@@ -84,7 +84,7 @@ export async function notifyEvent(event: NotifyEvent, text: string, parseMode = 
   }
 
   // Fallback to env-configured admin
-  if (envBotToken && envChatId) {
+  if (!skipEnvAdmin && envBotToken && envChatId) {
     try {
       const res = await fetch(`https://api.telegram.org/bot${envBotToken}/sendMessage`, {
         method: 'POST',

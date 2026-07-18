@@ -394,10 +394,16 @@ function HomePage() {
         setLobbyPlayerCount(Math.max(uniqueUserIds.size, data.livePlayerCount || 0));
         setReservedCardCount(Math.max(reservedCount, selectedCardsRef.current.length));
 
-        const myRes = reservations.filter((r: any) => r.user_id === profile.id).map((r: any) => r.card_number);
-        const activeMyRes = myRes.filter((n: number) => n > 0);
-        setSelectedCards(activeMyRes);
-        setPreviewCard(activeMyRes.length > 0 ? getSeededCard(activeMyRes[activeMyRes.length - 1]) : []);
+        // Only sync selectedCards from server when user hasn't made local selections yet
+        // (local selections via toggleCard are only sent to server when "Play" is clicked)
+        if (selectedCardsRef.current.length === 0) {
+          const myRes = reservations.filter((r: any) => r.user_id === profile.id).map((r: any) => r.card_number);
+          const activeMyRes = myRes.filter((n: number) => n > 0);
+          if (activeMyRes.length > 0) {
+            setSelectedCards(activeMyRes);
+            setPreviewCard(getSeededCard(activeMyRes[activeMyRes.length - 1]));
+          }
+        }
       }
     } catch (e) {
       console.error('Failed to refresh game state:', e);
@@ -729,7 +735,7 @@ function HomePage() {
           if (serverGameId) {
             setGameId(prevId => {
               if (prevId !== serverGameId) {
-                setSelectedCards([]);
+                // Preserve local card selections — only reset per-game lobby state
                 setPreviewCard([]);
                 setTakenCards([]);
                 setLobbyPlayerCount(0);
@@ -748,7 +754,7 @@ function HomePage() {
           const newGameId = generateDeterministicGameId(sr.id, newCycle);
           setGameId(prevId => {
             if (prevId !== newGameId) {
-              setSelectedCards([]);
+              // Preserve local card selections — only reset per-game lobby state
               setPreviewCard([]);
               setTakenCards([]);
               setLobbyPlayerCount(0);
